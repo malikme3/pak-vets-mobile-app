@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -9,8 +9,8 @@ import { AppInput } from '../components/ui/AppInput';
 import { Button } from '../components/ui/Button';
 import { ListRow } from '../components/ui/ListRow';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
-import { getAnimals } from '../store/mockDb';
-import { Animal } from '../types/domain';
+import { useSearchAnimals, useAnimals } from '../features/animals/hooks';
+import type { Animal } from '../types/api';
 
 type SearchFilter = 'tag' | 'owner_name' | 'owner_phone';
 
@@ -22,34 +22,38 @@ export default function SelectAnimalScreen() {
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<SearchFilter>('tag');
-  const [results, setResults] = useState<Animal[]>([]);
+  
+  // Use search hook when query exists, otherwise use all animals
+  const { data: searchResults, isLoading: searchLoading } = useSearchAnimals(searchQuery);
+  const { data: allAnimals, isLoading: animalsLoading } = useAnimals();
+  
+  // Filter results based on selected filter type
+  const results = searchQuery.trim()
+    ? (searchResults || []).filter((animal) => {
+        const query = searchQuery.toLowerCase();
+        switch (filter) {
+          case 'tag':
+            return animal.tagId?.toLowerCase().includes(query);
+          case 'owner_name':
+            return animal.ownerName?.toLowerCase().includes(query);
+          case 'owner_phone':
+            return animal.ownerPhone?.includes(searchQuery);
+          default:
+            return false;
+        }
+      })
+    : [];
 
-  const handleSearch = () => {
-    if (!searchQuery.trim()) {
-      setResults([]);
-      return;
-    }
-    const allAnimals = getAnimals();
-    const filtered = allAnimals.filter((animal) => {
-      const query = searchQuery.toLowerCase();
-      switch (filter) {
-        case 'tag':
-          return animal.tag_id?.toLowerCase().includes(query);
-        case 'owner_name':
-          return animal.owner_name.toLowerCase().includes(query);
-        case 'owner_phone':
-          return animal.owner_phone.includes(searchQuery);
-        default:
-          return false;
-      }
-    });
-    setResults(filtered);
-  };
+  const isLoading = searchLoading || animalsLoading;
 
   const handleAnimalSelect = (animal: Animal) => {
+    if (!returnTo || typeof returnTo !== 'string') {
+      console.error('Invalid returnTo path:', returnTo);
+      return;
+    }
     router.push({
-      pathname: returnTo as any,
-      params: { animalId: animal.id },
+      pathname: returnTo as `/${string}`,
+      params: { animalId: String(animal.animalId) },
     });
   };
 
@@ -61,10 +65,10 @@ export default function SelectAnimalScreen() {
   };
 
   const renderAnimalItem = ({ item }: { item: Animal }) => {
-    const subtitle = `${item.owner_name}${item.owner_phone ? ` • ${item.owner_phone}` : ''}`;
+    const subtitle = `${item.ownerName || 'Unknown Owner'}${item.ownerPhone ? ` • ${item.ownerPhone}` : ''}`;
     return (
       <ListRow
-        title={`${item.species}${item.breed ? ` - ${item.breed}` : ''}${item.tag_id ? ` (${item.tag_id})` : ''}`}
+        title={`${item.species}${item.breed ? ` - ${item.breed}` : ''}${item.tagId ? ` (${item.tagId})` : ''}`}
         subtitle={subtitle}
         onPress={() => handleAnimalSelect(item)}
       />
@@ -101,13 +105,12 @@ export default function SelectAnimalScreen() {
           />
         </View>
 
-        {/* Search Button */}
-        <Button
-          title="Search"
-          onPress={handleSearch}
-          variant="primary"
-          style={styles.searchButton}
-        />
+        {/* Loading State */}
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
 
         {/* Results */}
         {results.length > 0 && (
@@ -119,7 +122,7 @@ export default function SelectAnimalScreen() {
               <FlatList
                 data={results}
                 renderItem={renderAnimalItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => String(item.animalId)}
                 scrollEnabled={false}
                 ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
               />
@@ -168,9 +171,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 12,
   },
-  searchButton: {
-    marginBottom: 24,
-  },
   resultsSection: {
     marginBottom: 24,
   },
@@ -195,5 +195,9 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: 8,
+  },
+  loadingContainer: {
+    padding: 16,
+    alignItems: 'center',
   },
 });

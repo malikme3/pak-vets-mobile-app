@@ -97,6 +97,10 @@ export const getVisitsByAnimalId = (animalId: string): Visit[] => {
     .sort((a, b) => new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime());
 };
 
+export const getVisitById = (id: string): Visit | undefined => {
+  return mockVisits.find((visit) => visit.id === id);
+};
+
 export const createAnimal = (animalData: Omit<Animal, 'id'>): Animal => {
   const newAnimal: Animal = {
     id: String(mockAnimals.length + 1),
@@ -104,4 +108,13 @@ export const createAnimal = (animalData: Omit<Animal, 'id'>): Animal => {
   };
   mockAnimals.push(newAnimal);
   return newAnimal;
+};
+
+export const createVisit = (visitData: Omit<Visit, 'id'>): Visit => {
+  const newVisit: Visit = {
+    id: String(mockVisits.length + 1),
+    ...visitData,
+  };
+  mockVisits.push(newVisit);
+  return newVisit;
 };

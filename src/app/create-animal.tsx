@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -7,8 +7,8 @@ import { useTheme } from '../theme/useTheme';
 import { Card } from '../components/ui/Card';
 import { AppInput } from '../components/ui/AppInput';
 import { Button } from '../components/ui/Button';
-import { createAnimal } from '../store/mockDb';
-import { Animal } from '../types/domain';
+import { useCreateAnimal } from '../features/animals/hooks';
+import type { CreateAnimalRequest } from '../types/api';
 
 export default function CreateAnimalScreen() {
   const router = useRouter();
@@ -22,29 +22,38 @@ export default function CreateAnimalScreen() {
   const [breed, setBreed] = useState('');
   const [tagId, setTagId] = useState('');
 
-  const handleSave = () => {
-    if (!ownerName.trim() || !ownerPhone.trim() || !species.trim()) {
-      console.log('Please fill required fields');
+  const createAnimalMutation = useCreateAnimal();
+
+  const handleSave = async () => {
+    if (!species.trim()) {
+      Alert.alert('Error', 'Species is required');
       return;
     }
 
-    const newAnimal: Omit<Animal, 'id'> = {
-      owner_name: ownerName,
-      owner_phone: ownerPhone,
-      species: species,
+    const request: CreateAnimalRequest = {
+      ownerName: ownerName.trim() || undefined,
+      ownerPhone: ownerPhone.trim() || undefined,
+      species: species.trim(),
       breed: breed.trim() || undefined,
-      tag_id: tagId.trim() || undefined,
+      tagId: tagId.trim() || undefined,
     };
 
-    const createdAnimal = createAnimal(newAnimal);
-    
-    console.log('Animal created:', createdAnimal);
-    
-    // Navigate back to returnTo with the new animal ID
-    router.push({
-      pathname: returnTo as any,
-      params: { animalId: createdAnimal.id },
-    });
+    try {
+      const createdAnimal = await createAnimalMutation.mutateAsync(request);
+      
+      // Navigate back to returnTo with the new animal ID
+      if (!returnTo || typeof returnTo !== 'string') {
+        console.error('Invalid returnTo path:', returnTo);
+        router.back();
+        return;
+      }
+      router.push({
+        pathname: returnTo as `/${string}`,
+        params: { animalId: String(createdAnimal.animalId) },
+      });
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create animal');
+    }
   };
 
   return (
@@ -96,10 +105,11 @@ export default function CreateAnimalScreen() {
 
         {/* Save Button */}
         <Button
-          title="Create Animal"
+          title={createAnimalMutation.isPending ? "Creating..." : "Create Animal"}
           onPress={handleSave}
           variant="primary"
-          disabled={!ownerName.trim() || !ownerPhone.trim() || !species.trim()}
+          disabled={!species.trim() || createAnimalMutation.isPending}
+          loading={createAnimalMutation.isPending}
           style={styles.saveButton}
         />
       </ScrollView>

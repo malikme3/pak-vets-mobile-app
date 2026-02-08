@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -6,14 +6,23 @@ import { useTheme } from '../theme/useTheme';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ListRow } from '../components/ui/ListRow';
-import { getCurrentDoctor, getRecentVisits, getAnimalById } from '../store/mockDb';
-import { Visit } from '../types/domain';
+import { useCurrentDoctor } from '../features/doctors/hooks';
+import { useVisitsByDoctor } from '../features/visits/hooks';
+import { useAnimal } from '../features/animals/hooks';
+import type { Visit } from '../types/api';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const doctor = getCurrentDoctor();
-  const recentVisits = getRecentVisits(5);
+  const { data: doctor, isLoading: doctorLoading, error: doctorError, refetch: refetchDoctor } = useCurrentDoctor();
+  const { data: allVisits, isLoading: visitsLoading } = useVisitsByDoctor(doctor?.doctorId || 0);
+  
+  // Get recent 5 visits
+  const recentVisits = allVisits
+    ? [...allVisits]
+        .sort((a, b) => new Date(b.visitDatetime).getTime() - new Date(a.visitDatetime).getTime())
+        .slice(0, 5)
+    : [];
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
@@ -27,19 +36,60 @@ export default function DashboardScreen() {
   };
 
   const renderVisitItem = ({ item }: { item: Visit }) => {
-    const animal = getAnimalById(item.animal_id);
-    const animalInfo = animal
-      ? `${animal.species}${animal.breed ? ` - ${animal.breed}` : ''}`
-      : 'Unknown Animal';
-    const subtitle = `${formatDate(item.visit_datetime)}${item.chief_complaint ? ` • ${item.chief_complaint}` : ''}`;
+    // Note: We'll show visit info without animal details for now to avoid hook in render
+    // Animal details will be loaded in visit detail screen
+    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ''}`;
 
-    return <ListRow title={animalInfo} subtitle={subtitle} />;
+    return (
+      <ListRow
+        title={`Visit #${item.visitId}`}
+        subtitle={subtitle}
+        onPress={() => router.push(`/visit-detail?visitId=${item.visitId}`)}
+      />
+    );
   };
+
+  if (doctorLoading || visitsLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar style="auto" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!doctor && !doctorLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar style="auto" />
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: colors.text }]}>Failed to load doctor data</Text>
+          {doctorError && (
+            <Text style={[styles.errorDetail, { color: colors.muted }]}>
+              {doctorError instanceof Error ? doctorError.message : 'Unknown error'}
+            </Text>
+          )}
+          <Button
+            title="Retry"
+            onPress={() => refetchDoctor()}
+            variant="primary"
+            style={styles.retryButton}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleNewVisit = () => {
     router.push('/create-visit');
   };
 
+  // Guard: ensure doctor exists before rendering
+  if (!doctor) {
+    return null;
+  }
 
   return (
     <>
@@ -52,9 +102,9 @@ export default function DashboardScreen() {
           <Card style={styles.doctorCard}>
             <View style={styles.doctorHeader}>
               <View style={styles.doctorInfo}>
-                <Text style={[styles.doctorName, { color: colors.text }]}>{doctor.name}</Text>
-                {doctor.location && (
-                  <Text style={[styles.doctorLocation, { color: colors.muted }]}>{doctor.location}</Text>
+                <Text style={[styles.doctorName, { color: colors.text }]}>{doctor.fullName}</Text>
+                {doctor.locationName && (
+                  <Text style={[styles.doctorLocation, { color: colors.muted }]}>{doctor.locationName}</Text>
                 )}
               </View>
             </View>
@@ -74,7 +124,7 @@ export default function DashboardScreen() {
                 <FlatList
                   data={recentVisits}
                   renderItem={renderVisitItem}
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item) => String(item.visitId)}
                   scrollEnabled={false}
                   ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
                 />
@@ -148,5 +198,28 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  errorDetail: {
+    fontSize: 14,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 8,
   },
 });

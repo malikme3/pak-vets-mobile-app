@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -6,18 +6,18 @@ import { useTheme } from '../theme/useTheme';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ListRow } from '../components/ui/ListRow';
-import { getAnimalById, getVisitsByAnimalId } from '../store/mockDb';
-import { Visit } from '../types/domain';
+import { useAnimal } from '../features/animals/hooks';
+import { useVisitsByAnimal } from '../features/visits/hooks';
+import type { Visit } from '../types/api';
 
 export default function AnimalDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
   
-  // For now, use first animal as mock - later will come from params
-  const animalId = (params.id as string) || '1';
-  const animal = getAnimalById(animalId);
-  const visits = animal ? getVisitsByAnimalId(animalId) : [];
+  const animalId = params.animalId ? Number(params.animalId) : undefined;
+  const { data: animal, isLoading: animalLoading } = useAnimal(animalId || 0);
+  const { data: visits = [], isLoading: visitsLoading } = useVisitsByAnimal(animalId || 0);
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
@@ -31,13 +31,33 @@ export default function AnimalDetailsScreen() {
   };
 
   const renderVisitItem = ({ item }: { item: Visit }) => {
-    const subtitle = `${formatDate(item.visit_datetime)}${item.chief_complaint ? ` • ${item.chief_complaint}` : ''}`;
-    return <ListRow title="Visit" subtitle={subtitle} />;
+    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ''}`;
+    return (
+      <ListRow
+        title="Visit"
+        subtitle={subtitle}
+        onPress={() => router.push(`/visit-detail?visitId=${item.visitId}`)}
+      />
+    );
   };
 
   const handleCreateVisit = () => {
-    console.log('Create Visit pressed');
+    router.push({
+      pathname: '/create-visit',
+      params: { animalId: String(animalId) },
+    });
   };
+
+  if (animalLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar style="auto" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!animal) {
     return (
@@ -67,20 +87,24 @@ export default function AnimalDetailsScreen() {
               <Text style={[styles.value, { color: colors.text }]}>{animal.breed}</Text>
             </View>
           )}
-          {animal.tag_id && (
+          {animal.tagId && (
             <View style={styles.infoRow}>
               <Text style={[styles.label, { color: colors.muted }]}>Tag ID:</Text>
-              <Text style={[styles.value, { color: colors.text }]}>{animal.tag_id}</Text>
+              <Text style={[styles.value, { color: colors.text }]}>{animal.tagId}</Text>
             </View>
           )}
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.muted }]}>Owner:</Text>
-            <Text style={[styles.value, { color: colors.text }]}>{animal.owner_name}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.muted }]}>Phone:</Text>
-            <Text style={[styles.value, { color: colors.text }]}>{animal.owner_phone}</Text>
-          </View>
+          {animal.ownerName && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.label, { color: colors.muted }]}>Owner:</Text>
+              <Text style={[styles.value, { color: colors.text }]}>{animal.ownerName}</Text>
+            </View>
+          )}
+          {animal.ownerPhone && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.label, { color: colors.muted }]}>Phone:</Text>
+              <Text style={[styles.value, { color: colors.text }]}>{animal.ownerPhone}</Text>
+            </View>
+          )}
         </Card>
 
         {/* Create Visit Button */}
@@ -99,7 +123,7 @@ export default function AnimalDetailsScreen() {
               <FlatList
                 data={visits}
                 renderItem={renderVisitItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => String(item.visitId)}
                 scrollEnabled={false}
                 ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
               />
@@ -165,5 +189,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

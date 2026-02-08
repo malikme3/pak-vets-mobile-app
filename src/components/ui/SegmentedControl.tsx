@@ -11,33 +11,42 @@ export function SegmentedControl({ options, selectedValue, onValueChange }: Segm
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.border }]}>
+    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {options.map((option, index) => {
         const isSelected = option.value === selectedValue;
         const isFirst = index === 0;
         const isLast = index === options.length - 1;
+        const nextOption = options[index + 1];
+        const isNextSelected = nextOption?.value === selectedValue;
+        // Show separator if not last segment and neither current nor next is selected
+        const showRightSeparator = !isLast && !isSelected && !isNextSelected;
 
         return (
-          <TouchableOpacity
-            key={option.value}
-            style={[
-              styles.segment,
-              isFirst && styles.segmentFirst,
-              isLast && styles.segmentLast,
-              isSelected && { backgroundColor: colors.primary },
-            ]}
-            onPress={() => onValueChange(option.value)}
-            activeOpacity={0.7}
-          >
-            <Text
+          <View key={option.value} style={styles.segmentWrapper}>
+            <TouchableOpacity
               style={[
-                styles.segmentText,
-                { color: isSelected ? colors.surface : colors.text },
+                styles.segment,
+                isFirst && styles.segmentFirst,
+                isLast && styles.segmentLast,
+                isSelected && { backgroundColor: colors.primary },
+                !isSelected && { backgroundColor: colors.surface },
               ]}
+              onPress={() => onValueChange(option.value)}
+              activeOpacity={0.7}
             >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: isSelected ? colors.surface : colors.text },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+            {showRightSeparator && (
+              <View style={[styles.separator, { backgroundColor: colors.border }]} />
+            )}
+          </View>
         );
       })}
     </View>
@@ -48,8 +57,14 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     borderRadius: 8,
-    padding: 2,
+    borderWidth: 1,
     minHeight: 44,
+    overflow: 'hidden',
+  },
+  segmentWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    position: 'relative',
   },
   segment: {
     flex: 1,
@@ -59,12 +74,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   segmentFirst: {
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
+    borderTopLeftRadius: 7,
+    borderBottomLeftRadius: 7,
   },
   segmentLast: {
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
+    borderTopRightRadius: 7,
+    borderBottomRightRadius: 7,
+  },
+  separator: {
+    width: 1,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
   segmentText: {
     fontSize: 14,
