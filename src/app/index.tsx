@@ -1,44 +1,62 @@
-import { View, Text, StyleSheet, ScrollView, FlatList, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useTheme } from '../theme/useTheme';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { ListRow } from '../components/ui/ListRow';
-import { useCurrentDoctor } from '../features/doctors/hooks';
-import { useVisitsByDoctor } from '../features/visits/hooks';
-import { useAnimal } from '../features/animals/hooks';
-import type { Visit } from '../types/api';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  FlatList,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useTheme } from "../theme/useTheme";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { ListRow } from "../components/ui/ListRow";
+import { useCurrentDoctor } from "../features/doctors/hooks";
+import { useVisitsByDoctor } from "../features/visits/hooks";
+import { useAnimal } from "../features/animals/hooks";
+import type { Visit } from "../types/api";
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { data: doctor, isLoading: doctorLoading, error: doctorError, refetch: refetchDoctor } = useCurrentDoctor();
-  const { data: allVisits, isLoading: visitsLoading } = useVisitsByDoctor(doctor?.doctorId || 0);
-  
+  const {
+    data: doctor,
+    isLoading: doctorLoading,
+    error: doctorError,
+    refetch: refetchDoctor,
+  } = useCurrentDoctor();
+  const { data: allVisits, isLoading: visitsLoading } = useVisitsByDoctor(
+    doctor?.doctorId || 0,
+  );
+
   // Get recent 5 visits
   const recentVisits = allVisits
     ? [...allVisits]
-        .sort((a, b) => new Date(b.visitDatetime).getTime() - new Date(a.visitDatetime).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.visitDatetime).getTime() -
+            new Date(a.visitDatetime).getTime(),
+        )
         .slice(0, 5)
     : [];
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const renderVisitItem = ({ item }: { item: Visit }) => {
     // Note: We'll show visit info without animal details for now to avoid hook in render
     // Animal details will be loaded in visit detail screen
-    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ''}`;
+    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
 
     return (
       <ListRow
@@ -51,7 +69,9 @@ export default function DashboardScreen() {
 
   if (doctorLoading || visitsLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <StatusBar style="auto" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -62,13 +82,19 @@ export default function DashboardScreen() {
 
   if (!doctor && !doctorLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.text }]}>Failed to load doctor data</Text>
+          <Text style={[styles.errorText, { color: colors.text }]}>
+            Failed to load doctor data
+          </Text>
           {doctorError && (
             <Text style={[styles.errorDetail, { color: colors.muted }]}>
-              {doctorError instanceof Error ? doctorError.message : 'Unknown error'}
+              {doctorError instanceof Error
+                ? doctorError.message
+                : "Unknown error"}
             </Text>
           )}
           <Button
@@ -83,7 +109,7 @@ export default function DashboardScreen() {
   }
 
   const handleNewVisit = () => {
-    router.push('/create-visit');
+    router.push("/create-visit");
   };
 
   // Guard: ensure doctor exists before rendering
@@ -94,31 +120,50 @@ export default function DashboardScreen() {
   return (
     <>
       <StatusBar style="auto" />
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          <Text style={[styles.welcomeText, { color: colors.text }]}>Welcome to Dashboard</Text>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+        >
+          <Text style={[styles.welcomeText, { color: colors.text }]}>
+            Welcome to Dashboard
+          </Text>
 
           {/* Doctor Header Card */}
           <Card style={styles.doctorCard}>
             <View style={styles.doctorHeader}>
               <View style={styles.doctorInfo}>
-                <Text style={[styles.doctorName, { color: colors.text }]}>{doctor.fullName}</Text>
+                <Text style={[styles.doctorName, { color: colors.text }]}>
+                  {doctor.fullName}
+                </Text>
                 {doctor.locationName && (
-                  <Text style={[styles.doctorLocation, { color: colors.muted }]}>{doctor.locationName}</Text>
+                  <Text
+                    style={[styles.doctorLocation, { color: colors.muted }]}
+                  >
+                    {doctor.locationName}
+                  </Text>
                 )}
               </View>
             </View>
           </Card>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActionsSection}>
-          {/* <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text> */}
-          <Button title="New Visit" onPress={handleNewVisit} variant="primary" />
-        </View>
+          {/* Quick Actions */}
+          <View style={styles.quickActionsSection}>
+            {/* <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text> */}
+            <Button
+              title="New Visit"
+              onPress={handleNewVisit}
+              variant="primary"
+            />
+          </View>
 
           {/* Recent Visits */}
           <View style={styles.recentVisitsSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Visits</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Recent Visits
+            </Text>
             {recentVisits.length > 0 ? (
               <Card style={styles.visitsCard}>
                 <FlatList
@@ -126,12 +171,21 @@ export default function DashboardScreen() {
                   renderItem={renderVisitItem}
                   keyExtractor={(item) => String(item.visitId)}
                   scrollEnabled={false}
-                  ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                  ItemSeparatorComponent={() => (
+                    <View
+                      style={[
+                        styles.separator,
+                        { backgroundColor: colors.border },
+                      ]}
+                    />
+                  )}
                 />
               </Card>
             ) : (
               <Card style={styles.emptyCard}>
-                <Text style={[styles.emptyText, { color: colors.muted }]}>No recent visits</Text>
+                <Text style={[styles.emptyText, { color: colors.muted }]}>
+                  No recent visits
+                </Text>
               </Card>
             )}
           </View>
@@ -153,22 +207,22 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 16,
   },
   doctorCard: {
     marginTop: 8,
   },
   doctorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   doctorInfo: {
     flex: 1,
   },
   doctorName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 4,
   },
   doctorLocation: {
@@ -179,7 +233,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 16,
   },
   recentVisitsSection: {
@@ -197,17 +251,17 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   errorText: {
@@ -217,7 +271,7 @@ const styles = StyleSheet.create({
   errorDetail: {
     fontSize: 14,
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   retryButton: {
     marginTop: 8,

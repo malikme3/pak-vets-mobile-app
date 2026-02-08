@@ -30,7 +30,7 @@ export interface Doctor {
   fullName: string;
   phone: string;
   email?: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  status: "ACTIVE" | "INACTIVE";
   locationName?: string;
   createdAt: string;
 }
@@ -46,7 +46,7 @@ export interface UpdateDoctorRequest {
   fullName?: string;
   phone?: string;
   email?: string;
-  status?: 'ACTIVE' | 'INACTIVE';
+  status?: "ACTIVE" | "INACTIVE";
   locationName?: string;
 }
 
@@ -129,26 +129,26 @@ export interface VisitDiagnosis {
   diagnosisId: number;
   visitId: number;
   diagnosisText: string;
-  status: 'SUSPECTED' | 'CONFIRMED';
+  status: "SUSPECTED" | "CONFIRMED";
   createdAt: string;
 }
 
 export interface CreateVisitDiagnosisRequest {
   visitId: number;
   diagnosisText: string;
-  status?: 'SUSPECTED' | 'CONFIRMED';
+  status?: "SUSPECTED" | "CONFIRMED";
 }
 
 export interface UpdateVisitDiagnosisRequest {
   diagnosisText?: string;
-  status?: 'SUSPECTED' | 'CONFIRMED';
+  status?: "SUSPECTED" | "CONFIRMED";
 }
 
 export interface VisitTreatment {
   treatmentId: number;
   visitId: number;
-  treatmentType?: 'MEDICATION' | 'PROCEDURE' | 'ADVICE';
-  treatmentStatus: 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'STOPPED';
+  treatmentType?: "MEDICATION" | "PROCEDURE" | "ADVICE";
+  treatmentStatus: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED";
   medicineId?: number;
   medicineNameFree?: string;
   dose?: string;
@@ -161,8 +161,8 @@ export interface VisitTreatment {
 
 export interface CreateVisitTreatmentRequest {
   visitId: number;
-  treatmentType?: 'MEDICATION' | 'PROCEDURE' | 'ADVICE';
-  treatmentStatus?: 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'STOPPED';
+  treatmentType?: "MEDICATION" | "PROCEDURE" | "ADVICE";
+  treatmentStatus?: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED";
   medicineId?: number;
   medicineNameFree?: string;
   dose?: string;
@@ -173,8 +173,8 @@ export interface CreateVisitTreatmentRequest {
 }
 
 export interface UpdateVisitTreatmentRequest {
-  treatmentType?: 'MEDICATION' | 'PROCEDURE' | 'ADVICE';
-  treatmentStatus?: 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'STOPPED';
+  treatmentType?: "MEDICATION" | "PROCEDURE" | "ADVICE";
+  treatmentStatus?: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED";
   medicineId?: number;
   medicineNameFree?: string;
   dose?: string;
@@ -187,7 +187,7 @@ export interface UpdateVisitTreatmentRequest {
 export interface VisitNote {
   noteId: number;
   visitId: number;
-  noteType: 'TEXT' | 'VOICE_TRANSCRIPT';
+  noteType: "TEXT" | "VOICE_TRANSCRIPT";
   noteText: string;
   mediaId?: number;
   createdAt: string;
@@ -195,13 +195,13 @@ export interface VisitNote {
 
 export interface CreateVisitNoteRequest {
   visitId: number;
-  noteType?: 'TEXT' | 'VOICE_TRANSCRIPT';
+  noteType?: "TEXT" | "VOICE_TRANSCRIPT";
   noteText: string;
   mediaId?: number;
 }
 
 export interface UpdateVisitNoteRequest {
-  noteType?: 'TEXT' | 'VOICE_TRANSCRIPT';
+  noteType?: "TEXT" | "VOICE_TRANSCRIPT";
   noteText?: string;
   mediaId?: number;
 }
@@ -210,7 +210,7 @@ export interface MediaFile {
   mediaId: number;
   visitId?: number;
   animalId?: number;
-  fileType: 'AUDIO' | 'IMAGE' | 'VIDEO' | 'DOC';
+  fileType: "AUDIO" | "IMAGE" | "VIDEO" | "DOC";
   s3Key?: string;
   url?: string;
   createdAt: string;
@@ -219,7 +219,7 @@ export interface MediaFile {
 export interface CreateMediaFileRequest {
   visitId?: number;
   animalId?: number;
-  fileType: 'AUDIO' | 'IMAGE' | 'VIDEO' | 'DOC';
+  fileType: "AUDIO" | "IMAGE" | "VIDEO" | "DOC";
   s3Key?: string;
   url?: string;
 }
@@ -227,7 +227,7 @@ export interface CreateMediaFileRequest {
 export interface UpdateMediaFileRequest {
   visitId?: number;
   animalId?: number;
-  fileType?: 'AUDIO' | 'IMAGE' | 'VIDEO' | 'DOC';
+  fileType?: "AUDIO" | "IMAGE" | "VIDEO" | "DOC";
   s3Key?: string;
   url?: string;
 }

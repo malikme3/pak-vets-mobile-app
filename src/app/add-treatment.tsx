@@ -1,35 +1,39 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useTheme } from '../theme/useTheme';
-import { Card } from '../components/ui/Card';
-import { AppInput } from '../components/ui/AppInput';
-import { Button } from '../components/ui/Button';
-import { SegmentedControl } from '../components/ui/SegmentedControl';
-import { useCreateVisitTreatment } from '../features/treatments/hooks';
+import { useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useTheme } from "../theme/useTheme";
+import { Card } from "../components/ui/Card";
+import { AppInput } from "../components/ui/AppInput";
+import { Button } from "../components/ui/Button";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { useCreateVisitTreatment } from "../features/treatments/hooks";
 
 export default function AddTreatmentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
-  
+
   const visitId = params.visitId ? Number(params.visitId) : undefined;
   const createTreatmentMutation = useCreateVisitTreatment();
-  
-  const [treatmentType, setTreatmentType] = useState<'MEDICATION' | 'PROCEDURE' | 'ADVICE'>('MEDICATION');
-  const [treatmentStatus, setTreatmentStatus] = useState<'PLANNED' | 'ONGOING' | 'COMPLETED' | 'STOPPED'>('PLANNED');
-  const [medicineNameFree, setMedicineNameFree] = useState('');
-  const [dose, setDose] = useState('');
-  const [route, setRoute] = useState('');
-  const [frequency, setFrequency] = useState('');
-  const [durationDays, setDurationDays] = useState('');
-  const [instructions, setInstructions] = useState('');
+
+  const [treatmentType, setTreatmentType] = useState<
+    "MEDICATION" | "PROCEDURE" | "ADVICE"
+  >("MEDICATION");
+  const [treatmentStatus, setTreatmentStatus] = useState<
+    "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED"
+  >("PLANNED");
+  const [medicineNameFree, setMedicineNameFree] = useState("");
+  const [dose, setDose] = useState("");
+  const [route, setRoute] = useState("");
+  const [frequency, setFrequency] = useState("");
+  const [durationDays, setDurationDays] = useState("");
+  const [instructions, setInstructions] = useState("");
 
   const handleSave = async () => {
     if (!visitId) {
-      Alert.alert('Error', 'Visit ID is missing');
+      Alert.alert("Error", "Visit ID is missing");
       return;
     }
 
@@ -45,20 +49,27 @@ export default function AddTreatmentScreen() {
         durationDays: durationDays ? Number(durationDays) : undefined,
         instructions: instructions.trim() || undefined,
       });
-      
+
       // Navigate back to visit detail
       router.replace(`/visit-detail?visitId=${visitId}`);
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create treatment');
+      Alert.alert(
+        "Error",
+        error instanceof Error ? error.message : "Failed to create treatment",
+      );
     }
   };
 
   if (!visitId) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.text }]}>Invalid visit ID</Text>
+          <Text style={[styles.errorText, { color: colors.text }]}>
+            Invalid visit ID
+          </Text>
           <Button
             title="Go Back"
             onPress={() => router.back()}
@@ -71,22 +82,33 @@ export default function AddTreatmentScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <StatusBar style="auto" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.text }]}>Add Treatment</Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          Add Treatment
+        </Text>
 
         {/* Treatment Type */}
         <Card style={styles.card}>
-          <Text style={[styles.label, { color: colors.text }]}>Treatment Type</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Treatment Type
+          </Text>
           <SegmentedControl
             options={[
-              { label: 'Medication', value: 'MEDICATION' },
-              { label: 'Procedure', value: 'PROCEDURE' },
-              { label: 'Advice', value: 'ADVICE' },
+              { label: "Medication", value: "MEDICATION" },
+              { label: "Procedure", value: "PROCEDURE" },
+              { label: "Advice", value: "ADVICE" },
             ]}
             selectedValue={treatmentType}
-            onValueChange={(value) => setTreatmentType(value as 'MEDICATION' | 'PROCEDURE' | 'ADVICE')}
+            onValueChange={(value) =>
+              setTreatmentType(value as "MEDICATION" | "PROCEDURE" | "ADVICE")
+            }
           />
         </Card>
 
@@ -95,13 +117,17 @@ export default function AddTreatmentScreen() {
           <Text style={[styles.label, { color: colors.text }]}>Status</Text>
           <SegmentedControl
             options={[
-              { label: 'Planned', value: 'PLANNED' },
-              { label: 'Ongoing', value: 'ONGOING' },
-              { label: 'Completed', value: 'COMPLETED' },
-              { label: 'Stopped', value: 'STOPPED' },
+              { label: "Planned", value: "PLANNED" },
+              { label: "Ongoing", value: "ONGOING" },
+              { label: "Completed", value: "COMPLETED" },
+              { label: "Stopped", value: "STOPPED" },
             ]}
             selectedValue={treatmentStatus}
-            onValueChange={(value) => setTreatmentStatus(value as 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'STOPPED')}
+            onValueChange={(value) =>
+              setTreatmentStatus(
+                value as "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED",
+              )
+            }
           />
         </Card>
 
@@ -170,7 +196,9 @@ export default function AddTreatmentScreen() {
 
         {/* Save Button */}
         <Button
-          title={createTreatmentMutation.isPending ? "Saving..." : "Save Treatment"}
+          title={
+            createTreatmentMutation.isPending ? "Saving..." : "Save Treatment"
+          }
           onPress={handleSave}
           variant="primary"
           disabled={createTreatmentMutation.isPending}
@@ -194,8 +222,8 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   errorText: {
@@ -207,7 +235,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 24,
   },
   card: {
@@ -215,7 +243,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 12,
   },
   saveButton: {

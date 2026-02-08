@@ -1,50 +1,63 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Platform, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useTheme } from '../theme/useTheme';
-import { Card } from '../components/ui/Card';
-import { AppInput } from '../components/ui/AppInput';
-import { Button } from '../components/ui/Button';
-import { useCurrentDoctor } from '../features/doctors/hooks';
-import { useAnimal } from '../features/animals/hooks';
-import { useCreateVisit } from '../features/visits/hooks';
+import { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  TouchableOpacity,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useTheme } from "../theme/useTheme";
+import { Card } from "../components/ui/Card";
+import { AppInput } from "../components/ui/AppInput";
+import { Button } from "../components/ui/Button";
+import { useCurrentDoctor } from "../features/doctors/hooks";
+import { useAnimal } from "../features/animals/hooks";
+import { useCreateVisit } from "../features/visits/hooks";
 
 export default function CreateVisitScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
   const { data: doctor, isLoading: doctorLoading } = useCurrentDoctor();
-  
+
   const animalId = params.animalId ? Number(params.animalId) : undefined;
-  const { data: selectedAnimal, isLoading: animalLoading } = useAnimal(animalId || 0);
-  
+  const { data: selectedAnimal, isLoading: animalLoading } = useAnimal(
+    animalId || 0,
+  );
+
   const createVisitMutation = useCreateVisit();
-  
-  const [chiefComplaint, setChiefComplaint] = useState('');
-  const [notes, setNotes] = useState('');
+
+  const [chiefComplaint, setChiefComplaint] = useState("");
+  const [notes, setNotes] = useState("");
   const [visitDatetime, setVisitDatetime] = useState<Date>(new Date()); // Default to current time
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   const formatDateTime = (date: Date): string => {
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).replace(',', '');
+    return date
+      .toLocaleString("en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+      .replace(",", "");
   };
 
   const handleDateChange = (event: unknown, selectedDate?: Date) => {
     const nativeEvent = event as { type: string };
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       setShowDatePicker(false);
-      if (nativeEvent.type === 'set' && selectedDate) {
+      if (nativeEvent.type === "set" && selectedDate) {
         setVisitDatetime(selectedDate);
         // On Android, show time picker after date is selected
         setTimeout(() => setShowTimePicker(true), 300);
@@ -59,9 +72,9 @@ export default function CreateVisitScreen() {
 
   const handleTimeChange = (event: unknown, selectedTime?: Date) => {
     const nativeEvent = event as { type: string };
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       setShowTimePicker(false);
-      if (nativeEvent.type === 'set' && selectedTime) {
+      if (nativeEvent.type === "set" && selectedTime) {
         // Merge time with existing date
         const newDate = new Date(visitDatetime);
         newDate.setHours(selectedTime.getHours());
@@ -81,10 +94,10 @@ export default function CreateVisitScreen() {
 
   const handleSave = async () => {
     if (!selectedAnimal || !doctor) {
-      Alert.alert('Error', 'Please select an animal first');
+      Alert.alert("Error", "Please select an animal first");
       return;
     }
-    
+
     try {
       const visit = await createVisitMutation.mutateAsync({
         animalId: selectedAnimal.animalId,
@@ -93,26 +106,32 @@ export default function CreateVisitScreen() {
         chiefComplaint: chiefComplaint || undefined,
         notes: notes || undefined,
       });
-      
+
       // Navigate to visit detail
       router.replace(`/visit-detail?visitId=${visit.visitId}`);
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create visit');
+      Alert.alert(
+        "Error",
+        error instanceof Error ? error.message : "Failed to create visit",
+      );
     }
   };
 
-  const isLoading = doctorLoading || animalLoading || createVisitMutation.isPending;
+  const isLoading =
+    doctorLoading || animalLoading || createVisitMutation.isPending;
 
   const handleSelectAnimal = () => {
     router.push({
-      pathname: '/select-animal',
-      params: { returnTo: '/create-visit' },
+      pathname: "/select-animal",
+      params: { returnTo: "/create-visit" },
     });
   };
 
   if (isLoading && !selectedAnimal) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <StatusBar style="auto" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -122,10 +141,17 @@ export default function CreateVisitScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <StatusBar style="auto" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.text }]}>Create New Visit</Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          Create New Visit
+        </Text>
 
         {/* Animal Selection */}
         <Card style={styles.card}>
@@ -133,8 +159,9 @@ export default function CreateVisitScreen() {
           {selectedAnimal ? (
             <View style={styles.animalInfo}>
               <Text style={[styles.animalText, { color: colors.text }]}>
-                {selectedAnimal.species}{selectedAnimal.breed ? ` - ${selectedAnimal.breed}` : ''}
-                {selectedAnimal.tagId ? ` (${selectedAnimal.tagId})` : ''}
+                {selectedAnimal.species}
+                {selectedAnimal.breed ? ` - ${selectedAnimal.breed}` : ""}
+                {selectedAnimal.tagId ? ` (${selectedAnimal.tagId})` : ""}
               </Text>
               {selectedAnimal.ownerName && (
                 <Text style={[styles.ownerText, { color: colors.muted }]}>
@@ -154,31 +181,38 @@ export default function CreateVisitScreen() {
 
         {/* Visit Date/Time */}
         <Card style={styles.card}>
-          <Text style={[styles.label, { color: colors.text }]}>Visit Date & Time</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Visit Date & Time
+          </Text>
           <TouchableOpacity
             onPress={() => {
               setShowDatePicker(true);
             }}
-            style={[styles.datePickerButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            style={[
+              styles.datePickerButton,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
           >
             <Text style={[styles.datePickerText, { color: colors.text }]}>
               {formatDateTime(visitDatetime)}
             </Text>
-            <Text style={[styles.datePickerHint, { color: colors.muted }]}>Tap to change</Text>
+            <Text style={[styles.datePickerHint, { color: colors.muted }]}>
+              Tap to change
+            </Text>
           </TouchableOpacity>
-          
+
           {showDatePicker && (
             <DateTimePicker
               value={visitDatetime}
               mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
               onChange={handleDateChange}
               minimumDate={new Date(2020, 0, 1)}
               maximumDate={new Date(2030, 11, 31)}
             />
           )}
-          
-          {Platform.OS === 'ios' && showDatePicker && (
+
+          {Platform.OS === "ios" && showDatePicker && (
             <View style={styles.timePickerContainer}>
               <DateTimePicker
                 value={visitDatetime}
@@ -197,8 +231,8 @@ export default function CreateVisitScreen() {
               </View>
             </View>
           )}
-          
-          {Platform.OS === 'android' && showTimePicker && (
+
+          {Platform.OS === "android" && showTimePicker && (
             <DateTimePicker
               value={visitDatetime}
               mode="time"
@@ -259,7 +293,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 24,
   },
   card: {
@@ -267,7 +301,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 8,
   },
   animalInfo: {
@@ -275,7 +309,7 @@ const styles = StyleSheet.create({
   },
   animalText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 4,
   },
   ownerText: {
@@ -289,21 +323,21 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   datePickerButton: {
     borderWidth: 1,
     borderRadius: 8,
     padding: 16,
     marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   datePickerText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   datePickerHint: {
     fontSize: 12,

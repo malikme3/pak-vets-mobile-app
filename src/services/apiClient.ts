@@ -1,7 +1,11 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosInstance,
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from "axios";
 
 // API base URL - should be set via environment variable
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001";
 
 export interface ApiError {
   message: string;
@@ -17,7 +21,7 @@ class ApiClient {
     this.client = axios.create({
       baseURL: API_BASE_URL,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       timeout: 30000,
     });
@@ -34,7 +38,7 @@ class ApiClient {
       },
       (error) => {
         return Promise.reject(error);
-      }
+      },
     );
 
     // Response interceptor for error handling
@@ -42,17 +46,20 @@ class ApiClient {
       (response) => {
         // Log response in dev mode for debugging
         if (__DEV__) {
-          console.log(`[API] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-            status: response.status,
-            data: response.data,
-          });
+          console.log(
+            `[API] ${response.config.method?.toUpperCase()} ${response.config.url}`,
+            {
+              status: response.status,
+              data: response.data,
+            },
+          );
         }
         return response;
       },
       (error: AxiosError) => {
         // Log error in dev mode for debugging
         if (__DEV__) {
-          console.error('[API Error]', {
+          console.error("[API Error]", {
             url: error.config?.url,
             method: error.config?.method,
             status: error.response?.status,
@@ -61,7 +68,7 @@ class ApiClient {
           });
         }
         return Promise.reject(this.normalizeError(error));
-      }
+      },
     );
   }
 
@@ -78,7 +85,8 @@ class ApiClient {
       };
 
       const apiError: ApiError = {
-        message: response.error?.message || error.message || 'An error occurred',
+        message:
+          response.error?.message || error.message || "An error occurred",
         status: error.response.status,
         code: response.error?.code,
       };
@@ -87,7 +95,7 @@ class ApiClient {
       if (response.error?.details) {
         const fieldErrors: Record<string, string> = {};
         Object.entries(response.error.details).forEach(([key, value]) => {
-          if (typeof value === 'string') {
+          if (typeof value === "string") {
             fieldErrors[key] = value;
           }
         });
@@ -100,13 +108,13 @@ class ApiClient {
     } else if (error.request) {
       // Request made but no response
       return {
-        message: 'Network error. Please check your connection.',
+        message: "Network error. Please check your connection.",
         status: 0,
       };
     } else {
       // Something else happened
       return {
-        message: error.message || 'An unexpected error occurred',
+        message: error.message || "An unexpected error occurred",
         status: 0,
       };
     }

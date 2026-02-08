@@ -1,12 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { visitNoteApi } from '../../services/vetApi';
-import type { VisitNote, CreateVisitNoteRequest, UpdateVisitNoteRequest } from '../../types/api';
-import { visitKeys } from '../visits/hooks';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { visitNoteApi } from "../../services/vetApi";
+import type {
+  VisitNote,
+  CreateVisitNoteRequest,
+  UpdateVisitNoteRequest,
+} from "../../types/api";
+import { visitKeys } from "../visits/hooks";
 
 export const noteKeys = {
-  all: ['note'] as const,
+  all: ["note"] as const,
   detail: (id: number) => [...noteKeys.all, id] as const,
-  byVisit: (visitId: number) => [...noteKeys.all, 'visit', visitId] as const,
+  byVisit: (visitId: number) => [...noteKeys.all, "visit", visitId] as const,
 };
 
 export function useVisitNote(noteId: number) {
@@ -35,10 +39,14 @@ export function useCreateVisitNote() {
       visitNoteApi.createVisitNote(request),
     onSuccess: (data) => {
       // Invalidate note queries for this visit
-      queryClient.invalidateQueries({ queryKey: noteKeys.byVisit(data.visitId) });
+      queryClient.invalidateQueries({
+        queryKey: noteKeys.byVisit(data.visitId),
+      });
       queryClient.invalidateQueries({ queryKey: noteKeys.detail(data.noteId) });
       // Also invalidate visit queries
-      queryClient.invalidateQueries({ queryKey: visitKeys.detail(data.visitId) });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.detail(data.visitId),
+      });
     },
   });
 }
@@ -47,13 +55,22 @@ export function useUpdateVisitNote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ noteId, request }: { noteId: number; request: UpdateVisitNoteRequest }) =>
-      visitNoteApi.updateVisitNote(noteId, request),
+    mutationFn: ({
+      noteId,
+      request,
+    }: {
+      noteId: number;
+      request: UpdateVisitNoteRequest;
+    }) => visitNoteApi.updateVisitNote(noteId, request),
     onSuccess: (data) => {
       // Invalidate specific note and visit queries
       queryClient.invalidateQueries({ queryKey: noteKeys.detail(data.noteId) });
-      queryClient.invalidateQueries({ queryKey: noteKeys.byVisit(data.visitId) });
-      queryClient.invalidateQueries({ queryKey: visitKeys.detail(data.visitId) });
+      queryClient.invalidateQueries({
+        queryKey: noteKeys.byVisit(data.visitId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.detail(data.visitId),
+      });
     },
   });
 }
@@ -66,10 +83,14 @@ export function useDeleteVisitNote() {
       visitNoteApi.deleteVisitNote(noteId),
     onSuccess: (_, variables) => {
       // Invalidate note queries for this visit
-      queryClient.invalidateQueries({ queryKey: noteKeys.byVisit(variables.visitId) });
+      queryClient.invalidateQueries({
+        queryKey: noteKeys.byVisit(variables.visitId),
+      });
       queryClient.invalidateQueries({ queryKey: noteKeys.all });
       // Also invalidate visit queries
-      queryClient.invalidateQueries({ queryKey: visitKeys.detail(variables.visitId) });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.detail(variables.visitId),
+      });
     },
   });
 }

@@ -1,13 +1,17 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { visitApi } from '../../services/vetApi';
-import type { Visit, CreateVisitRequest, UpdateVisitRequest } from '../../types/api';
-import { animalKeys } from '../animals/hooks';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { visitApi } from "../../services/vetApi";
+import type {
+  Visit,
+  CreateVisitRequest,
+  UpdateVisitRequest,
+} from "../../types/api";
+import { animalKeys } from "../animals/hooks";
 
 export const visitKeys = {
-  all: ['visit'] as const,
+  all: ["visit"] as const,
   detail: (id: number) => [...visitKeys.all, id] as const,
   list: (filters?: { animalId?: number; doctorId?: number }) =>
-    [...visitKeys.all, 'list', filters] as const,
+    [...visitKeys.all, "list", filters] as const,
 };
 
 export function useVisit(visitId: number) {
@@ -48,12 +52,20 @@ export function useCreateVisit() {
     mutationFn: (request: CreateVisitRequest) => visitApi.createVisit(request),
     onSuccess: (data) => {
       // Invalidate visit queries
-      queryClient.invalidateQueries({ queryKey: visitKeys.detail(data.visitId) });
-      queryClient.invalidateQueries({ queryKey: visitKeys.list({ animalId: data.animalId }) });
-      queryClient.invalidateQueries({ queryKey: visitKeys.list({ doctorId: data.doctorId }) });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.detail(data.visitId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.list({ animalId: data.animalId }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.list({ doctorId: data.doctorId }),
+      });
       queryClient.invalidateQueries({ queryKey: visitKeys.list() });
       // Also invalidate animal queries since visit count might change
-      queryClient.invalidateQueries({ queryKey: animalKeys.detail(data.animalId) });
+      queryClient.invalidateQueries({
+        queryKey: animalKeys.detail(data.animalId),
+      });
     },
   });
 }
@@ -62,13 +74,24 @@ export function useUpdateVisit() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ visitId, request }: { visitId: number; request: UpdateVisitRequest }) =>
-      visitApi.updateVisit(visitId, request),
+    mutationFn: ({
+      visitId,
+      request,
+    }: {
+      visitId: number;
+      request: UpdateVisitRequest;
+    }) => visitApi.updateVisit(visitId, request),
     onSuccess: (data) => {
       // Invalidate specific visit and related queries
-      queryClient.invalidateQueries({ queryKey: visitKeys.detail(data.visitId) });
-      queryClient.invalidateQueries({ queryKey: visitKeys.list({ animalId: data.animalId }) });
-      queryClient.invalidateQueries({ queryKey: visitKeys.list({ doctorId: data.doctorId }) });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.detail(data.visitId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.list({ animalId: data.animalId }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: visitKeys.list({ doctorId: data.doctorId }),
+      });
     },
   });
 }

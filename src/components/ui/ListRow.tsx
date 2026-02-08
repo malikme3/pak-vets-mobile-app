@@ -1,5 +1,11 @@
-import { TouchableOpacity, View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { useTheme } from '../../theme/useTheme';
+import {
+  TouchableOpacity,
+  View,
+  Text,
+  StyleSheet,
+  ViewStyle,
+} from "react-native";
+import { useTheme } from "../../theme/useTheme";
 
 interface ListRowProps {
   title: string;
@@ -24,7 +30,10 @@ export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
           {title}
         </Text>
         {subtitle && (
-          <Text style={[styles.subtitle, { color: colors.muted }]} numberOfLines={1}>
+          <Text
+            style={[styles.subtitle, { color: colors.muted }]}
+            numberOfLines={1}
+          >
             {subtitle}
           </Text>
         )}
@@ -35,7 +44,11 @@ export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={handlePress} activeOpacity={0.7} style={styles.touchable}>
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.7}
+        style={styles.touchable}
+      >
         {content}
       </TouchableOpacity>
     );
@@ -49,8 +62,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
     minHeight: 44,
@@ -61,7 +74,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 4,
   },
   subtitle: {

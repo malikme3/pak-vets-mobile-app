@@ -1,34 +1,34 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useTheme } from '../theme/useTheme';
-import { Card } from '../components/ui/Card';
-import { AppInput } from '../components/ui/AppInput';
-import { Button } from '../components/ui/Button';
-import { SegmentedControl } from '../components/ui/SegmentedControl';
-import { useCreateVisitDiagnosis } from '../features/diagnoses/hooks';
+import { useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useTheme } from "../theme/useTheme";
+import { Card } from "../components/ui/Card";
+import { AppInput } from "../components/ui/AppInput";
+import { Button } from "../components/ui/Button";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { useCreateVisitDiagnosis } from "../features/diagnoses/hooks";
 
 export default function AddDiagnosisScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
-  
+
   const visitId = params.visitId ? Number(params.visitId) : undefined;
   const createDiagnosisMutation = useCreateVisitDiagnosis();
-  
-  const [diagnosisText, setDiagnosisText] = useState('');
-  const [status, setStatus] = useState<'SUSPECTED' | 'CONFIRMED'>('SUSPECTED');
+
+  const [diagnosisText, setDiagnosisText] = useState("");
+  const [status, setStatus] = useState<"SUSPECTED" | "CONFIRMED">("SUSPECTED");
 
   const handleSave = async () => {
     if (!visitId) {
-      Alert.alert('Error', 'Visit ID is missing');
+      Alert.alert("Error", "Visit ID is missing");
       return;
     }
 
     if (!diagnosisText.trim()) {
-      Alert.alert('Error', 'Please enter diagnosis text');
+      Alert.alert("Error", "Please enter diagnosis text");
       return;
     }
 
@@ -38,20 +38,27 @@ export default function AddDiagnosisScreen() {
         diagnosisText: diagnosisText.trim(),
         status,
       });
-      
+
       // Navigate back to visit detail - use replace to ensure fresh data load
       router.replace(`/visit-detail?visitId=${visitId}`);
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create diagnosis');
+      Alert.alert(
+        "Error",
+        error instanceof Error ? error.message : "Failed to create diagnosis",
+      );
     }
   };
 
   if (!visitId) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.text }]}>Invalid visit ID</Text>
+          <Text style={[styles.errorText, { color: colors.text }]}>
+            Invalid visit ID
+          </Text>
           <Button
             title="Go Back"
             onPress={() => router.back()}
@@ -64,10 +71,17 @@ export default function AddDiagnosisScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <StatusBar style="auto" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.text }]}>Add Diagnosis</Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          Add Diagnosis
+        </Text>
 
         {/* Diagnosis Text */}
         <Card style={styles.card}>
@@ -86,17 +100,21 @@ export default function AddDiagnosisScreen() {
           <Text style={[styles.label, { color: colors.text }]}>Status</Text>
           <SegmentedControl
             options={[
-              { label: 'Suspected', value: 'SUSPECTED' },
-              { label: 'Confirmed', value: 'CONFIRMED' },
+              { label: "Suspected", value: "SUSPECTED" },
+              { label: "Confirmed", value: "CONFIRMED" },
             ]}
             selectedValue={status}
-            onValueChange={(value) => setStatus(value as 'SUSPECTED' | 'CONFIRMED')}
+            onValueChange={(value) =>
+              setStatus(value as "SUSPECTED" | "CONFIRMED")
+            }
           />
         </Card>
 
         {/* Save Button */}
         <Button
-          title={createDiagnosisMutation.isPending ? "Saving..." : "Save Diagnosis"}
+          title={
+            createDiagnosisMutation.isPending ? "Saving..." : "Save Diagnosis"
+          }
           onPress={handleSave}
           variant="primary"
           disabled={!diagnosisText.trim() || createDiagnosisMutation.isPending}
@@ -120,8 +138,8 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   errorText: {
@@ -133,7 +151,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 24,
   },
   card: {
@@ -141,7 +159,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 12,
   },
   saveButton: {

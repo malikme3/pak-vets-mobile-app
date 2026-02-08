@@ -1,5 +1,12 @@
-import { View, Text, TextInput, StyleSheet, ViewStyle, TextInputProps } from 'react-native';
-import { useTheme } from '../../theme/useTheme';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ViewStyle,
+  TextInputProps,
+} from "react-native";
+import { useTheme } from "../../theme/useTheme";
 
 interface AppInputProps extends TextInputProps {
   label?: string;
@@ -7,23 +14,39 @@ interface AppInputProps extends TextInputProps {
   containerStyle?: ViewStyle;
 }
 
-export function AppInput({ label, error, containerStyle, style, ...textInputProps }: AppInputProps) {
+export function AppInput({
+  label,
+  error,
+  containerStyle,
+  style,
+  ...textInputProps
+}: AppInputProps) {
   const { colors } = useTheme();
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={[styles.label, { color: colors.text }]}>{label}</Text>}
+      {label && (
+        <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+      )}
       <TextInput
         style={[
           styles.input,
-          { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            color: colors.text,
+          },
           error && { borderColor: colors.danger },
           style,
         ]}
         placeholderTextColor={colors.muted}
         {...textInputProps}
       />
-      {error && <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>}
+      {error && (
+        <Text style={[styles.errorText, { color: colors.danger }]}>
+          {error}
+        </Text>
+      )}
     </View>
   );
 }
@@ -34,7 +57,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 8,
   },
   input: {
