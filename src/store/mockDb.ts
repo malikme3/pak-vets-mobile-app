@@ -77,6 +77,10 @@ export const getCurrentDoctor = (): Doctor => {
   return mockDoctors[0];
 };
 
+export const getAnimals = (): Animal[] => {
+  return mockAnimals;
+};
+
 export const getAnimalById = (id: string): Animal | undefined => {
   return mockAnimals.find((animal) => animal.id === id);
 };
@@ -85,4 +89,19 @@ export const getRecentVisits = (limit: number = 5): Visit[] => {
   return [...mockVisits]
     .sort((a, b) => new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime())
     .slice(0, limit);
+};
+
+export const getVisitsByAnimalId = (animalId: string): Visit[] => {
+  return mockVisits
+    .filter((visit) => visit.animal_id === animalId)
+    .sort((a, b) => new Date(b.visit_datetime).getTime() - new Date(a.visit_datetime).getTime());
+};
+
+export const createAnimal = (animalData: Omit<Animal, 'id'>): Animal => {
+  const newAnimal: Animal = {
+    id: String(mockAnimals.length + 1),
+    ...animalData,
+  };
+  mockAnimals.push(newAnimal);
+  return newAnimal;
 };

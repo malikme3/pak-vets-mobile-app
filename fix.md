@@ -1,0 +1,1 @@
+Fixed. The issue was a bug in react-native-screens 4.17.0+ with Expo SDK 54. I've downgraded it to 4.16.0, which resolves the error.
