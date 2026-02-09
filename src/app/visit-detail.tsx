@@ -454,6 +454,14 @@ export default function VisitDetailScreen() {
                     audioMedia = mediaFiles.find(
                       (m) => m.mediaId === note.mediaId,
                     );
+                    if (__DEV__) {
+                      console.log(
+                        "[VisitDetail] Looking for audioMedia by mediaId:",
+                        note.mediaId,
+                        "Found:",
+                        !!audioMedia,
+                      );
+                    }
                   }
 
                   // Fallback: Find audio files for this visit that match the pattern
@@ -465,6 +473,17 @@ export default function VisitDetailScreen() {
                         m.visitId === visitId &&
                         m.s3Key?.includes(`visits/${visitId}/audio/`),
                     );
+                    if (__DEV__) {
+                      console.log(
+                        "[VisitDetail] Found audio files for visit:",
+                        audioFiles.length,
+                        audioFiles.map((f) => ({
+                          mediaId: f.mediaId,
+                          s3Key: f.s3Key,
+                          createdAt: f.createdAt,
+                        })),
+                      );
+                    }
                     // If there's only one audio file for this visit, use it
                     // Otherwise, try to match by creation time (closest to note creation time)
                     if (audioFiles.length > 0) {
@@ -486,6 +505,17 @@ export default function VisitDetailScreen() {
                           return currentDiff < closestDiff ? current : closest;
                         }) || audioFiles[0];
                     }
+                  }
+
+                  if (__DEV__) {
+                    console.log("[VisitDetail] Voice transcript note:", {
+                      noteId: note.noteId,
+                      noteType: note.noteType,
+                      mediaId: note.mediaId,
+                      audioMediaFound: !!audioMedia,
+                      audioMediaId: audioMedia?.mediaId,
+                      audioS3Key: audioMedia?.s3Key,
+                    });
                   }
                 }
 
@@ -770,8 +800,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   audioPlayerCard: {
-    borderRadius: 8,
-    padding: 8,
+    borderRadius: 12,
+    padding: 12,
     marginBottom: 12,
     marginTop: 4,
     borderWidth: 1,
@@ -787,12 +817,12 @@ const styles = StyleSheet.create({
   audioPlayerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
   },
   playButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -800,9 +830,9 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
   },
   playIcon: {
     marginLeft: 2, // Slight offset for play icon to center it visually
@@ -814,21 +844,29 @@ const styles = StyleSheet.create({
   audioInfoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
   audioLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
   },
   audioDuration: {
-    fontSize: 10,
+    fontSize: 11,
   },
   stopButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   audioControls: {
     flexDirection: "row",
@@ -922,12 +960,17 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Load audio URL when component mounts
+  // Load audio URL when component mounts or audioMedia changes
   useEffect(() => {
-    if (note.noteType === "VOICE_TRANSCRIPT" && audioMedia) {
-      getAudioUrl(audioMedia).then(setAudioUrl);
+    if (note.noteType === "VOICE_TRANSCRIPT") {
+      if (audioMedia) {
+        getAudioUrl(audioMedia).then(setAudioUrl);
+      } else {
+        // Reset audio URL if media is not found
+        setAudioUrl(null);
+      }
     }
-  }, [note.noteId, audioMedia, getAudioUrl]);
+  }, [note.noteId, audioMedia, getAudioUrl, note.noteType]);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -1051,7 +1094,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
       </View>
 
       {/* Audio Playback Controls for Voice Transcripts */}
-      {note.noteType === "VOICE_TRANSCRIPT" && audioMedia && (
+      {note.noteType === "VOICE_TRANSCRIPT" && (
         <View
           style={[
             styles.audioPlayerCard,
@@ -1068,11 +1111,11 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
                 styles.playButton,
                 {
                   backgroundColor: colors.primary,
-                  opacity: audioUrl ? 1 : 0.5,
+                  opacity: audioUrl && audioMedia ? 1 : 0.5,
                 },
               ]}
               onPress={handlePlayPause}
-              disabled={!audioUrl || isLoading}
+              disabled={!audioUrl || !audioMedia || isLoading}
               activeOpacity={0.7}
             >
               {isLoading ? (
@@ -1080,7 +1123,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
               ) : (
                 <FontAwesome
                   name={isPlaying ? "pause" : "play"}
-                  size={11}
+                  size={16}
                   color="#fff"
                   style={styles.playIcon}
                 />
@@ -1092,7 +1135,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
               <View style={styles.audioInfoRow}>
                 <FontAwesome
                   name="microphone"
-                  size={10}
+                  size={12}
                   color={colors.primary}
                 />
                 <Text
@@ -1100,6 +1143,12 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
                   numberOfLines={1}
                 >
                   Voice Recording
+                  {!audioMedia && (
+                    <Text style={{ color: colors.muted, fontSize: 11 }}>
+                      {" "}
+                      (Loading...)
+                    </Text>
+                  )}
                 </Text>
               </View>
             </View>
@@ -1116,7 +1165,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
                 onPress={handleStop}
                 activeOpacity={0.7}
               >
-                <FontAwesome name="stop" size={10} color="#fff" />
+                <FontAwesome name="stop" size={12} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
