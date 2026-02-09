@@ -18,6 +18,8 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCreateVisitNote } from "../features/notes/hooks";
+import { useCreateMediaFile } from "../features/media/hooks";
+import { getBucketName } from "../services/sharedServicesApi";
 
 export default function AddNoteScreen() {
   const router = useRouter();
@@ -26,6 +28,7 @@ export default function AddNoteScreen() {
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
   const createNoteMutation = useCreateVisitNote();
+  const createMediaMutation = useCreateMediaFile();
 
   const [noteText, setNoteText] = useState("");
   const [noteType, setNoteType] = useState<"TEXT" | "VOICE_TRANSCRIPT">("TEXT");
@@ -135,10 +138,30 @@ export default function AddNoteScreen() {
     }
 
     try {
+      let mediaId: number | undefined;
+
+      // For voice transcripts, create a MediaFile record first
+      if (noteType === "VOICE_TRANSCRIPT" && voiceRecording?.s3Key) {
+        const bucketName = getBucketName();
+        // Construct the S3 URL for the audio file
+        const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
+
+        const mediaFile = await createMediaMutation.mutateAsync({
+          visitId,
+          fileType: "AUDIO",
+          s3Key: voiceRecording.s3Key,
+          url: s3Url,
+        });
+
+        mediaId = mediaFile.mediaId;
+      }
+
+      // Create the note with mediaId if it's a voice transcript
       await createNoteMutation.mutateAsync({
         visitId,
         noteType,
         noteText: noteText.trim(),
+        mediaId,
       });
 
       // Cleanup audio

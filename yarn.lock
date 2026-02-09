@@ -1446,6 +1446,11 @@
   dependencies:
     invariant "^2.2.4"
 
+"@react-native-community/slider@^5.1.2":
+  version "5.1.2"
+  resolved "https://registry.yarnpkg.com/@react-native-community/slider/-/slider-5.1.2.tgz#b7255c27b52d74440bcf146a05dcf13c94e7d91c"
+  integrity sha512-UV/MjCyCtSjS5BQDrrGIMmCXm309xEG6XbR0Dj65kzTraJSVDxSjQS2uBUXgX+5SZUOCzCxzv3OufOZBdtQY4w==
+
 "@react-native/assets-registry@0.81.5":
   version "0.81.5"
   resolved "https://registry.npmjs.org/@react-native/assets-registry/-/assets-registry-0.81.5.tgz"
@@ -2718,6 +2723,11 @@ expo-server@^1.0.5:
   version "1.0.5"
   resolved "https://registry.npmjs.org/expo-server/-/expo-server-1.0.5.tgz"
   integrity sha512-IGR++flYH70rhLyeXF0Phle56/k4cee87WeQ4mamS+MkVAVP+dDlOHf2nN06Z9Y2KhU0Gp1k+y61KkghF7HdhA==
+
+expo-speech@^14.0.8:
+  version "14.0.8"
+  resolved "https://registry.yarnpkg.com/expo-speech/-/expo-speech-14.0.8.tgz#fa7861ab55244fb64916a4939f93d33f03cf28b5"
+  integrity sha512-UjBFCFv58nutlLw92L7kUS0ZjbOOfaTdiEv/HbjvMrT6BfldoOLLBZbaEcEhDdZK36NY/kass0Kzxk+co6vxSQ==
 
 expo-status-bar@~3.0.9:
   version "3.0.9"

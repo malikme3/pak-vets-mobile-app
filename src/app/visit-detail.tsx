@@ -1,14 +1,19 @@
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Audio } from "expo-av";
+import * as Speech from "expo-speech";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -21,6 +26,10 @@ import { useVisitNotes } from "../features/notes/hooks";
 import { useMediaFilesByVisit } from "../features/media/hooks";
 import { ListRow } from "../components/ui/ListRow";
 import { Image } from "react-native";
+import {
+  getBucketName,
+  getDownloadSignedUrl,
+} from "../services/sharedServicesApi";
 import type {
   VisitDiagnosis,
   VisitTreatment,
@@ -95,6 +104,24 @@ export default function VisitDetailScreen() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  // Helper to get audio URL from media file
+  const getAudioUrl = async (media: MediaFile): Promise<string | null> => {
+    if (media.url) {
+      return media.url;
+    }
+    if (media.s3Key) {
+      try {
+        const bucketName = getBucketName();
+        const signedUrl = await getDownloadSignedUrl(bucketName, media.s3Key);
+        return signedUrl;
+      } catch (error) {
+        console.error("Error getting audio signed URL:", error);
+        return null;
+      }
+    }
+    return null;
   };
 
   if (isLoading) {
@@ -417,31 +444,61 @@ export default function VisitDetailScreen() {
           </View>
           {notes.length > 0 ? (
             <View style={styles.listContainer}>
-              {notes.map((note) => (
-                <View
-                  key={note.noteId}
-                  style={[styles.noteItem, { borderLeftColor: colors.primary }]}
-                >
-                  <View style={styles.noteHeader}>
-                    <Text style={[styles.noteType, { color: colors.primary }]}>
-                      {note.noteType === "VOICE_TRANSCRIPT"
-                        ? "Voice Transcript"
-                        : "Text Note"}
-                    </Text>
-                    <Text style={[styles.noteDate, { color: colors.muted }]}>
-                      {new Date(note.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Text>
-                  </View>
-                  <Text style={[styles.noteText, { color: colors.text }]}>
-                    {note.noteText}
-                  </Text>
-                </View>
-              ))}
+              {notes.map((note) => {
+                // Find associated media file for voice transcripts
+                let audioMedia: MediaFile | null | undefined = null;
+
+                if (note.noteType === "VOICE_TRANSCRIPT") {
+                  // First try to find by mediaId (for new notes)
+                  if (note.mediaId) {
+                    audioMedia = mediaFiles.find(
+                      (m) => m.mediaId === note.mediaId,
+                    );
+                  }
+
+                  // Fallback: Find audio files for this visit that match the pattern
+                  // Voice recordings are stored as visits/{visitId}/audio/{timestamp}-{random}.m4a
+                  if (!audioMedia && visitId) {
+                    const audioFiles = mediaFiles.filter(
+                      (m) =>
+                        m.fileType === "AUDIO" &&
+                        m.visitId === visitId &&
+                        m.s3Key?.includes(`visits/${visitId}/audio/`),
+                    );
+                    // If there's only one audio file for this visit, use it
+                    // Otherwise, try to match by creation time (closest to note creation time)
+                    if (audioFiles.length > 0) {
+                      const noteCreatedAt = new Date(note.createdAt).getTime();
+                      audioMedia =
+                        audioFiles.reduce((closest, current) => {
+                          const currentTime = new Date(
+                            current.createdAt,
+                          ).getTime();
+                          const closestTime = new Date(
+                            closest.createdAt,
+                          ).getTime();
+                          const currentDiff = Math.abs(
+                            currentTime - noteCreatedAt,
+                          );
+                          const closestDiff = Math.abs(
+                            closestTime - noteCreatedAt,
+                          );
+                          return currentDiff < closestDiff ? current : closest;
+                        }) || audioFiles[0];
+                    }
+                  }
+                }
+
+                return (
+                  <NoteItem
+                    key={note.noteId}
+                    note={note}
+                    audioMedia={audioMedia}
+                    colors={colors}
+                    getAudioUrl={getAudioUrl}
+                  />
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -696,6 +753,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  noteHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  noteIcon: {
+    marginRight: 0,
+  },
   noteType: {
     fontSize: 12,
     fontWeight: "600",
@@ -703,6 +768,86 @@ const styles = StyleSheet.create({
   },
   noteDate: {
     fontSize: 11,
+  },
+  audioPlayerCard: {
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 12,
+    marginTop: 4,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  audioPlayerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  playButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  playIcon: {
+    marginLeft: 2, // Slight offset for play icon to center it visually
+  },
+  audioInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  audioInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  audioLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  audioDuration: {
+    fontSize: 10,
+  },
+  stopButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  audioControls: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  audioButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 6,
+  },
+  audioButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   noteText: {
     fontSize: 14,
@@ -761,3 +906,253 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 });
+
+// Voice Note Item Component with Audio Playback
+interface NoteItemProps {
+  note: VisitNote;
+  audioMedia: MediaFile | null | undefined;
+  colors: ReturnType<typeof useTheme>["colors"];
+  getAudioUrl: (media: MediaFile) => Promise<string | null>;
+}
+
+function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Load audio URL when component mounts
+  useEffect(() => {
+    if (note.noteType === "VOICE_TRANSCRIPT" && audioMedia) {
+      getAudioUrl(audioMedia).then(setAudioUrl);
+    }
+  }, [note.noteId, audioMedia, getAudioUrl]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(console.error);
+      }
+    };
+  }, [sound]);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!audioUrl) {
+      Alert.alert("Error", "Audio file not available");
+      return;
+    }
+
+    try {
+      if (isPlaying && sound) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        setIsLoading(true);
+        if (sound) {
+          // Set up playback status updates for existing sound
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+          await sound.playAsync();
+          setIsPlaying(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: audioUrl },
+            { shouldPlay: true },
+          );
+          setSound(newSound);
+          setIsPlaying(true);
+
+          // Set up playback status updates
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+        }
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setIsLoading(false);
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) {
+        console.error("Playback error:", error);
+      }
+    }
+  }, [audioUrl, sound, isPlaying]);
+
+  const handleStop = useCallback(async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+    }
+  }, [sound]);
+
+  // Text-to-speech handlers for text notes
+  const handleListen = useCallback(() => {
+    if (!note.noteText) {
+      Alert.alert("Error", "No text to read");
+      return;
+    }
+
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+    } else {
+      setIsSpeaking(true);
+      Speech.speak(note.noteText, {
+        onDone: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+        onError: () => {
+          setIsSpeaking(false);
+          Alert.alert("Error", "Failed to read text");
+        },
+      });
+    }
+  }, [note.noteText, isSpeaking]);
+
+  // Stop speech when component unmounts
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
+
+  return (
+    <View style={[styles.noteItem, { borderLeftColor: colors.primary }]}>
+      <View style={styles.noteHeader}>
+        <View style={styles.noteHeaderLeft}>
+          <FontAwesome
+            name={
+              note.noteType === "VOICE_TRANSCRIPT" ? "microphone" : "file-text"
+            }
+            size={14}
+            color={colors.primary}
+            style={styles.noteIcon}
+          />
+          <Text style={[styles.noteType, { color: colors.primary }]}>
+            {note.noteType === "VOICE_TRANSCRIPT"
+              ? "Voice Transcript"
+              : "Text Note"}
+          </Text>
+        </View>
+        <Text style={[styles.noteDate, { color: colors.muted }]}>
+          {new Date(note.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+      </View>
+
+      {/* Audio Playback Controls for Voice Transcripts */}
+      {note.noteType === "VOICE_TRANSCRIPT" && audioMedia && (
+        <View
+          style={[
+            styles.audioPlayerCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          {/* Main Play Button */}
+          <View style={styles.audioPlayerHeader}>
+            <TouchableOpacity
+              style={[
+                styles.playButton,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: audioUrl ? 1 : 0.5,
+                },
+              ]}
+              onPress={handlePlayPause}
+              disabled={!audioUrl || isLoading}
+              activeOpacity={0.7}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <FontAwesome
+                  name={isPlaying ? "pause" : "play"}
+                  size={11}
+                  color="#fff"
+                  style={styles.playIcon}
+                />
+              )}
+            </TouchableOpacity>
+
+            {/* Audio Info */}
+            <View style={styles.audioInfo}>
+              <View style={styles.audioInfoRow}>
+                <FontAwesome
+                  name="microphone"
+                  size={10}
+                  color={colors.primary}
+                />
+                <Text
+                  style={[styles.audioLabel, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  Voice Recording
+                </Text>
+              </View>
+            </View>
+
+            {/* Stop Button (when playing) */}
+            {isPlaying && (
+              <TouchableOpacity
+                style={[
+                  styles.stopButton,
+                  {
+                    backgroundColor: colors.danger,
+                  },
+                ]}
+                onPress={handleStop}
+                activeOpacity={0.7}
+              >
+                <FontAwesome name="stop" size={10} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Listen Button for Text Notes */}
+      {note.noteType === "TEXT" && note.noteText && (
+        <View style={styles.audioControls}>
+          <TouchableOpacity
+            style={[
+              styles.audioButton,
+              {
+                backgroundColor: isSpeaking ? colors.danger : colors.accent,
+              },
+            ]}
+            onPress={handleListen}
+          >
+            <FontAwesome
+              name={isSpeaking ? "stop" : "volume-up"}
+              size={12}
+              color="#fff"
+            />
+            <Text style={styles.audioButtonText}>
+              {isSpeaking ? "Stop" : "Listen"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Note Text */}
+      {note.noteText && (
+        <Text style={[styles.noteText, { color: colors.text }]}>
+          {note.noteText}
+        </Text>
+      )}
+    </View>
+  );
+}
