@@ -172,152 +172,171 @@ export function VoiceMessageRecorder({
     }`;
   }, []);
 
-  const stopAndTranscribe = useCallback(
-    async () => {
-      const rec = recordingRef.current;
+  const stopAndTranscribe = useCallback(async () => {
+    const rec = recordingRef.current;
 
-      if (!rec) {
-        Alert.alert("Error", "No active recording found.");
-        setRecordingStatus("idle");
+    if (!rec) {
+      Alert.alert("Error", "No active recording found.");
+      setRecordingStatus("idle");
+      return;
+    }
+
+    try {
+      isRecordingInProgressRef.current = false;
+      setRecordingStatus("processing");
+
+      await rec.stopAndUnloadAsync();
+      const uri = rec.getURI();
+
+      if (!uri) {
+        throw new Error("No recording URI available");
+      }
+
+      setRecording(null);
+      recordingRef.current = null;
+      setIsProcessing(true);
+
+      // Generate S3 key and get bucket name based on stage
+      const s3Key = generateS3Key();
+      const bucketName = getBucketName();
+
+      // Get presigned URL for upload
+      console.log("[VoiceRecorder] Requesting presigned URL:", {
+        bucketName,
+        s3Key,
+        tags: AUDIO_TAG,
+      });
+      const { signedUrl } = await getUploadSignedUrl(
+        bucketName,
+        s3Key,
+        AUDIO_TAG,
+      );
+      console.log("[VoiceRecorder] Presigned URL received:", {
+        signedUrlLength: signedUrl.length,
+        bucketName,
+        s3Key,
+      });
+
+      // Upload audio to S3
+      console.log("[VoiceRecorder] Uploading to S3:", {
+        s3Key,
+        bucketName,
+        uri,
+        signedUrlPreview: signedUrl.substring(0, 200) + "...",
+      });
+      const uploadResult = await FileSystem.uploadAsync(signedUrl, uri, {
+        httpMethod: "PUT",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: { "Content-Type": "audio/m4a" },
+      });
+
+      // Verify upload was successful
+      if (uploadResult.status !== 200) {
+        const errorBody =
+          typeof uploadResult.body === "string"
+            ? uploadResult.body
+            : JSON.stringify(uploadResult.body);
+        console.error("[VoiceRecorder] S3 Upload Failed:", {
+          status: uploadResult.status,
+          headers: uploadResult.headers,
+          body: errorBody,
+          signedUrl: signedUrl.substring(0, 200) + "...",
+          bucketName,
+          s3Key,
+        });
+        throw new Error(
+          `S3 upload failed with status ${uploadResult.status}: ${errorBody}`,
+        );
+      }
+      console.log("[VoiceRecorder] S3 upload successful");
+
+      // Wait for S3 to process the file before transcription
+      console.log(
+        `[VoiceRecorder] Waiting ${S3_PROCESSING_DELAY_MS}ms for S3 processing...`,
+      );
+      await new Promise((resolve) =>
+        setTimeout(resolve, S3_PROCESSING_DELAY_MS),
+      );
+
+      // Transcribe audio using s3Key (backend will generate read URL internally)
+      console.log("[VoiceRecorder] Calling transcription API with s3Key:", {
+        s3Key,
+        bucketName,
+      });
+      const result = await transcribeAudio(s3Key, bucketName);
+      console.log("[VoiceRecorder] Transcription completed:", {
+        status: result.status,
+        hasRawText: !!result.transcript.rawText,
+        rawTextLength: result.transcript.rawText?.length || 0,
+        hasImprovedText: !!result.transcript.improvedText,
+      });
+
+      if (result.status === "REJECTED") {
+        Alert.alert("Rejected", "Content not allowed.");
+        await resetRecording();
         return;
       }
 
-      try {
-        isRecordingInProgressRef.current = false;
-        setRecordingStatus("processing");
+      const transcriptText =
+        result.transcript.improvedText || result.transcript.rawText || "";
 
-        await rec.stopAndUnloadAsync();
-        const uri = rec.getURI();
-
-        if (!uri) {
-          throw new Error("No recording URI available");
-        }
-
-        setRecording(null);
-        recordingRef.current = null;
-        setIsProcessing(true);
-
-        // Generate S3 key and get bucket name based on stage
-        const s3Key = generateS3Key();
-        const bucketName = getBucketName();
-
-        // Get presigned URL for upload
-        console.log("[VoiceRecorder] Requesting presigned URL:", {
-          bucketName,
-          s3Key,
-          tags: AUDIO_TAG,
-        });
-        const { signedUrl } = await getUploadSignedUrl(
-          bucketName,
-          s3Key,
-          AUDIO_TAG,
+      // Handle empty transcription - could be silent audio or too short
+      if (!transcriptText || transcriptText.trim().length === 0) {
+        console.warn(
+          "[VoiceRecorder] Empty transcription - audio may be silent or too short",
         );
-        console.log("[VoiceRecorder] Presigned URL received:", {
-          signedUrlLength: signedUrl.length,
-          bucketName,
-          s3Key,
-        });
-
-        // Upload audio to S3
-        console.log("[VoiceRecorder] Uploading to S3:", {
-          s3Key,
-          bucketName,
-          uri,
-          signedUrlPreview: signedUrl.substring(0, 200) + "...",
-        });
-        const uploadResult = await FileSystem.uploadAsync(signedUrl, uri, {
-          httpMethod: "PUT",
-          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-          headers: { "Content-Type": "audio/m4a" },
-        });
-
-        // Verify upload was successful
-        if (uploadResult.status !== 200) {
-          const errorBody =
-            typeof uploadResult.body === "string"
-              ? uploadResult.body
-              : JSON.stringify(uploadResult.body);
-          console.error("[VoiceRecorder] S3 Upload Failed:", {
-            status: uploadResult.status,
-            headers: uploadResult.headers,
-            body: errorBody,
-            signedUrl: signedUrl.substring(0, 200) + "...",
-            bucketName,
-            s3Key,
-          });
-          throw new Error(
-            `S3 upload failed with status ${uploadResult.status}: ${errorBody}`,
-          );
-        }
-        console.log("[VoiceRecorder] S3 upload successful");
-
-        // Transcribe audio using s3Key (backend will generate read URL internally)
-        console.log("[VoiceRecorder] Calling transcription API with s3Key:", {
-          s3Key,
-          bucketName,
-        });
-        const result = await transcribeAudio(s3Key, bucketName);
-        console.log("[VoiceRecorder] Transcription completed:", {
-          status: result.status,
-          hasRawText: !!result.transcript.rawText,
-          hasImprovedText: !!result.transcript.improvedText,
-        });
-
-        if (result.status === "REJECTED") {
-          Alert.alert("Rejected", "Content not allowed.");
-          await resetRecording();
-          return;
-        }
-
-        const transcriptText =
-          result.transcript.improvedText || result.transcript.rawText;
-
-        if (onTranscriptReady) {
-          onTranscriptReady(transcriptText);
-        }
-
-        if (onRecordingComplete) {
-          onRecordingComplete(
-            s3Key,
-            result.transcript.rawText,
-            result.transcript.improvedText,
-            uri, // Pass local URI for playback
-          );
-        }
-
+        Alert.alert(
+          "No Speech Detected",
+          "The recording doesn't contain any detectable speech. Please try recording again.",
+        );
         await resetRecording();
-      } catch (error) {
-        const errorObj =
-          error instanceof Error ? error : new Error(String(error));
-
-        console.error("[VoiceRecorder] Error in stopAndTranscribe:", {
-          error: errorObj.message,
-          stack: errorObj.stack,
-        });
-
-        // Format error message for user display
-        const errorMessage = formatErrorMessage(error);
-
-        if (onError) {
-          onError(errorObj);
-        } else {
-          Alert.alert("Error", errorMessage);
-        }
-        await resetRecording();
-      } finally {
-        setIsProcessing(false);
+        return;
       }
-    },
-    [
-      onTranscriptReady,
-      onRecordingComplete,
-      onError,
-      resetRecording,
-      generateS3Key,
-      formatErrorMessage,
-      visitId,
-    ],
-  );
+
+      if (onTranscriptReady) {
+        onTranscriptReady(transcriptText);
+      }
+
+      if (onRecordingComplete) {
+        onRecordingComplete(
+          s3Key,
+          result.transcript.rawText || "",
+          result.transcript.improvedText,
+          uri, // Pass local URI for playback
+        );
+      }
+
+      await resetRecording();
+    } catch (error) {
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
+
+      console.error("[VoiceRecorder] Error in stopAndTranscribe:", {
+        error: errorObj.message,
+        stack: errorObj.stack,
+      });
+
+      // Format error message for user display
+      const errorMessage = formatErrorMessage(error);
+
+      if (onError) {
+        onError(errorObj);
+      } else {
+        Alert.alert("Error", errorMessage);
+      }
+      await resetRecording();
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [
+    onTranscriptReady,
+    onRecordingComplete,
+    onError,
+    resetRecording,
+    generateS3Key,
+    formatErrorMessage,
+    visitId,
+  ]);
 
   const handleButtonPress = useCallback(() => {
     if (handleButtonPressRef.current) {
@@ -368,7 +387,9 @@ export function VoiceMessageRecorder({
           height: buttonSize,
           borderRadius: buttonSize / 2,
           backgroundColor:
-            recordingStatus === "recording" ? RECORDING_BUTTON_COLOR : buttonColor,
+            recordingStatus === "recording"
+              ? RECORDING_BUTTON_COLOR
+              : buttonColor,
         },
         (disabled || isProcessing) && { opacity: 0.5 },
       ]}

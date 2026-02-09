@@ -6,6 +6,7 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -14,9 +15,7 @@ import { Audio } from "expo-av";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
-import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
-import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCreateVisitNote } from "../features/notes/hooks";
 
@@ -116,6 +115,7 @@ export default function AddNoteScreen() {
     }
     setVoiceRecording(null);
     setNoteText("");
+    setNoteType("TEXT");
   }, [sound]);
 
   const handleSave = async () => {
@@ -188,150 +188,92 @@ export default function AddNoteScreen() {
       >
         <Text style={[styles.title, { color: colors.text }]}>Add Note</Text>
 
-        {/* Note Type */}
-        <Card style={styles.card}>
-          <Text style={[styles.label, { color: colors.text }]}>Note Type</Text>
-          <SegmentedControl
-            options={[
-              { label: "Text", value: "TEXT" },
-              { label: "Voice Transcript", value: "VOICE_TRANSCRIPT" },
-            ]}
-            selectedValue={noteType}
-            onValueChange={(value) =>
-              setNoteType(value as "TEXT" | "VOICE_TRANSCRIPT")
-            }
-          />
-        </Card>
-
-        {/* Voice Recording Section */}
-        {noteType === "VOICE_TRANSCRIPT" && (
-          <Card style={styles.card}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Voice Recording
-            </Text>
-            {!voiceRecording ? (
-              <View style={styles.recordSection}>
-                <Text style={[styles.instructionText, { color: colors.muted }]}>
-                  Tap the microphone to start recording
-                </Text>
-                <View style={styles.recordButtonContainer}>
-                  <VoiceMessageRecorder
-                    onRecordingComplete={handleVoiceRecordingComplete}
-                    onTranscriptReady={handleTranscriptReady}
-                    buttonSize={64}
-                    buttonColor={colors.primary}
-                    visitId={visitId}
+        {/* ChatGPT-style Input Area */}
+        <Card style={styles.inputCard}>
+          <View style={styles.inputContainer}>
+            {/* Voice Recording Playback (if exists) */}
+            {voiceRecording && (
+              <View
+                style={[
+                  styles.voicePlaybackCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.voicePlaybackHeader}>
+                  <FontAwesome
+                    name="microphone"
+                    size={14}
+                    color={colors.primary}
                   />
-                </View>
-              </View>
-            ) : (
-              <View style={styles.playbackSection}>
-                <View
-                  style={[
-                    styles.voiceMessageCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <View style={styles.voiceMessageHeader}>
-                    <FontAwesome
-                      name="microphone"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text
-                      style={[styles.voiceMessageTitle, { color: colors.text }]}
-                    >
-                      Voice Message Recorded
-                    </Text>
-                  </View>
-                  {voiceRecording.rawText && (
-                    <Text
-                      style={[styles.transcriptText, { color: colors.muted }]}
-                      numberOfLines={3}
-                    >
-                      {voiceRecording.rawText}
-                    </Text>
-                  )}
-                </View>
-
-                <View style={styles.playbackControls}>
+                  <Text
+                    style={[styles.voicePlaybackTitle, { color: colors.text }]}
+                  >
+                    Voice recorded
+                  </Text>
                   <TouchableOpacity
-                    style={[
-                      styles.playbackButton,
-                      { backgroundColor: colors.primary },
-                    ]}
                     onPress={handlePlayPause}
+                    style={styles.playbackIconButton}
                   >
                     <FontAwesome
                       name={isPlaying ? "pause" : "play"}
-                      size={16}
-                      color="#fff"
+                      size={12}
+                      color={colors.primary}
                     />
-                    <Text style={styles.playbackButtonText}>
-                      {isPlaying ? "Pause" : "Play"}
-                    </Text>
                   </TouchableOpacity>
                   {isPlaying && (
                     <TouchableOpacity
-                      style={[
-                        styles.playbackButton,
-                        {
-                          backgroundColor: colors.muted,
-                          borderColor: colors.border,
-                        },
-                      ]}
                       onPress={handleStop}
+                      style={styles.playbackIconButton}
                     >
-                      <FontAwesome name="stop" size={16} color="#fff" />
-                      <Text style={styles.playbackButtonText}>Stop</Text>
+                      <FontAwesome name="stop" size={12} color={colors.muted} />
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
-                    style={[
-                      styles.playbackButton,
-                      {
-                        backgroundColor: colors.muted,
-                        borderColor: colors.border,
-                      },
-                    ]}
                     onPress={handleRecordAgain}
+                    style={styles.playbackIconButton}
                   >
-                    <FontAwesome name="repeat" size={16} color="#fff" />
-                    <Text style={styles.playbackButtonText}>Record Again</Text>
+                    <FontAwesome name="times" size={12} color={colors.muted} />
                   </TouchableOpacity>
                 </View>
               </View>
             )}
-          </Card>
-        )}
 
-        {/* Note Text */}
-        <Card style={styles.card}>
-          <View style={styles.inputHeader}>
-            <Text style={[styles.label, { color: colors.text }]}>Note *</Text>
-            {noteType === "TEXT" && (
-              <View style={styles.micButtonContainer}>
+            {/* Text Input Area */}
+            <View style={styles.textInputWrapper}>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={noteText}
+                onChangeText={setNoteText}
+                placeholder="Type your note or tap the microphone to record..."
+                placeholderTextColor={colors.muted}
+                multiline
+                textAlignVertical="top"
+              />
+              {/* Microphone Button - Bottom Right */}
+              <View style={styles.micButtonWrapper}>
                 <VoiceMessageRecorder
                   onTranscriptReady={handleTranscriptReady}
                   onRecordingComplete={handleVoiceRecordingComplete}
-                  buttonSize={36}
+                  onError={(error: Error) => {
+                    Alert.alert("Error", error.message);
+                  }}
+                  buttonSize={32}
                   buttonColor={colors.primary}
                   visitId={visitId}
                 />
               </View>
-            )}
+            </View>
           </View>
-          <AppInput
-            value={noteText}
-            onChangeText={setNoteText}
-            placeholder="Enter your note here..."
-            multiline
-            numberOfLines={8}
-            style={noteType === "TEXT" ? styles.textAreaWithIcon : undefined}
-          />
         </Card>
 
         {/* Save Button */}
@@ -380,85 +322,54 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 24,
   },
-  card: {
+  inputCard: {
     marginBottom: 16,
+    padding: 0,
+    overflow: "hidden",
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
+  inputContainer: {
+    padding: 16,
+  },
+  voicePlaybackCard: {
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
     marginBottom: 12,
+  },
+  voicePlaybackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  voicePlaybackTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+  },
+  playbackIconButton: {
+    padding: 4,
+  },
+  textInputWrapper: {
+    position: "relative",
+    minHeight: 120,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 44,
+    fontSize: 16,
+    minHeight: 120,
+    maxHeight: 300,
+  },
+  micButtonWrapper: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    zIndex: 10,
   },
   saveButton: {
     marginTop: 8,
-  },
-  recordSection: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-  },
-  instructionText: {
-    fontSize: 14,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  recordButtonContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playbackSection: {
-    gap: 16,
-  },
-  voiceMessageCard: {
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-  },
-  voiceMessageHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-    gap: 8,
-  },
-  voiceMessageTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  transcriptText: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginLeft: 24,
-  },
-  playbackControls: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  playbackButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 6,
-    flex: 1,
-    minWidth: 100,
-  },
-  playbackButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  inputHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  micButtonContainer: {
-    zIndex: 10,
-  },
-  textAreaWithIcon: {
-    paddingRight: 50,
   },
 });
