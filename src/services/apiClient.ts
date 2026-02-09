@@ -5,7 +5,9 @@ import axios, {
 } from "axios";
 
 // API base URL - should be set via environment variable
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001";
+// Defaults to dev custom domain, can be overridden with EXPO_PUBLIC_API_URL
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || "https://pak-vets-dev.roundrocktennis.com";
 
 export interface ApiError {
   message: string;
