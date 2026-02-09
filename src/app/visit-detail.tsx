@@ -12,7 +12,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
-import * as Speech from "expo-speech";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
@@ -278,34 +277,22 @@ export default function VisitDetailScreen() {
           </View>
           {diagnoses.length > 0 ? (
             <View style={styles.listContainer}>
-              {diagnoses.map((diagnosis) => (
-                <View
-                  key={diagnosis.diagnosisId}
-                  style={[
-                    styles.diagnosisItem,
-                    { borderLeftColor: colors.primary },
-                  ]}
-                >
-                  <View style={styles.diagnosisHeader}>
-                    <Text
-                      style={[
-                        styles.diagnosisStatus,
-                        {
-                          color:
-                            diagnosis.status === "CONFIRMED"
-                              ? colors.success
-                              : colors.warning,
-                        },
-                      ]}
-                    >
-                      {diagnosis.status}
-                    </Text>
-                  </View>
-                  <Text style={[styles.diagnosisText, { color: colors.text }]}>
-                    {diagnosis.diagnosisText}
-                  </Text>
-                </View>
-              ))}
+              {diagnoses.map((diagnosis) => {
+                // Find associated audio media file
+                const audioMedia = diagnosis.mediaId
+                  ? mediaFiles.find((m) => m.mediaId === diagnosis.mediaId)
+                  : null;
+
+                return (
+                  <DiagnosisItem
+                    key={diagnosis.diagnosisId}
+                    diagnosis={diagnosis}
+                    audioMedia={audioMedia}
+                    colors={colors}
+                    getAudioUrl={getAudioUrl}
+                  />
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -333,87 +320,22 @@ export default function VisitDetailScreen() {
           </View>
           {treatments.length > 0 ? (
             <View style={styles.listContainer}>
-              {treatments.map((treatment) => (
-                <View
-                  key={treatment.treatmentId}
-                  style={[
-                    styles.treatmentItem,
-                    { borderLeftColor: colors.accent },
-                  ]}
-                >
-                  <View style={styles.treatmentHeader}>
-                    <Text
-                      style={[styles.treatmentType, { color: colors.primary }]}
-                    >
-                      {treatment.treatmentType || "Treatment"}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.treatmentStatus,
-                        {
-                          color:
-                            treatment.treatmentStatus === "COMPLETED"
-                              ? colors.success
-                              : treatment.treatmentStatus === "STOPPED"
-                                ? colors.danger
-                                : colors.warning,
-                        },
-                      ]}
-                    >
-                      {treatment.treatmentStatus}
-                    </Text>
-                  </View>
-                  {treatment.medicineNameFree && (
-                    <Text
-                      style={[styles.treatmentText, { color: colors.text }]}
-                    >
-                      <Text style={styles.bold}>Medicine:</Text>{" "}
-                      {treatment.medicineNameFree}
-                    </Text>
-                  )}
-                  {treatment.dose && (
-                    <Text
-                      style={[styles.treatmentText, { color: colors.text }]}
-                    >
-                      <Text style={styles.bold}>Dose:</Text> {treatment.dose}
-                    </Text>
-                  )}
-                  {treatment.route && (
-                    <Text
-                      style={[styles.treatmentText, { color: colors.text }]}
-                    >
-                      <Text style={styles.bold}>Route:</Text> {treatment.route}
-                    </Text>
-                  )}
-                  {treatment.frequency && (
-                    <Text
-                      style={[styles.treatmentText, { color: colors.text }]}
-                    >
-                      <Text style={styles.bold}>Frequency:</Text>{" "}
-                      {treatment.frequency}
-                    </Text>
-                  )}
-                  {treatment.durationDays && (
-                    <Text
-                      style={[styles.treatmentText, { color: colors.text }]}
-                    >
-                      <Text style={styles.bold}>Duration:</Text>{" "}
-                      {treatment.durationDays} days
-                    </Text>
-                  )}
-                  {treatment.instructions && (
-                    <Text
-                      style={[
-                        styles.treatmentText,
-                        { color: colors.text, marginTop: 4 },
-                      ]}
-                    >
-                      <Text style={styles.bold}>Instructions:</Text>{" "}
-                      {treatment.instructions}
-                    </Text>
-                  )}
-                </View>
-              ))}
+              {treatments.map((treatment) => {
+                // Find associated audio media file
+                const audioMedia = treatment.mediaId
+                  ? mediaFiles.find((m) => m.mediaId === treatment.mediaId)
+                  : null;
+
+                return (
+                  <TreatmentItem
+                    key={treatment.treatmentId}
+                    treatment={treatment}
+                    audioMedia={audioMedia}
+                    colors={colors}
+                    getAudioUrl={getAudioUrl}
+                  />
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -945,6 +867,431 @@ const styles = StyleSheet.create({
   },
 });
 
+// Diagnosis Item Component with Audio Playback
+interface DiagnosisItemProps {
+  diagnosis: VisitDiagnosis;
+  audioMedia: MediaFile | null | undefined;
+  colors: ReturnType<typeof useTheme>["colors"];
+  getAudioUrl: (media: MediaFile) => Promise<string | null>;
+}
+
+function DiagnosisItem({
+  diagnosis,
+  audioMedia,
+  colors,
+  getAudioUrl,
+}: DiagnosisItemProps) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // Load audio URL when component mounts or audioMedia changes
+  useEffect(() => {
+    if (audioMedia) {
+      getAudioUrl(audioMedia).then(setAudioUrl);
+    } else {
+      setAudioUrl(null);
+    }
+  }, [diagnosis.diagnosisId, audioMedia, getAudioUrl]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(console.error);
+      }
+    };
+  }, [sound]);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!audioUrl) {
+      Alert.alert("Error", "Audio file not available");
+      return;
+    }
+
+    try {
+      if (isPlaying && sound) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        setIsLoading(true);
+        if (sound) {
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+          await sound.playAsync();
+          setIsPlaying(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: audioUrl },
+            { shouldPlay: true },
+          );
+          setSound(newSound);
+          setIsPlaying(true);
+
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+        }
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setIsLoading(false);
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) {
+        console.error("Playback error:", error);
+      }
+    }
+  }, [audioUrl, sound, isPlaying]);
+
+  const handleStop = useCallback(async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+    }
+  }, [sound]);
+
+  return (
+    <View
+      style={[styles.diagnosisItem, { borderLeftColor: colors.primary }]}
+    >
+      <View style={styles.diagnosisHeader}>
+        <Text
+          style={[
+            styles.diagnosisStatus,
+            {
+              color:
+                diagnosis.status === "CONFIRMED"
+                  ? colors.success
+                  : colors.warning,
+            },
+          ]}
+        >
+          {diagnosis.status}
+        </Text>
+      </View>
+
+      {/* Audio Playback Controls for Voice Recordings */}
+      {audioMedia && (
+        <View
+          style={[
+            styles.audioPlayerCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.audioPlayerHeader}>
+            <TouchableOpacity
+              style={[
+                styles.playButton,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: audioUrl ? 1 : 0.5,
+                },
+              ]}
+              onPress={handlePlayPause}
+              disabled={!audioUrl || isLoading}
+              activeOpacity={0.7}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <FontAwesome
+                  name={isPlaying ? "pause" : "play"}
+                  size={16}
+                  color="#fff"
+                  style={styles.playIcon}
+                />
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.audioInfo}>
+              <View style={styles.audioInfoRow}>
+                <FontAwesome
+                  name="microphone"
+                  size={12}
+                  color={colors.primary}
+                />
+                <Text
+                  style={[styles.audioLabel, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  Voice Recording
+                  {!audioUrl && (
+                    <Text style={{ color: colors.muted, fontSize: 11 }}>
+                      {" "}
+                      (Loading...)
+                    </Text>
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            {isPlaying && (
+              <TouchableOpacity
+                style={[
+                  styles.stopButton,
+                  {
+                    backgroundColor: colors.danger,
+                  },
+                ]}
+                onPress={handleStop}
+                activeOpacity={0.7}
+              >
+                <FontAwesome name="stop" size={12} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Diagnosis Text */}
+      <Text style={[styles.diagnosisText, { color: colors.text }]}>
+        {diagnosis.diagnosisText}
+      </Text>
+    </View>
+  );
+}
+
+// Treatment Item Component with Audio Playback
+interface TreatmentItemProps {
+  treatment: VisitTreatment;
+  audioMedia: MediaFile | null | undefined;
+  colors: ReturnType<typeof useTheme>["colors"];
+  getAudioUrl: (media: MediaFile) => Promise<string | null>;
+}
+
+function TreatmentItem({
+  treatment,
+  audioMedia,
+  colors,
+  getAudioUrl,
+}: TreatmentItemProps) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // Load audio URL when component mounts or audioMedia changes
+  useEffect(() => {
+    if (audioMedia) {
+      getAudioUrl(audioMedia).then(setAudioUrl);
+    } else {
+      setAudioUrl(null);
+    }
+  }, [treatment.treatmentId, audioMedia, getAudioUrl]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(console.error);
+      }
+    };
+  }, [sound]);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!audioUrl) {
+      Alert.alert("Error", "Audio file not available");
+      return;
+    }
+
+    try {
+      if (isPlaying && sound) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        setIsLoading(true);
+        if (sound) {
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+          await sound.playAsync();
+          setIsPlaying(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: audioUrl },
+            { shouldPlay: true },
+          );
+          setSound(newSound);
+          setIsPlaying(true);
+
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+        }
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setIsLoading(false);
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) {
+        console.error("Playback error:", error);
+      }
+    }
+  }, [audioUrl, sound, isPlaying]);
+
+  const handleStop = useCallback(async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+    }
+  }, [sound]);
+
+  return (
+    <View style={[styles.treatmentItem, { borderLeftColor: colors.accent }]}>
+      <View style={styles.treatmentHeader}>
+        <Text style={[styles.treatmentType, { color: colors.primary }]}>
+          {treatment.treatmentType || "Treatment"}
+        </Text>
+        <Text
+          style={[
+            styles.treatmentStatus,
+            {
+              color:
+                treatment.treatmentStatus === "COMPLETED"
+                  ? colors.success
+                  : treatment.treatmentStatus === "STOPPED"
+                    ? colors.danger
+                    : colors.warning,
+            },
+          ]}
+        >
+          {treatment.treatmentStatus}
+        </Text>
+      </View>
+      {treatment.medicineNameFree && (
+        <Text style={[styles.treatmentText, { color: colors.text }]}>
+          <Text style={styles.bold}>Medicine:</Text>{" "}
+          {treatment.medicineNameFree}
+        </Text>
+      )}
+      {treatment.dose && (
+        <Text style={[styles.treatmentText, { color: colors.text }]}>
+          <Text style={styles.bold}>Dose:</Text> {treatment.dose}
+        </Text>
+      )}
+      {treatment.route && (
+        <Text style={[styles.treatmentText, { color: colors.text }]}>
+          <Text style={styles.bold}>Route:</Text> {treatment.route}
+        </Text>
+      )}
+      {treatment.frequency && (
+        <Text style={[styles.treatmentText, { color: colors.text }]}>
+          <Text style={styles.bold}>Frequency:</Text> {treatment.frequency}
+        </Text>
+      )}
+      {treatment.durationDays && (
+        <Text style={[styles.treatmentText, { color: colors.text }]}>
+          <Text style={styles.bold}>Duration:</Text> {treatment.durationDays}{" "}
+          days
+        </Text>
+      )}
+
+      {/* Audio Playback Controls for Voice Recordings */}
+      {audioMedia && treatment.instructions && (
+        <View
+          style={[
+            styles.audioPlayerCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              marginTop: 8,
+            },
+          ]}
+        >
+          <View style={styles.audioPlayerHeader}>
+            <TouchableOpacity
+              style={[
+                styles.playButton,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: audioUrl ? 1 : 0.5,
+                },
+              ]}
+              onPress={handlePlayPause}
+              disabled={!audioUrl || isLoading}
+              activeOpacity={0.7}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <FontAwesome
+                  name={isPlaying ? "pause" : "play"}
+                  size={16}
+                  color="#fff"
+                  style={styles.playIcon}
+                />
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.audioInfo}>
+              <View style={styles.audioInfoRow}>
+                <FontAwesome
+                  name="microphone"
+                  size={12}
+                  color={colors.primary}
+                />
+                <Text
+                  style={[styles.audioLabel, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  Voice Instructions
+                  {!audioUrl && (
+                    <Text style={{ color: colors.muted, fontSize: 11 }}>
+                      {" "}
+                      (Loading...)
+                    </Text>
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            {isPlaying && (
+              <TouchableOpacity
+                style={[
+                  styles.stopButton,
+                  {
+                    backgroundColor: colors.danger,
+                  },
+                ]}
+                onPress={handleStop}
+                activeOpacity={0.7}
+              >
+                <FontAwesome name="stop" size={12} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Instructions */}
+      {treatment.instructions && (
+        <Text
+          style={[
+            styles.treatmentText,
+            { color: colors.text, marginTop: 4 },
+          ]}
+        >
+          <Text style={styles.bold}>Instructions:</Text>{" "}
+          {treatment.instructions}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 // Voice Note Item Component with Audio Playback
 interface NoteItemProps {
   note: VisitNote;
@@ -958,7 +1305,6 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Load audio URL when component mounts or audioMedia changes
   useEffect(() => {
@@ -1034,36 +1380,6 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
       setIsPlaying(false);
     }
   }, [sound]);
-
-  // Text-to-speech handlers for text notes
-  const handleListen = useCallback(() => {
-    if (!note.noteText) {
-      Alert.alert("Error", "No text to read");
-      return;
-    }
-
-    if (isSpeaking) {
-      Speech.stop();
-      setIsSpeaking(false);
-    } else {
-      setIsSpeaking(true);
-      Speech.speak(note.noteText, {
-        onDone: () => setIsSpeaking(false),
-        onStopped: () => setIsSpeaking(false),
-        onError: () => {
-          setIsSpeaking(false);
-          Alert.alert("Error", "Failed to read text");
-        },
-      });
-    }
-  }, [note.noteText, isSpeaking]);
-
-  // Stop speech when component unmounts
-  useEffect(() => {
-    return () => {
-      Speech.stop();
-    };
-  }, []);
 
   return (
     <View style={[styles.noteItem, { borderLeftColor: colors.primary }]}>
@@ -1169,30 +1485,6 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
               </TouchableOpacity>
             )}
           </View>
-        </View>
-      )}
-
-      {/* Listen Button for Text Notes */}
-      {note.noteType === "TEXT" && note.noteText && (
-        <View style={styles.audioControls}>
-          <TouchableOpacity
-            style={[
-              styles.audioButton,
-              {
-                backgroundColor: isSpeaking ? colors.danger : colors.accent,
-              },
-            ]}
-            onPress={handleListen}
-          >
-            <FontAwesome
-              name={isSpeaking ? "stop" : "volume-up"}
-              size={12}
-              color="#fff"
-            />
-            <Text style={styles.audioButtonText}>
-              {isSpeaking ? "Stop" : "Listen"}
-            </Text>
-          </TouchableOpacity>
         </View>
       )}
 

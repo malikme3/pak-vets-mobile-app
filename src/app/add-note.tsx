@@ -16,10 +16,10 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCreateVisitNote } from "../features/notes/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import { getBucketName } from "../services/sharedServicesApi";
+import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 
 export default function AddNoteScreen() {
   const router = useRouter();
@@ -161,7 +161,7 @@ export default function AddNoteScreen() {
         visitId,
         noteType,
         noteText: noteText.trim(),
-        mediaId,
+        ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
       });
 
       // Cleanup audio

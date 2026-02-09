@@ -1,14 +1,27 @@
-import { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
+import { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  TouchableOpacity,
+  TextInput,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Audio } from "expo-av";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCreateVisitTreatment } from "../features/treatments/hooks";
+import { useCreateMediaFile } from "../features/media/hooks";
+import { getBucketName } from "../services/sharedServicesApi";
 
 export default function AddTreatmentScreen() {
   const router = useRouter();
@@ -17,6 +30,7 @@ export default function AddTreatmentScreen() {
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
   const createTreatmentMutation = useCreateVisitTreatment();
+  const createMediaMutation = useCreateMediaFile();
 
   const [treatmentType, setTreatmentType] = useState<
     "MEDICATION" | "PROCEDURE" | "ADVICE"
@@ -30,6 +44,92 @@ export default function AddTreatmentScreen() {
   const [frequency, setFrequency] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [voiceRecording, setVoiceRecording] = useState<{
+    s3Key: string;
+    rawText: string;
+    improvedText?: string;
+    localUri: string;
+  } | null>(null);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handleVoiceRecordingComplete = useCallback(
+    (
+      s3Key: string,
+      rawText: string,
+      improvedText?: string,
+      localUri?: string,
+    ) => {
+      setVoiceRecording({
+        s3Key,
+        rawText,
+        improvedText,
+        localUri: localUri || "",
+      });
+      // Populate instructions field with transcript
+      const transcriptToUse = improvedText || rawText;
+      setInstructions(transcriptToUse);
+    },
+    [],
+  );
+
+  const handleTranscriptReady = useCallback((transcript: string) => {
+    setInstructions(transcript);
+  }, []);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!voiceRecording || !voiceRecording.localUri) {
+      Alert.alert("Error", "Audio file not available for playback");
+      return;
+    }
+
+    try {
+      if (isPlaying && sound) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        if (sound) {
+          await sound.playAsync();
+          setIsPlaying(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: voiceRecording.localUri },
+            { shouldPlay: true },
+          );
+          setSound(newSound);
+          setIsPlaying(true);
+
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+        }
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) {
+        console.error("[AddTreatment] Playback error:", error);
+      }
+    }
+  }, [voiceRecording, sound, isPlaying]);
+
+  const handleStop = useCallback(async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+    }
+  }, [sound]);
+
+  const handleRecordAgain = useCallback(() => {
+    setVoiceRecording(null);
+    setInstructions("");
+    if (sound) {
+      sound.unloadAsync();
+      setSound(null);
+    }
+    setIsPlaying(false);
+  }, [sound]);
 
   const handleSave = async () => {
     if (!visitId) {
@@ -38,6 +138,23 @@ export default function AddTreatmentScreen() {
     }
 
     try {
+      let mediaId: number | undefined = undefined;
+
+      // If there's a voice recording, create MediaFile first
+      if (voiceRecording?.s3Key) {
+        const bucketName = getBucketName();
+        const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
+
+        const mediaFile = await createMediaMutation.mutateAsync({
+          visitId,
+          fileType: "AUDIO",
+          s3Key: voiceRecording.s3Key,
+          url: s3Url,
+        });
+
+        mediaId = mediaFile.mediaId;
+      }
+
       await createTreatmentMutation.mutateAsync({
         visitId,
         treatmentType,
@@ -48,6 +165,7 @@ export default function AddTreatmentScreen() {
         frequency: frequency.trim() || undefined,
         durationDays: durationDays ? Number(durationDays) : undefined,
         instructions: instructions.trim() || undefined,
+        ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
       });
 
       // Navigate back to visit detail
@@ -182,16 +300,95 @@ export default function AddTreatmentScreen() {
           />
         </Card>
 
-        {/* Instructions */}
-        <Card style={styles.card}>
-          <AppInput
-            label="Instructions"
-            value={instructions}
-            onChangeText={setInstructions}
-            placeholder="Additional instructions (optional)"
-            multiline
-            numberOfLines={4}
-          />
+        {/* Instructions with Voice Input */}
+        <Card style={styles.inputCard}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Instructions
+          </Text>
+          <View style={styles.inputContainer}>
+            {/* Voice Recording Playback (if exists) */}
+            {voiceRecording && (
+              <View
+                style={[
+                  styles.voicePlaybackCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.voicePlaybackHeader}>
+                  <FontAwesome
+                    name="microphone"
+                    size={14}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={[styles.voicePlaybackTitle, { color: colors.text }]}
+                  >
+                    Voice recorded
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handlePlayPause}
+                    style={styles.playbackIconButton}
+                  >
+                    <FontAwesome
+                      name={isPlaying ? "pause" : "play"}
+                      size={12}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                  {isPlaying && (
+                    <TouchableOpacity
+                      onPress={handleStop}
+                      style={styles.playbackIconButton}
+                    >
+                      <FontAwesome name="stop" size={12} color={colors.muted} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={handleRecordAgain}
+                    style={styles.playbackIconButton}
+                  >
+                    <FontAwesome name="times" size={12} color={colors.muted} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Text Input Area */}
+            <View style={styles.textInputWrapper}>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={instructions}
+                onChangeText={setInstructions}
+                placeholder="Type instructions or tap the microphone to record..."
+                placeholderTextColor={colors.muted}
+                multiline
+                textAlignVertical="top"
+              />
+              {/* Microphone Button - Bottom Right */}
+              <View style={styles.micButtonWrapper}>
+                <VoiceMessageRecorder
+                  onTranscriptReady={handleTranscriptReady}
+                  onRecordingComplete={handleVoiceRecordingComplete}
+                  onError={(error: Error) => {
+                    Alert.alert("Error", error.message);
+                  }}
+                  buttonSize={32}
+                  buttonColor={colors.primary}
+                  visitId={visitId}
+                />
+              </View>
+            </View>
+          </View>
         </Card>
 
         {/* Save Button */}
@@ -201,8 +398,10 @@ export default function AddTreatmentScreen() {
           }
           onPress={handleSave}
           variant="primary"
-          disabled={createTreatmentMutation.isPending}
-          loading={createTreatmentMutation.isPending}
+          disabled={
+            createTreatmentMutation.isPending || createMediaMutation.isPending
+          }
+          loading={createTreatmentMutation.isPending || createMediaMutation.isPending}
           style={styles.saveButton}
         />
       </ScrollView>
@@ -245,6 +444,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     marginBottom: 12,
+  },
+  inputCard: {
+    marginBottom: 16,
+    padding: 16,
+  },
+  inputContainer: {
+    marginTop: 8,
+  },
+  voicePlaybackCard: {
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  voicePlaybackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  voicePlaybackTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+  },
+  playbackIconButton: {
+    padding: 4,
+  },
+  textInputWrapper: {
+    position: "relative",
+    minHeight: 120,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 44,
+    fontSize: 16,
+    minHeight: 120,
+    maxHeight: 300,
+  },
+  micButtonWrapper: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    zIndex: 10,
   },
   saveButton: {
     marginTop: 8,

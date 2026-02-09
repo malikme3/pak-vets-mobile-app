@@ -130,6 +130,7 @@ export interface VisitDiagnosis {
   visitId: number;
   diagnosisText: string;
   status: "SUSPECTED" | "CONFIRMED";
+  mediaId?: number;
   createdAt: string;
 }
 
@@ -137,6 +138,7 @@ export interface CreateVisitDiagnosisRequest {
   visitId: number;
   diagnosisText: string;
   status?: "SUSPECTED" | "CONFIRMED";
+  mediaId?: number;
 }
 
 export interface UpdateVisitDiagnosisRequest {
@@ -156,6 +158,7 @@ export interface VisitTreatment {
   frequency?: string;
   durationDays?: number;
   instructions?: string;
+  mediaId?: number;
   createdAt: string;
 }
 
@@ -170,6 +173,7 @@ export interface CreateVisitTreatmentRequest {
   frequency?: string;
   durationDays?: number;
   instructions?: string;
+  mediaId?: number;
 }
 
 export interface UpdateVisitTreatmentRequest {
