@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,18 +8,28 @@ import {
   Alert,
   Platform,
   TouchableOpacity,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Audio } from "expo-av";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
-import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
+import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useAnimal } from "../features/animals/hooks";
 import { useCreateVisit } from "../features/visits/hooks";
+
+type VoiceRecording = {
+  s3Key: string;
+  rawText: string;
+  improvedText?: string;
+  localUri: string;
+};
 
 export default function CreateVisitScreen() {
   const router = useRouter();
@@ -39,6 +49,35 @@ export default function CreateVisitScreen() {
   const [visitDatetime, setVisitDatetime] = useState<Date>(new Date()); // Default to current time
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [chiefComplaintVoiceRecording, setChiefComplaintVoiceRecording] =
+    useState<VoiceRecording | null>(null);
+  const [notesVoiceRecording, setNotesVoiceRecording] =
+    useState<VoiceRecording | null>(null);
+  const [chiefComplaintSound, setChiefComplaintSound] =
+    useState<Audio.Sound | null>(null);
+  const [notesSound, setNotesSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingChiefComplaint, setIsPlayingChiefComplaint] = useState(false);
+  const [isPlayingNotes, setIsPlayingNotes] = useState(false);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      const cleanupAudio = async (sound: Audio.Sound | null) => {
+        if (sound) {
+          try {
+            await sound.unloadAsync();
+          } catch (error) {
+            if (__DEV__) {
+              console.error("[CreateVisit] Audio cleanup error:", error);
+            }
+          }
+        }
+      };
+
+      cleanupAudio(chiefComplaintSound);
+      cleanupAudio(notesSound);
+    };
+  }, [chiefComplaintSound, notesSound]);
 
   const formatDateTime = (date: Date): string => {
     return date
@@ -52,6 +91,170 @@ export default function CreateVisitScreen() {
       })
       .replace(",", "");
   };
+
+  // Chief Complaint Voice Handlers
+  const handleChiefComplaintVoiceRecordingComplete = useCallback(
+    (
+      s3Key: string,
+      rawText: string,
+      improvedText?: string,
+      localUri?: string,
+    ) => {
+      setChiefComplaintVoiceRecording({
+        s3Key,
+        rawText,
+        improvedText,
+        localUri: localUri || "",
+      });
+      setChiefComplaint(improvedText || rawText);
+    },
+    [],
+  );
+
+  const handleChiefComplaintTranscriptReady = useCallback(
+    (transcript: string) => {
+      setChiefComplaint(transcript);
+    },
+    [],
+  );
+
+  const handleChiefComplaintPlayPause = useCallback(async () => {
+    if (
+      !chiefComplaintVoiceRecording ||
+      !chiefComplaintVoiceRecording.localUri
+    ) {
+      Alert.alert("Error", "Audio file not available for playback");
+      return;
+    }
+
+    try {
+      if (isPlayingChiefComplaint && chiefComplaintSound) {
+        await chiefComplaintSound.pauseAsync();
+        setIsPlayingChiefComplaint(false);
+      } else {
+        if (chiefComplaintSound) {
+          await chiefComplaintSound.playAsync();
+          setIsPlayingChiefComplaint(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: chiefComplaintVoiceRecording.localUri },
+            { shouldPlay: true },
+          );
+          setChiefComplaintSound(newSound);
+          setIsPlayingChiefComplaint(true);
+
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlayingChiefComplaint(false);
+            }
+          });
+        }
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) {
+        console.error("[CreateVisit] Chief Complaint playback error:", error);
+      }
+    }
+  }, [
+    chiefComplaintVoiceRecording,
+    chiefComplaintSound,
+    isPlayingChiefComplaint,
+  ]);
+
+  const handleChiefComplaintStop = useCallback(async () => {
+    if (chiefComplaintSound) {
+      await chiefComplaintSound.stopAsync();
+      setIsPlayingChiefComplaint(false);
+    }
+  }, [chiefComplaintSound]);
+
+  const handleChiefComplaintRecordAgain = useCallback(() => {
+    setChiefComplaintVoiceRecording(null);
+    setChiefComplaint("");
+    if (chiefComplaintSound) {
+      chiefComplaintSound.unloadAsync();
+      setChiefComplaintSound(null);
+    }
+    setIsPlayingChiefComplaint(false);
+  }, [chiefComplaintSound]);
+
+  // Notes Voice Handlers
+  const handleNotesVoiceRecordingComplete = useCallback(
+    (
+      s3Key: string,
+      rawText: string,
+      improvedText?: string,
+      localUri?: string,
+    ) => {
+      setNotesVoiceRecording({
+        s3Key,
+        rawText,
+        improvedText,
+        localUri: localUri || "",
+      });
+      setNotes(improvedText || rawText);
+    },
+    [],
+  );
+
+  const handleNotesTranscriptReady = useCallback((transcript: string) => {
+    setNotes(transcript);
+  }, []);
+
+  const handleNotesPlayPause = useCallback(async () => {
+    if (!notesVoiceRecording || !notesVoiceRecording.localUri) {
+      Alert.alert("Error", "Audio file not available for playback");
+      return;
+    }
+
+    try {
+      if (isPlayingNotes && notesSound) {
+        await notesSound.pauseAsync();
+        setIsPlayingNotes(false);
+      } else {
+        if (notesSound) {
+          await notesSound.playAsync();
+          setIsPlayingNotes(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: notesVoiceRecording.localUri },
+            { shouldPlay: true },
+          );
+          setNotesSound(newSound);
+          setIsPlayingNotes(true);
+
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlayingNotes(false);
+            }
+          });
+        }
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) {
+        console.error("[CreateVisit] Notes playback error:", error);
+      }
+    }
+  }, [notesVoiceRecording, notesSound, isPlayingNotes]);
+
+  const handleNotesStop = useCallback(async () => {
+    if (notesSound) {
+      await notesSound.stopAsync();
+      setIsPlayingNotes(false);
+    }
+  }, [notesSound]);
+
+  const handleNotesRecordAgain = useCallback(() => {
+    setNotesVoiceRecording(null);
+    setNotes("");
+    if (notesSound) {
+      notesSound.unloadAsync();
+      setNotesSound(null);
+    }
+    setIsPlayingNotes(false);
+  }, [notesSound]);
 
   const handleDateChange = (event: unknown, selectedDate?: Date) => {
     const nativeEvent = event as { type: string };
@@ -99,15 +302,22 @@ export default function CreateVisitScreen() {
     }
 
     try {
+      // Cleanup audio before navigation
+      const cleanupPromises = [
+        chiefComplaintSound?.unloadAsync(),
+        notesSound?.unloadAsync(),
+      ].filter(Boolean);
+
+      await Promise.all(cleanupPromises);
+
       const visit = await createVisitMutation.mutateAsync({
         animalId: selectedAnimal.animalId,
         doctorId: doctor.doctorId,
         visitDatetime: visitDatetime.toISOString(),
-        chiefComplaint: chiefComplaint || undefined,
-        notes: notes || undefined,
+        chiefComplaint: chiefComplaint.trim() || undefined,
+        notes: notes.trim() || undefined,
       });
 
-      // Navigate to visit detail
       router.replace(`/visit-detail?visitId=${visit.visitId}`);
     } catch (error) {
       Alert.alert(
@@ -119,6 +329,7 @@ export default function CreateVisitScreen() {
 
   const isLoading =
     doctorLoading || animalLoading || createVisitMutation.isPending;
+  const isDisabled = !selectedAnimal;
 
   const handleSelectAnimal = () => {
     router.push({
@@ -186,14 +397,26 @@ export default function CreateVisitScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => {
-              setShowDatePicker(true);
+              if (!isDisabled) {
+                setShowDatePicker(true);
+              }
             }}
+            disabled={isDisabled}
             style={[
               styles.datePickerButton,
-              { borderColor: colors.border, backgroundColor: colors.surface },
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                opacity: isDisabled ? 0.5 : 1,
+              },
             ]}
           >
-            <Text style={[styles.datePickerText, { color: colors.text }]}>
+            <Text
+              style={[
+                styles.datePickerText,
+                { color: isDisabled ? colors.muted : colors.text },
+              ]}
+            >
               {formatDateTime(visitDatetime)}
             </Text>
             <Text style={[styles.datePickerHint, { color: colors.muted }]}>
@@ -243,28 +466,194 @@ export default function CreateVisitScreen() {
           )}
         </Card>
 
-        {/* Chief Complaint */}
-        <Card style={styles.card}>
-          <AppInput
-            label="Chief Complaint"
-            value={chiefComplaint}
-            onChangeText={setChiefComplaint}
-            placeholder="Enter chief complaint"
-            multiline
-            numberOfLines={3}
-          />
+        {/* Chief Complaint with Voice Input */}
+        <Card style={styles.inputCard}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Chief Complaint
+          </Text>
+          <View style={styles.inputContainer}>
+            {/* Voice Recording Playback (if exists) */}
+            {chiefComplaintVoiceRecording && (
+              <View
+                style={[
+                  styles.voicePlaybackCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.voicePlaybackHeader}>
+                  <FontAwesome
+                    name="microphone"
+                    size={14}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={[styles.voicePlaybackTitle, { color: colors.text }]}
+                  >
+                    Voice recorded
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleChiefComplaintPlayPause}
+                    style={styles.playbackIconButton}
+                  >
+                    <FontAwesome
+                      name={isPlayingChiefComplaint ? "pause" : "play"}
+                      size={12}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                  {isPlayingChiefComplaint && (
+                    <TouchableOpacity
+                      onPress={handleChiefComplaintStop}
+                      style={styles.playbackIconButton}
+                    >
+                      <FontAwesome name="stop" size={12} color={colors.muted} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={handleChiefComplaintRecordAgain}
+                    style={styles.playbackIconButton}
+                  >
+                    <FontAwesome name="times" size={12} color={colors.muted} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Text Input Area */}
+            <View style={styles.textInputWrapper}>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    color: isDisabled ? colors.muted : colors.text,
+                    opacity: isDisabled ? 0.5 : 1,
+                  },
+                ]}
+                value={chiefComplaint}
+                onChangeText={setChiefComplaint}
+                placeholder="Type chief complaint or tap the microphone to record..."
+                placeholderTextColor={colors.muted}
+                multiline
+                textAlignVertical="top"
+                editable={!isDisabled}
+              />
+              {/* Microphone Button - Bottom Right */}
+              {!isDisabled && (
+                <View style={styles.micButtonWrapper}>
+                  <VoiceMessageRecorder
+                    onTranscriptReady={handleChiefComplaintTranscriptReady}
+                    onRecordingComplete={
+                      handleChiefComplaintVoiceRecordingComplete
+                    }
+                    onError={(error: Error) => {
+                      Alert.alert("Error", error.message);
+                    }}
+                    buttonSize={32}
+                    buttonColor={colors.primary}
+                    visitId={undefined}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
         </Card>
 
-        {/* Notes */}
-        <Card style={styles.card}>
-          <AppInput
-            label="Notes"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Additional notes (optional)"
-            multiline
-            numberOfLines={4}
-          />
+        {/* Notes with Voice Input */}
+        <Card style={styles.inputCard}>
+          <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
+          <View style={styles.inputContainer}>
+            {/* Voice Recording Playback (if exists) */}
+            {notesVoiceRecording && (
+              <View
+                style={[
+                  styles.voicePlaybackCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.voicePlaybackHeader}>
+                  <FontAwesome
+                    name="microphone"
+                    size={14}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={[styles.voicePlaybackTitle, { color: colors.text }]}
+                  >
+                    Voice recorded
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleNotesPlayPause}
+                    style={styles.playbackIconButton}
+                  >
+                    <FontAwesome
+                      name={isPlayingNotes ? "pause" : "play"}
+                      size={12}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                  {isPlayingNotes && (
+                    <TouchableOpacity
+                      onPress={handleNotesStop}
+                      style={styles.playbackIconButton}
+                    >
+                      <FontAwesome name="stop" size={12} color={colors.muted} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={handleNotesRecordAgain}
+                    style={styles.playbackIconButton}
+                  >
+                    <FontAwesome name="times" size={12} color={colors.muted} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Text Input Area */}
+            <View style={styles.textInputWrapper}>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    color: isDisabled ? colors.muted : colors.text,
+                    opacity: isDisabled ? 0.5 : 1,
+                  },
+                ]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Type notes or tap the microphone to record..."
+                placeholderTextColor={colors.muted}
+                multiline
+                textAlignVertical="top"
+                editable={!isDisabled}
+              />
+              {/* Microphone Button - Bottom Right */}
+              {!isDisabled && (
+                <View style={styles.micButtonWrapper}>
+                  <VoiceMessageRecorder
+                    onTranscriptReady={handleNotesTranscriptReady}
+                    onRecordingComplete={handleNotesVoiceRecordingComplete}
+                    onError={(error: Error) => {
+                      Alert.alert("Error", error.message);
+                    }}
+                    buttonSize={32}
+                    buttonColor={colors.primary}
+                    visitId={undefined}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
         </Card>
 
         {/* Save Button */}
@@ -272,7 +661,7 @@ export default function CreateVisitScreen() {
           title={createVisitMutation.isPending ? "Creating..." : "Create Visit"}
           onPress={handleSave}
           variant="primary"
-          disabled={!selectedAnimal || !doctor || createVisitMutation.isPending}
+          disabled={isDisabled || !doctor || createVisitMutation.isPending}
           loading={createVisitMutation.isPending}
           style={styles.saveButton}
         />
@@ -350,5 +739,53 @@ const styles = StyleSheet.create({
   },
   pickerButton: {
     marginTop: 8,
+  },
+  inputCard: {
+    marginBottom: 16,
+    padding: 0,
+    overflow: "hidden",
+  },
+  inputContainer: {
+    padding: 16,
+    paddingTop: 8,
+  },
+  voicePlaybackCard: {
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  voicePlaybackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  voicePlaybackTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+  },
+  playbackIconButton: {
+    padding: 4,
+  },
+  textInputWrapper: {
+    position: "relative",
+    minHeight: 100,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 44,
+    fontSize: 16,
+    minHeight: 100,
+    maxHeight: 200,
+  },
+  micButtonWrapper: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    zIndex: 10,
   },
 });
