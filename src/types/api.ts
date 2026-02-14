@@ -241,3 +241,28 @@ export interface PresignedUrlResponse {
   s3Key: string;
   url: string;
 }
+
+// Match animal by image (find animal by face/ear/body image)
+export type MatchImageType = "FACE" | "EAR" | "BODY" | "AUTO";
+
+export interface MatchAnimalImageRequest {
+  queryImageUrl: string;
+  expectedType?: MatchImageType;
+  topK?: number;
+  minScore?: number;
+}
+
+export interface MatchCandidate {
+  animalId: number;
+  score: number;
+  imageType: string;
+  refImageUrl: string;
+  embeddingId: number;
+}
+
+export interface MatchAnimalImageResponse {
+  matchedAnimalId: number | null;
+  bestScore: number;
+  matchStatus: "MATCH" | "NO_MATCH";
+  candidates: MatchCandidate[];
+}

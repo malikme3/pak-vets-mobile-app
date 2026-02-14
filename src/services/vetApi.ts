@@ -23,6 +23,8 @@ import type {
   UpdateMediaFileRequest,
   PresignedUrlResponse,
   ApiSuccessResponse,
+  MatchAnimalImageRequest,
+  MatchAnimalImageResponse,
 } from "../types/api";
 
 // Doctors API
@@ -128,6 +130,41 @@ export const animalApi = {
         animal.ownerName?.toLowerCase().includes(lowerQuery) ||
         animal.ownerPhone?.includes(query),
     );
+  },
+
+  // Enroll animal reference images (face, ear, body)
+  enrollAnimalImages: async (
+    animalId: number,
+    request: {
+      faceImageUrl: string;
+      earImageUrl: string;
+      bodyImageUrl: string;
+      captureDate?: string;
+      notes?: string;
+      source?: string;
+    },
+  ): Promise<{
+    enrolled: boolean;
+    embeddingIds: { face: number; ear: number; body: number };
+    animalImageIds: { face: number; ear: number; body: number };
+  }> => {
+    const response = await apiClient.instance.post<
+      ApiSuccessResponse<{
+        enrolled: boolean;
+        embeddingIds: { face: number; ear: number; body: number };
+        animalImageIds: { face: number; ear: number; body: number };
+      }>
+    >(`/animals/${animalId}/enroll`, request);
+    return response.data.data;
+  },
+
+  matchAnimalImage: async (
+    request: MatchAnimalImageRequest,
+  ): Promise<MatchAnimalImageResponse> => {
+    const response = await apiClient.instance.post<
+      ApiSuccessResponse<MatchAnimalImageResponse>
+    >("/animals/match", request);
+    return response.data.data;
   },
 };
 
