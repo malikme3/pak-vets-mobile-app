@@ -4,8 +4,8 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-// API base URL - should be set via environment variable
-// Defaults to dev custom domain, can be overridden with EXPO_PUBLIC_API_URL
+// API base URL - set EXPO_PUBLIC_API_URL to hit local server (e.g. http://localhost:3001)
+// Defaults to deployed dev API; use EXPO_PUBLIC_API_URL for local backend
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://pak-vets-dev.roundrocktennis.com";
 
@@ -28,7 +28,7 @@ class ApiClient {
       timeout: 30000,
     });
 
-    // Request interceptor for auth token
+    // Request interceptor: auth + dev logging (full payload as JSON)
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
         // TODO: Get token from auth store
@@ -36,6 +36,16 @@ class ApiClient {
         // if (token) {
         //   config.headers.Authorization = `Bearer ${token}`;
         // }
+        if (__DEV__ && config.data != null) {
+          const body =
+            typeof config.data === "string"
+              ? config.data
+              : JSON.stringify(config.data, null, 2);
+          console.log(
+            `[API] REQUEST ${config.method?.toUpperCase()} ${config.url}`,
+            "\n" + body,
+          );
+        }
         return config;
       },
       (error) => {
@@ -43,31 +53,26 @@ class ApiClient {
       },
     );
 
-    // Response interceptor for error handling
+    // Response interceptor: log full response as JSON (no [Object] collapse)
     this.client.interceptors.response.use(
       (response) => {
-        // Log response in dev mode for debugging
         if (__DEV__) {
           console.log(
-            `[API] ${response.config.method?.toUpperCase()} ${response.config.url}`,
-            {
-              status: response.status,
-              data: response.data,
-            },
+            `[API] RESPONSE ${response.config.method?.toUpperCase()} ${response.config.url} ${response.status}`,
+            "\n" + JSON.stringify(response.data, null, 2),
           );
         }
         return response;
       },
       (error: AxiosError) => {
-        // Log error in dev mode for debugging
         if (__DEV__) {
-          console.error("[API Error]", {
-            url: error.config?.url,
-            method: error.config?.method,
-            status: error.response?.status,
-            data: error.response?.data,
-            message: error.message,
-          });
+          console.error(
+            "[API Error]",
+            error.config?.method,
+            error.config?.url,
+            error.response?.status,
+            "\n" + JSON.stringify(error.response?.data ?? error.message, null, 2),
+          );
         }
         return Promise.reject(this.normalizeError(error));
       },

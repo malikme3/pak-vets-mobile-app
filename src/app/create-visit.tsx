@@ -45,19 +45,14 @@ export default function CreateVisitScreen() {
   const createVisitMutation = useCreateVisit();
 
   const [chiefComplaint, setChiefComplaint] = useState("");
-  const [notes, setNotes] = useState("");
   const [visitDatetime, setVisitDatetime] = useState<Date>(new Date()); // Default to current time
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [chiefComplaintVoiceRecording, setChiefComplaintVoiceRecording] =
     useState<VoiceRecording | null>(null);
-  const [notesVoiceRecording, setNotesVoiceRecording] =
-    useState<VoiceRecording | null>(null);
   const [chiefComplaintSound, setChiefComplaintSound] =
     useState<Audio.Sound | null>(null);
-  const [notesSound, setNotesSound] = useState<Audio.Sound | null>(null);
   const [isPlayingChiefComplaint, setIsPlayingChiefComplaint] = useState(false);
-  const [isPlayingNotes, setIsPlayingNotes] = useState(false);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -75,9 +70,8 @@ export default function CreateVisitScreen() {
       };
 
       cleanupAudio(chiefComplaintSound);
-      cleanupAudio(notesSound);
     };
-  }, [chiefComplaintSound, notesSound]);
+  }, [chiefComplaintSound]);
 
   const formatDateTime = (date: Date): string => {
     return date
@@ -179,83 +173,6 @@ export default function CreateVisitScreen() {
     setIsPlayingChiefComplaint(false);
   }, [chiefComplaintSound]);
 
-  // Notes Voice Handlers
-  const handleNotesVoiceRecordingComplete = useCallback(
-    (
-      s3Key: string,
-      rawText: string,
-      improvedText?: string,
-      localUri?: string,
-    ) => {
-      setNotesVoiceRecording({
-        s3Key,
-        rawText,
-        improvedText,
-        localUri: localUri || "",
-      });
-      setNotes(improvedText || rawText);
-    },
-    [],
-  );
-
-  const handleNotesTranscriptReady = useCallback((transcript: string) => {
-    setNotes(transcript);
-  }, []);
-
-  const handleNotesPlayPause = useCallback(async () => {
-    if (!notesVoiceRecording || !notesVoiceRecording.localUri) {
-      Alert.alert("Error", "Audio file not available for playback");
-      return;
-    }
-
-    try {
-      if (isPlayingNotes && notesSound) {
-        await notesSound.pauseAsync();
-        setIsPlayingNotes(false);
-      } else {
-        if (notesSound) {
-          await notesSound.playAsync();
-          setIsPlayingNotes(true);
-        } else {
-          const { sound: newSound } = await Audio.Sound.createAsync(
-            { uri: notesVoiceRecording.localUri },
-            { shouldPlay: true },
-          );
-          setNotesSound(newSound);
-          setIsPlayingNotes(true);
-
-          newSound.setOnPlaybackStatusUpdate((status) => {
-            if (status.isLoaded && status.didJustFinish) {
-              setIsPlayingNotes(false);
-            }
-          });
-        }
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to play audio");
-      if (__DEV__) {
-        console.error("[CreateVisit] Notes playback error:", error);
-      }
-    }
-  }, [notesVoiceRecording, notesSound, isPlayingNotes]);
-
-  const handleNotesStop = useCallback(async () => {
-    if (notesSound) {
-      await notesSound.stopAsync();
-      setIsPlayingNotes(false);
-    }
-  }, [notesSound]);
-
-  const handleNotesRecordAgain = useCallback(() => {
-    setNotesVoiceRecording(null);
-    setNotes("");
-    if (notesSound) {
-      notesSound.unloadAsync();
-      setNotesSound(null);
-    }
-    setIsPlayingNotes(false);
-  }, [notesSound]);
-
   const handleDateChange = (event: unknown, selectedDate?: Date) => {
     const nativeEvent = event as { type: string };
     if (Platform.OS === "android") {
@@ -303,19 +220,15 @@ export default function CreateVisitScreen() {
 
     try {
       // Cleanup audio before navigation
-      const cleanupPromises = [
-        chiefComplaintSound?.unloadAsync(),
-        notesSound?.unloadAsync(),
-      ].filter(Boolean);
-
-      await Promise.all(cleanupPromises);
+      if (chiefComplaintSound) {
+        await chiefComplaintSound.unloadAsync();
+      }
 
       const visit = await createVisitMutation.mutateAsync({
         animalId: selectedAnimal.animalId,
         doctorId: doctor.doctorId,
         visitDatetime: visitDatetime.toISOString(),
         chiefComplaint: chiefComplaint.trim() || undefined,
-        notes: notes.trim() || undefined,
       });
 
       router.replace(`/visit-detail?visitId=${visit.visitId}`);
@@ -550,99 +463,6 @@ export default function CreateVisitScreen() {
                     onRecordingComplete={
                       handleChiefComplaintVoiceRecordingComplete
                     }
-                    onError={(error: Error) => {
-                      Alert.alert("Error", error.message);
-                    }}
-                    buttonSize={32}
-                    buttonColor={colors.primary}
-                    visitId={undefined}
-                  />
-                </View>
-              )}
-            </View>
-          </View>
-        </Card>
-
-        {/* Notes with Voice Input */}
-        <Card style={styles.inputCard}>
-          <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
-          <View style={styles.inputContainer}>
-            {/* Voice Recording Playback (if exists) */}
-            {notesVoiceRecording && (
-              <View
-                style={[
-                  styles.voicePlaybackCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.voicePlaybackHeader}>
-                  <FontAwesome
-                    name="microphone"
-                    size={14}
-                    color={colors.primary}
-                  />
-                  <Text
-                    style={[styles.voicePlaybackTitle, { color: colors.text }]}
-                  >
-                    Voice recorded
-                  </Text>
-                  <TouchableOpacity
-                    onPress={handleNotesPlayPause}
-                    style={styles.playbackIconButton}
-                  >
-                    <FontAwesome
-                      name={isPlayingNotes ? "pause" : "play"}
-                      size={12}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
-                  {isPlayingNotes && (
-                    <TouchableOpacity
-                      onPress={handleNotesStop}
-                      style={styles.playbackIconButton}
-                    >
-                      <FontAwesome name="stop" size={12} color={colors.muted} />
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    onPress={handleNotesRecordAgain}
-                    style={styles.playbackIconButton}
-                  >
-                    <FontAwesome name="times" size={12} color={colors.muted} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* Text Input Area */}
-            <View style={styles.textInputWrapper}>
-              <TextInput
-                style={[
-                  styles.textInput,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    color: isDisabled ? colors.muted : colors.text,
-                    opacity: isDisabled ? 0.5 : 1,
-                  },
-                ]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Type notes or tap the microphone to record..."
-                placeholderTextColor={colors.muted}
-                multiline
-                textAlignVertical="top"
-                editable={!isDisabled}
-              />
-              {/* Microphone Button - Bottom Right */}
-              {!isDisabled && (
-                <View style={styles.micButtonWrapper}>
-                  <VoiceMessageRecorder
-                    onTranscriptReady={handleNotesTranscriptReady}
-                    onRecordingComplete={handleNotesVoiceRecordingComplete}
                     onError={(error: Error) => {
                       Alert.alert("Error", error.message);
                     }}

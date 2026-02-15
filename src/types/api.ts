@@ -134,6 +134,11 @@ export interface VisitDiagnosis {
   createdAt: string;
 }
 
+export interface DiagnosisSuggestion {
+  diagnosis_text: string;
+  status: "SUSPECTED" | "CONFIRMED";
+}
+
 export interface CreateVisitDiagnosisRequest {
   visitId: number;
   diagnosisText: string;
@@ -144,6 +149,16 @@ export interface CreateVisitDiagnosisRequest {
 export interface UpdateVisitDiagnosisRequest {
   diagnosisText?: string;
   status?: "SUSPECTED" | "CONFIRMED";
+}
+
+export interface TreatmentSuggestion {
+  treatmentType: "MEDICATION" | "PROCEDURE" | "ADVICE";
+  medicineNameFree?: string | null;
+  dose?: string | null;
+  route?: string | null;
+  frequency?: string | null;
+  durationDays?: number | null;
+  instructions?: string | null;
 }
 
 export interface VisitTreatment {

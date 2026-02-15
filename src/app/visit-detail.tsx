@@ -29,11 +29,13 @@ import {
   getBucketName,
   getDownloadSignedUrl,
 } from "../services/sharedServicesApi";
+import { visitDiagnosisApi, visitTreatmentApi } from "../services/vetApi";
 import type {
   VisitDiagnosis,
   VisitTreatment,
   VisitNote,
   MediaFile,
+  DiagnosisSuggestion,
 } from "../types/api";
 
 export default function VisitDetailScreen() {
@@ -44,6 +46,10 @@ export default function VisitDetailScreen() {
   const visitId = params.visitId ? Number(params.visitId) : undefined;
   const [visitInfoExpanded, setVisitInfoExpanded] = useState(false);
   const [animalInfoExpanded, setAnimalInfoExpanded] = useState(false);
+  const [suggestedDiagnoses, setSuggestedDiagnoses] = useState<
+    DiagnosisSuggestion[]
+  >([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const { data: visit, isLoading: visitLoading } = useVisit(visitId || 0);
   const { data: animal, isLoading: animalLoading } = useAnimal(
     visit?.animalId || 0,
@@ -69,6 +75,30 @@ export default function VisitDetailScreen() {
     isLoading: mediaLoading,
     refetch: refetchMedia,
   } = useMediaFilesByVisit(visitId || 0);
+
+  // Fetch AI-suggested diagnoses when visit has chief complaint
+  useEffect(() => {
+    if (!visit?.chiefComplaint?.trim()) {
+      setSuggestedDiagnoses([]);
+      return;
+    }
+    let cancelled = false;
+    setSuggestionsLoading(true);
+    visitDiagnosisApi
+      .suggestDiagnoses(visit.chiefComplaint.trim())
+      .then((data) => {
+        if (!cancelled) setSuggestedDiagnoses(data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestedDiagnoses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSuggestionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visit?.visitId, visit?.chiefComplaint]);
 
   // Refetch diagnoses, treatments, notes, and media when screen comes into focus (e.g., after adding)
   useFocusEffect(
@@ -114,6 +144,55 @@ export default function VisitDetailScreen() {
   const handleToggleAnimalInfo = useCallback(() => {
     setTimeout(() => setAnimalInfoExpanded((v) => !v), 50);
   }, []);
+
+  // Add Treatment: suggest from diagnoses (saved or AI), then navigate with first suggestion to pre-fill
+  const [treatmentSuggestionsLoading, setTreatmentSuggestionsLoading] =
+    useState(false);
+  const handleAddTreatment = useCallback(async () => {
+    const vid = visit?.visitId;
+    if (!vid) return;
+    const diagnosisPayload = (
+      diagnoses.length > 0 ? diagnoses : suggestedDiagnoses
+    ).map((d) => ({
+      diagnosis_text:
+        "diagnosis_text" in d ? d.diagnosis_text : d.diagnosisText,
+      status: d.status,
+    }));
+    const params: Record<string, string> = { visitId: String(vid) };
+    if (diagnosisPayload.length > 0) {
+      setTreatmentSuggestionsLoading(true);
+      try {
+        const suggestions = await visitTreatmentApi.suggestTreatments(
+          diagnosisPayload,
+        );
+        const first = suggestions?.[0];
+        if (first) {
+          params.treatmentType = first.treatmentType;
+          if (first.medicineNameFree != null)
+            params.medicineNameFree = first.medicineNameFree;
+          if (first.dose != null) params.dose = first.dose;
+          if (first.route != null) params.route = first.route;
+          if (first.frequency != null) params.frequency = first.frequency;
+          if (first.durationDays != null)
+            params.durationDays = String(first.durationDays);
+          if (first.instructions != null)
+            params.instructions = first.instructions;
+        }
+      } catch {
+        // ignore; navigate without pre-fill
+      } finally {
+        setTreatmentSuggestionsLoading(false);
+      }
+    }
+    setTimeout(
+      () => router.push({ pathname: "/add-treatment", params }),
+      50,
+    );
+  }, [
+    visit?.visitId,
+    diagnoses,
+    suggestedDiagnoses,
+  ]);
 
   // Helper to get audio URL from media file
   const getAudioUrl = async (media: MediaFile): Promise<string | null> => {
@@ -300,6 +379,76 @@ export default function VisitDetailScreen() {
           </Card>
         )}
 
+        {/* Suggested diagnoses (from chief complaint) */}
+        {visit.chiefComplaint?.trim() && (
+          <Card style={styles.card}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Suggested diagnoses
+            </Text>
+            {suggestionsLoading ? (
+              <View style={styles.suggestionsLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.suggestionsLoadingText, { color: colors.muted }]}>
+                  AI suggesting based on chief complaint…
+                </Text>
+              </View>
+            ) : suggestedDiagnoses.length > 0 ? (
+              <View style={styles.listContainer}>
+                {suggestedDiagnoses.map((s, index) => (
+                  <View
+                    key={`${s.diagnosis_text}-${index}`}
+                    style={[
+                      styles.suggestionRow,
+                      { borderLeftColor: colors.primary },
+                    ]}
+                  >
+                    <View style={styles.suggestionRowContent}>
+                      <Text
+                        style={[styles.diagnosisText, { color: colors.text }]}
+                        numberOfLines={2}
+                      >
+                        {s.diagnosis_text}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.diagnosisStatus,
+                          {
+                            color:
+                              s.status === "CONFIRMED"
+                                ? colors.success
+                                : colors.warning,
+                          },
+                        ]}
+                      >
+                        {s.status}
+                      </Text>
+                    </View>
+                    <Button
+                      title="Add"
+                      onPress={() => {
+                        setTimeout(
+                          () =>
+                            router.push({
+                              pathname: "/add-diagnosis",
+                              params: {
+                                visitId: String(visit.visitId),
+                                diagnosisText: s.diagnosis_text,
+                                status: s.status,
+                              },
+                            }),
+                          50,
+                        );
+                      }}
+                      variant="secondary"
+                      style={styles.suggestionAddButton}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </Card>
+        )}
+
         {/* Diagnoses Section */}
         <Card style={styles.card}>
           <View style={styles.sectionHeader}>
@@ -350,12 +499,14 @@ export default function VisitDetailScreen() {
               Treatments
             </Text>
             <Button
-              title="Add Treatment"
-              onPress={() => {
-                router.push(`/add-treatment?visitId=${visit?.visitId}`);
-              }}
+              title={
+                treatmentSuggestionsLoading ? "Suggesting…" : "Add Treatment"
+              }
+              onPress={handleAddTreatment}
               variant="secondary"
               style={styles.addButton}
+              disabled={treatmentSuggestionsLoading}
+              loading={treatmentSuggestionsLoading}
             />
           </View>
           {treatments.length > 0 ? (
@@ -416,14 +567,6 @@ export default function VisitDetailScreen() {
                     audioMedia = mediaFiles.find(
                       (m) => m.mediaId === note.mediaId,
                     );
-                    if (__DEV__) {
-                      console.log(
-                        "[VisitDetail] Looking for audioMedia by mediaId:",
-                        note.mediaId,
-                        "Found:",
-                        !!audioMedia,
-                      );
-                    }
                   }
 
                   // Fallback: Find audio files for this visit that match the pattern
@@ -435,17 +578,6 @@ export default function VisitDetailScreen() {
                         m.visitId === visitId &&
                         m.s3Key?.includes(`visits/${visitId}/audio/`),
                     );
-                    if (__DEV__) {
-                      console.log(
-                        "[VisitDetail] Found audio files for visit:",
-                        audioFiles.length,
-                        audioFiles.map((f) => ({
-                          mediaId: f.mediaId,
-                          s3Key: f.s3Key,
-                          createdAt: f.createdAt,
-                        })),
-                      );
-                    }
                     // If there's only one audio file for this visit, use it
                     // Otherwise, try to match by creation time (closest to note creation time)
                     if (audioFiles.length > 0) {
@@ -467,17 +599,6 @@ export default function VisitDetailScreen() {
                           return currentDiff < closestDiff ? current : closest;
                         }) || audioFiles[0];
                     }
-                  }
-
-                  if (__DEV__) {
-                    console.log("[VisitDetail] Voice transcript note:", {
-                      noteId: note.noteId,
-                      noteType: note.noteType,
-                      mediaId: note.mediaId,
-                      audioMediaFound: !!audioMedia,
-                      audioMediaId: audioMedia?.mediaId,
-                      audioS3Key: audioMedia?.s3Key,
-                    });
                   }
                 }
 
@@ -546,9 +667,6 @@ export default function VisitDetailScreen() {
                               imageUri,
                               error,
                             );
-                          }}
-                          onLoad={() => {
-                            console.log("Image loaded successfully:", imageUri);
                           }}
                         />
                         <View
@@ -702,6 +820,33 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     marginTop: 8,
+  },
+  suggestionsLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+  },
+  suggestionsLoadingText: {
+    fontSize: 13,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    backgroundColor: "transparent",
+  },
+  suggestionRowContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  suggestionAddButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   diagnosisItem: {
     paddingVertical: 12,

@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import {
   View,
   Text,
@@ -5,6 +6,8 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator,
+  Image,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -12,10 +15,9 @@ import { StatusBar } from "expo-status-bar";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { ListRow } from "../components/ui/ListRow";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useVisitsByDoctor } from "../features/visits/hooks";
-import { useAnimal } from "../features/animals/hooks";
+import { useAnimalImages } from "../features/animals/hooks";
 import type { Visit } from "../types/api";
 
 export default function DashboardScreen() {
@@ -53,16 +55,24 @@ export default function DashboardScreen() {
     });
   };
 
-  const renderVisitItem = ({ item }: { item: Visit }) => {
-    // Note: We'll show visit info without animal details for now to avoid hook in render
-    // Animal details will be loaded in visit detail screen
-    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
+  const handleVisitPress = useCallback(
+    (visitId: number) => {
+      setTimeout(
+        () => router.push(`/visit-detail?visitId=${visitId}`),
+        50,
+      );
+    },
+    [router],
+  );
 
+  const renderVisitItem = ({ item }: { item: Visit }) => {
+    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
     return (
-      <ListRow
+      <VisitRow
+        animalId={item.animalId}
         title={`Visit #${item.visitId}`}
         subtitle={subtitle}
-        onPress={() => router.push(`/visit-detail?visitId=${item.visitId}`)}
+        onPress={() => handleVisitPress(item.visitId)}
       />
     );
   };
@@ -276,4 +286,98 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: 8,
   },
+  visitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 44,
+  },
+  visitAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: "hidden",
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  visitAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  visitAvatarPlaceholder: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  visitRowContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  visitRowTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  visitRowSubtitle: {
+    fontSize: 14,
+  },
+  visitRowChevron: {
+    fontSize: 24,
+  },
 });
+
+// Row with animal face avatar for dashboard recent visits
+interface VisitRowProps {
+  animalId: number;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}
+
+function VisitRow({
+  animalId,
+  title,
+  subtitle,
+  onPress,
+}: VisitRowProps) {
+  const { colors } = useTheme();
+  const { data: animalImages = [] } = useAnimalImages(animalId);
+  const faceUrl =
+    animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+
+  return (
+    <TouchableOpacity
+      style={styles.visitRow}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[styles.visitAvatar, { backgroundColor: colors.border }]}
+      >
+        {faceUrl ? (
+          <Image
+            source={{ uri: faceUrl }}
+            style={styles.visitAvatarImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text
+            style={[styles.visitAvatarPlaceholder, { color: colors.muted }]}
+          >
+            ?
+          </Text>
+        )}
+      </View>
+      <View style={styles.visitRowContent}>
+        <Text style={[styles.visitRowTitle, { color: colors.text }]} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={[styles.visitRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <Text style={[styles.visitRowChevron, { color: colors.muted }]}>›</Text>
+    </TouchableOpacity>
+  );
+}

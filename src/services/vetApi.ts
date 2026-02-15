@@ -12,9 +12,11 @@ import type {
   VisitDiagnosis,
   CreateVisitDiagnosisRequest,
   UpdateVisitDiagnosisRequest,
+  DiagnosisSuggestion,
   VisitTreatment,
   CreateVisitTreatmentRequest,
   UpdateVisitTreatmentRequest,
+  TreatmentSuggestion,
   VisitNote,
   CreateVisitNoteRequest,
   UpdateVisitNoteRequest,
@@ -247,6 +249,15 @@ export const visitDiagnosisApi = {
     return response.data.data;
   },
 
+  suggestDiagnoses: async (
+    complaint: string,
+  ): Promise<DiagnosisSuggestion[]> => {
+    const response = await apiClient.instance.post<
+      ApiSuccessResponse<DiagnosisSuggestion[]>
+    >("/visit-diagnoses/suggest", { complaint });
+    return response.data.data;
+  },
+
   createVisitDiagnosis: async (
     request: CreateVisitDiagnosisRequest,
   ): Promise<VisitDiagnosis> => {
@@ -273,6 +284,15 @@ export const visitDiagnosisApi = {
 
 // Visit Treatments API
 export const visitTreatmentApi = {
+  suggestTreatments: async (
+    diagnoses: Array<{ diagnosis_text: string; status: "SUSPECTED" | "CONFIRMED" }>,
+  ): Promise<TreatmentSuggestion[]> => {
+    const response = await apiClient.instance.post<
+      ApiSuccessResponse<TreatmentSuggestion[]>
+    >("/visit-treatments/suggest", { diagnoses });
+    return response.data.data;
+  },
+
   getVisitTreatment: async (treatmentId: number): Promise<VisitTreatment> => {
     const response = await apiClient.instance.get<
       ApiSuccessResponse<VisitTreatment>

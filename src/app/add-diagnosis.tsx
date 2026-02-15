@@ -28,11 +28,26 @@ export default function AddDiagnosisScreen() {
   const { colors } = useTheme();
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const paramText =
+    typeof params.diagnosisText === "string"
+      ? params.diagnosisText
+      : Array.isArray(params.diagnosisText)
+        ? params.diagnosisText[0] ?? ""
+        : "";
+  const paramStatus =
+    typeof params.status === "string"
+      ? params.status
+      : Array.isArray(params.status)
+        ? params.status[0]
+        : "";
+  const validStatus: "SUSPECTED" | "CONFIRMED" =
+    paramStatus === "CONFIRMED" ? "CONFIRMED" : "SUSPECTED";
+
   const createDiagnosisMutation = useCreateVisitDiagnosis();
   const createMediaMutation = useCreateMediaFile();
 
-  const [diagnosisText, setDiagnosisText] = useState("");
-  const [status, setStatus] = useState<"SUSPECTED" | "CONFIRMED">("SUSPECTED");
+  const [diagnosisText, setDiagnosisText] = useState(paramText);
+  const [status, setStatus] = useState<"SUSPECTED" | "CONFIRMED">(validStatus);
   const [voiceRecording, setVoiceRecording] = useState<{
     s3Key: string;
     rawText: string;

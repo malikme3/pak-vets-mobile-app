@@ -35,21 +35,37 @@ export default function AddTreatmentScreen() {
   const { colors } = useTheme();
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const param = (key: string) =>
+    typeof params[key] === "string"
+      ? params[key]
+      : Array.isArray(params[key])
+        ? (params[key] as string[])[0]
+        : "";
+  const paramTreatmentType = param("treatmentType");
+  const validType: "MEDICATION" | "PROCEDURE" | "ADVICE" =
+    paramTreatmentType === "PROCEDURE"
+      ? "PROCEDURE"
+      : paramTreatmentType === "ADVICE"
+        ? "ADVICE"
+        : "MEDICATION";
+
   const createTreatmentMutation = useCreateVisitTreatment();
   const createMediaMutation = useCreateMediaFile();
 
   const [treatmentType, setTreatmentType] = useState<
     "MEDICATION" | "PROCEDURE" | "ADVICE"
-  >("MEDICATION");
+  >(validType);
   const [treatmentStatus, setTreatmentStatus] = useState<
     "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED"
   >("PLANNED");
-  const [medicineNameFree, setMedicineNameFree] = useState("");
-  const [dose, setDose] = useState("");
-  const [route, setRoute] = useState("");
-  const [frequency, setFrequency] = useState("");
-  const [durationDays, setDurationDays] = useState("");
-  const [instructions, setInstructions] = useState("");
+  const [medicineNameFree, setMedicineNameFree] = useState(
+    param("medicineNameFree"),
+  );
+  const [dose, setDose] = useState(param("dose"));
+  const [route, setRoute] = useState(param("route"));
+  const [frequency, setFrequency] = useState(param("frequency"));
+  const [durationDays, setDurationDays] = useState(param("durationDays"));
+  const [instructions, setInstructions] = useState(param("instructions"));
   const [voiceRecording, setVoiceRecording] = useState<{
     s3Key: string;
     rawText: string;
