@@ -7,11 +7,11 @@
 |---|---|---|---|
 | Doctor | Dashboard | `getCurrentDoctor()` | `['doctor','me']` |
 | Animal | Search / Profile / Create | `searchAnimals`, `getAnimal`, `createAnimal` | `['animals', query]`, `['animal', id]` |
-| Visit | Create / Detail / History | `createVisit`, `getVisit`, `listVisits` | `['visit', id]`, `['visits', filters]` |
-| Diagnosis | Add / List | `addDiagnosis`, `listDiagnoses` | `['visit', id]` invalidate |
-| Treatment | Add / List | `addTreatment`, `listTreatments` | `['visit', id]` invalidate |
-| Notes | Add / List | `addNote`, `listNotes` | `['visit', id]` invalidate |
-| Media | Upload / List | `addMedia`, `listMedia` | `['visit', id]` invalidate |
+| Case | Create / Detail / History | `createCase`, `getCase`, `listCases` | `['case', id]`, `['cases', filters]` |
+| Diagnosis | Add / List | `addDiagnosis`, `listDiagnoses` | `['case', id]` invalidate |
+| Treatment | Add / List | `addTreatment`, `listTreatments` | `['case', id]` invalidate |
+| Notes | Add / List | `addNote`, `listNotes` | `['case', id]` invalidate |
+| Media | Upload / List | `addMedia`, `listMedia` | `['case', id]` invalidate |
 
 ---
 
@@ -47,7 +47,7 @@
 - ✅ Mutations invalidate correct queries
 - ✅ Loading/empty/error states everywhere
 - ✅ Light + dark theme supported across UI components
-- ✅ “Visit has no treatment” flow works cleanly (empty state shown)
+- ✅ “Case has no treatment” flow works cleanly (empty state shown)
 
 ---
 

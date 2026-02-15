@@ -192,7 +192,7 @@ export default function AddDiagnosisScreen() {
         });
       }
 
-      // Navigate back to visit detail - use replace to ensure fresh data load
+      // Navigate back to case detail - use replace to ensure fresh data load
       router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       Alert.alert(

@@ -527,7 +527,7 @@ export default function AddTreatmentScreen() {
         });
       }
 
-      // Navigate back to visit detail
+      // Navigate back to case detail
       router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       Alert.alert(
@@ -583,7 +583,7 @@ export default function AddTreatmentScreen() {
               styles.autoFillButton,
               {
                 backgroundColor: isAutoFillRecording
-                  ? "#ef4444"
+                  ? colors.danger
                   : colors.primary,
                 opacity: isProcessingStructured ? 0.6 : 1,
               },

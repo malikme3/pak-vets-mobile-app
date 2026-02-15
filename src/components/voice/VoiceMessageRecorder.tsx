@@ -16,6 +16,7 @@ import {
   transcribeAudio,
   getBucketName,
 } from "../../services/sharedServicesApi";
+import { useTheme } from "../../theme/useTheme";
 
 type RecordingStatus = "idle" | "recording" | "processing";
 
@@ -40,18 +41,20 @@ const AUDIO_TAG = "type=audio-note";
 const S3_PROCESSING_DELAY_MS = 2000;
 const BUTTON_DEBOUNCE_MS = 500;
 const BUTTON_PRESS_DELAY_MS = 10;
-const RECORDING_BUTTON_COLOR = "#ef4444";
-const ACTIVITY_INDICATOR_COLOR = "#fff";
 
 export function VoiceMessageRecorder({
   onTranscriptReady,
   onRecordingComplete,
   onError,
   buttonSize = 36,
-  buttonColor = "#007AFF",
+  buttonColor,
   disabled = false,
   caseId,
 }: VoiceMessageRecorderProps) {
+  const { colors } = useTheme();
+  const resolvedButtonColor = buttonColor ?? colors.primary;
+  const recordingColor = colors.danger;
+
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingStatus, setRecordingStatus] =
     useState<RecordingStatus>("idle");
@@ -388,8 +391,8 @@ export function VoiceMessageRecorder({
           borderRadius: buttonSize / 2,
           backgroundColor:
             recordingStatus === "recording"
-              ? RECORDING_BUTTON_COLOR
-              : buttonColor,
+              ? recordingColor
+              : resolvedButtonColor,
         },
         (disabled || isProcessing) && { opacity: 0.5 },
       ]}
@@ -408,18 +411,18 @@ export function VoiceMessageRecorder({
       delayPressOut={0}
     >
       {isProcessing ? (
-        <ActivityIndicator size="small" color={ACTIVITY_INDICATOR_COLOR} />
+        <ActivityIndicator size="small" color={colors.onPrimary} />
       ) : recordingStatus === "recording" ? (
         <FontAwesome
           name="stop"
           size={buttonSize * 0.45}
-          color={ACTIVITY_INDICATOR_COLOR}
+          color={colors.onPrimary}
         />
       ) : (
         <FontAwesome
           name="microphone"
           size={buttonSize * 0.5}
-          color={ACTIVITY_INDICATOR_COLOR}
+          color={colors.onPrimary}
         />
       )}
     </TouchableOpacity>

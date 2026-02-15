@@ -10,6 +10,7 @@ export const lightColors = {
   warning: "#F59E0B",
   success: "#16A34A",
   overlay: "rgba(0, 0, 0, 0.6)",
+  onPrimary: "#FFFFFF",
 };
 
 export const darkColors = {
@@ -24,4 +25,5 @@ export const darkColors = {
   warning: "#F59E0B",
   success: "#16A34A",
   overlay: "rgba(0, 0, 0, 0.65)",
+  onPrimary: "#FFFFFF",
 };

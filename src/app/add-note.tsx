@@ -169,7 +169,7 @@ export default function AddNoteScreen() {
         await sound.unloadAsync();
       }
 
-      // Navigate back to visit detail
+      // Navigate back to case detail
       router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       Alert.alert(

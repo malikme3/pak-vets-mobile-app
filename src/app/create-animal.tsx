@@ -40,7 +40,7 @@ export default function CreateAnimalScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
-  const returnTo = (params.returnTo as string) || "/create-visit";
+  const returnTo = (params.returnTo as string) || "/create-case";
 
   const [step, setStep] = useState<Step>("owner");
 

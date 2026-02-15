@@ -317,19 +317,19 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: 8,
   },
-  visitRow: {
+  caseRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
     minHeight: 44,
   },
-  visitRowTap: {
+  caseRowTap: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
   },
-  visitDeleteBtn: {
+  caseDeleteBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 8,
   },
-  visitAvatar: {
+  caseAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -347,27 +347,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  visitAvatarImage: {
+  caseAvatarImage: {
     width: "100%",
     height: "100%",
   },
-  visitAvatarPlaceholder: {
+  caseAvatarPlaceholder: {
     fontSize: 18,
     fontWeight: "600",
   },
-  visitRowContent: {
+  caseRowContent: {
     flex: 1,
     marginRight: 8,
   },
-  visitRowTitle: {
+  caseRowTitle: {
     fontSize: 16,
     fontWeight: "500",
     marginBottom: 4,
   },
-  visitRowSubtitle: {
+  caseRowSubtitle: {
     fontSize: 14,
   },
-  visitRowChevron: {
+  caseRowChevron: {
     fontSize: 24,
   },
 });
@@ -396,44 +396,44 @@ function CaseRow({
     animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
 
   return (
-    <View style={styles.visitRow}>
+    <View style={styles.caseRow}>
       <TouchableOpacity
-        style={styles.visitRowTap}
+        style={styles.caseRowTap}
         onPress={onPress}
         activeOpacity={0.7}
       >
         <View
-          style={[styles.visitAvatar, { backgroundColor: colors.border }]}
+          style={[styles.caseAvatar, { backgroundColor: colors.border }]}
         >
           {faceUrl ? (
             <Image
               source={{ uri: faceUrl }}
-              style={styles.visitAvatarImage}
+              style={styles.caseAvatarImage}
               resizeMode="cover"
             />
           ) : (
             <Text
-              style={[styles.visitAvatarPlaceholder, { color: colors.muted }]}
+              style={[styles.caseAvatarPlaceholder, { color: colors.muted }]}
             >
               ?
             </Text>
           )}
         </View>
-        <View style={styles.visitRowContent}>
-          <Text style={[styles.visitRowTitle, { color: colors.text }]} numberOfLines={1}>
+        <View style={styles.caseRowContent}>
+          <Text style={[styles.caseRowTitle, { color: colors.text }]} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={[styles.visitRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
+          <Text style={[styles.caseRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
             {subtitle}
           </Text>
         </View>
-        <Text style={[styles.visitRowChevron, { color: colors.muted }]}>›</Text>
+        <Text style={[styles.caseRowChevron, { color: colors.muted }]}>›</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={onDelete}
         disabled={isDeleting}
         style={[
-          styles.visitDeleteBtn,
+          styles.caseDeleteBtn,
           { borderColor: colors.danger },
           isDeleting && { opacity: 0.5 },
         ]}

@@ -122,7 +122,7 @@ function MediaThumbnail({
   );
 }
 
-// Accordion sections - Visit, Animal, Diagnoses expanded by default
+// Accordion sections - Case, Animal, Diagnoses expanded by default
 type AccordionKey = "case" | "animal" | "diagnoses" | "treatments" | "notes" | "media";
 const DEFAULT_EXPANDED: AccordionKey[] = ["case", "animal", "diagnoses"];
 
