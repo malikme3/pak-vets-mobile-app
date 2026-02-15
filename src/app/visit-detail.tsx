@@ -15,7 +15,6 @@ import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
-import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { useVisit } from "../features/visits/hooks";
 import { useAnimal } from "../features/animals/hooks";
@@ -43,11 +42,89 @@ import type {
   TreatmentSuggestion,
 } from "../types/api";
 
-// Design system: consistent icon sizes across visit detail (fonts in StyleSheet)
-const ICON_SECTION = 16;
-const ICON_CHEVRON = 16;
-const ICON_ACTION = 16;
-const ICON_EMPTY = 28;
+const ICON_SECTION = 18;
+const ICON_CHEVRON = 14;
+const ICON_ACTION = 14;
+const ICON_EMPTY = 24;
+
+// --- Accordion Section (reusable) ---
+interface AccordionSectionProps {
+  title: string;
+  icon: keyof typeof FontAwesome.glyphMap;
+  count?: number;
+  expanded: boolean;
+  onToggle: () => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}
+
+function AccordionSection({ title, icon, count, expanded, onToggle, colors, children, action }: AccordionSectionProps) {
+  return (
+    <View style={[styles.accordionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
+        <View style={styles.accordionTitleRow}>
+          <FontAwesome name={icon} size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
+          <Text style={[styles.accordionTitle, { color: colors.text }]}>{title}</Text>
+          {count != null && count > 0 && (
+            <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.countBadgeText}>{count}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.accordionRight}>
+          {action}
+          <FontAwesome name={expanded ? "chevron-up" : "chevron-down"} size={ICON_CHEVRON} color={colors.muted} />
+        </View>
+      </TouchableOpacity>
+      {expanded && <View style={[styles.accordionBody, { borderTopColor: colors.border }]}>{children}</View>}
+    </View>
+  );
+}
+
+// --- Media Thumbnail (loads signed URL for S3 images) ---
+function MediaThumbnail({
+  media,
+  colors,
+  getBucketName,
+  getDownloadSignedUrl,
+}: {
+  media: MediaFile;
+  colors: ReturnType<typeof useTheme>["colors"];
+  getBucketName: () => string;
+  getDownloadSignedUrl: (bucket: string, key: string) => Promise<string>;
+}) {
+  const [imageUri, setImageUri] = useState<string | null>(media.fileType === "IMAGE" && media.url ? media.url : null);
+
+  useEffect(() => {
+    if (media.fileType === "IMAGE" && media.s3Key && !media.url) {
+      getDownloadSignedUrl(getBucketName(), media.s3Key).then(setImageUri).catch(() => setImageUri(null));
+    }
+  }, [media.mediaId, media.s3Key, media.url, media.fileType]);
+
+  const uri = media.fileType === "IMAGE" && media.url ? media.url : imageUri;
+  return (
+    <View style={styles.mediaItem}>
+      {media.fileType === "IMAGE" && uri ? (
+        <View style={[styles.imageWrapper, { backgroundColor: colors.border }]}>
+          <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" onError={() => setImageUri(null)} />
+        </View>
+      ) : (
+        <View style={[styles.mediaPlaceholder, { backgroundColor: colors.border }]}>
+          <FontAwesome name="image" size={24} color={colors.muted} />
+          <Text style={[styles.mediaType, { color: colors.text }]}>{media.fileType}</Text>
+        </View>
+      )}
+      <Text style={[styles.mediaDate, { color: colors.muted }]}>
+        {new Date(media.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+      </Text>
+    </View>
+  );
+}
+
+// Accordion sections - Visit, Animal, Diagnoses expanded by default
+type AccordionKey = "visit" | "animal" | "diagnoses" | "treatments" | "notes" | "media";
+const DEFAULT_EXPANDED: AccordionKey[] = ["visit", "animal", "diagnoses"];
 
 export default function VisitDetailScreen() {
   const router = useRouter();
@@ -55,8 +132,14 @@ export default function VisitDetailScreen() {
   const { colors } = useTheme();
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
-  const [visitInfoExpanded, setVisitInfoExpanded] = useState(false);
-  const [animalInfoExpanded, setAnimalInfoExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<Record<AccordionKey, boolean>>(() =>
+    Object.fromEntries(
+      (["visit", "animal", "diagnoses", "treatments", "notes", "media"] as AccordionKey[]).map((k) => [
+        k,
+        DEFAULT_EXPANDED.includes(k),
+      ])
+    ) as Record<AccordionKey, boolean>
+  );
   const [suggestedDiagnoses, setSuggestedDiagnoses] = useState<
     DiagnosisSuggestion[]
   >([]);
@@ -271,12 +354,8 @@ export default function VisitDetailScreen() {
     });
   };
 
-  // ScrollView-safe press (guideline: avoid onPress cancel inside ScrollView)
-  const handleToggleVisitInfo = useCallback(() => {
-    setTimeout(() => setVisitInfoExpanded((v) => !v), 50);
-  }, []);
-  const handleToggleAnimalInfo = useCallback(() => {
-    setTimeout(() => setAnimalInfoExpanded((v) => !v), 50);
+  const toggleSection = useCallback((key: AccordionKey) => {
+    setTimeout(() => setExpanded((prev) => ({ ...prev, [key]: !prev[key] })), 50);
   }, []);
 
   // Add Treatment: suggest from diagnoses (saved or AI), then navigate with first suggestion to pre-fill
@@ -431,438 +510,217 @@ export default function VisitDetailScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.title, { color: colors.text }]}>
-          Visit Details
-        </Text>
+        {/* Compact header */}
+        <View style={[styles.header, { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 16 }]}>
+          <Text style={[styles.headerDate, { color: colors.muted }]}>
+            {visit ? formatDate(visit.visitDatetime) : ""}
+          </Text>
+          {visit?.chiefComplaint && (
+            <Text style={[styles.headerComplaint, { color: colors.text }]} numberOfLines={2}>
+              {visit.chiefComplaint}
+            </Text>
+          )}
+          {animal && (
+            <Text style={[styles.headerAnimal, { color: colors.primary }]}>
+              {animal.species}
+              {animal.breed ? ` · ${animal.breed}` : ""}
+            </Text>
+          )}
+        </View>
 
-        {/* Visit Information (accordion) */}
-        <Card style={styles.card}>
-          <TouchableOpacity
-            style={styles.accordionHeader}
-            onPress={handleToggleVisitInfo}
-            activeOpacity={0.7}
-          >
-            <View style={styles.accordionTitleRow}>
-              <FontAwesome name="calendar" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-              <Text style={[styles.accordionTitle, { color: colors.text }]}>
-                Visit Information
-              </Text>
-            </View>
-            <FontAwesome
-              name={visitInfoExpanded ? "chevron-up" : "chevron-down"}
-              size={ICON_CHEVRON}
-              color={colors.muted}
-            />
-          </TouchableOpacity>
-          {visitInfoExpanded && (
-            <View style={[styles.accordionBody, { borderTopColor: colors.border }]}>
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Date & Time
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {formatDate(visit.visitDatetime)}
-                </Text>
-              </View>
-              {visit.chiefComplaint && (
-                <View style={styles.infoRow}>
-                  <Text style={[styles.label, { color: colors.muted }]}>
-                    Chief Complaint
-                  </Text>
-                  <Text style={[styles.value, { color: colors.text }]}>
-                    {visit.chiefComplaint}
-                  </Text>
-                </View>
-              )}
+        {/* 1. Visit Information */}
+        <AccordionSection
+          title="Visit"
+          icon="calendar"
+          expanded={expanded.visit}
+          onToggle={() => toggleSection("visit")}
+          colors={colors}
+        >
+          <View style={styles.infoRow}>
+            <Text style={[styles.label, { color: colors.muted }]}>Date & Time</Text>
+            <Text style={[styles.value, { color: colors.text }]}>{formatDate(visit.visitDatetime)}</Text>
+          </View>
+          {visit.chiefComplaint && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.label, { color: colors.muted }]}>Chief Complaint</Text>
+              <Text style={[styles.value, { color: colors.text }]}>{visit.chiefComplaint}</Text>
             </View>
           )}
-        </Card>
+        </AccordionSection>
 
-        {/* Animal Information (accordion) */}
+        {/* 2. Animal Information */}
         {animal && (
-          <Card style={styles.card}>
+          <AccordionSection
+            title="Animal"
+            icon="paw"
+            expanded={expanded.animal}
+            onToggle={() => toggleSection("animal")}
+            colors={colors}
+          >
+            <View style={styles.infoRow}>
+              <Text style={[styles.label, { color: colors.muted }]}>Species</Text>
+              <Text style={[styles.value, { color: colors.text }]}>{animal.species}</Text>
+            </View>
+            {animal.breed && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.label, { color: colors.muted }]}>Breed</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.breed}</Text>
+              </View>
+            )}
+            {animal.tagId && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.label, { color: colors.muted }]}>Tag ID</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.tagId}</Text>
+              </View>
+            )}
+            {animal.ownerName && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.label, { color: colors.muted }]}>Owner</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.ownerName}</Text>
+              </View>
+            )}
+            {animal.ownerPhone && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.label, { color: colors.muted }]}>Phone</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.ownerPhone}</Text>
+              </View>
+            )}
             <TouchableOpacity
-              style={styles.accordionHeader}
-              onPress={handleToggleAnimalInfo}
+              onPress={() => router.push(`/animal-details?animalId=${animal.animalId}`)}
+              style={[styles.linkButton, { borderColor: colors.primary }]}
               activeOpacity={0.7}
             >
-              <View style={styles.accordionTitleRow}>
-                <FontAwesome name="paw" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-                <Text style={[styles.accordionTitle, { color: colors.text }]}>
-                  Animal Information
-                </Text>
-              </View>
-              <FontAwesome
-                name={animalInfoExpanded ? "chevron-up" : "chevron-down"}
-                size={ICON_CHEVRON}
-                color={colors.muted}
-              />
+              <FontAwesome name="external-link" size={12} color={colors.primary} />
+              <Text style={[styles.linkButtonText, { color: colors.primary }]}>View profile</Text>
             </TouchableOpacity>
-            {animalInfoExpanded && (
-              <View style={[styles.accordionBody, { borderTopColor: colors.border }]}>
-                <View style={styles.infoRow}>
-                  <Text style={[styles.label, { color: colors.muted }]}>
-                    Species
-                  </Text>
-                  <Text style={[styles.value, { color: colors.text }]}>
-                    {animal.species}
-                  </Text>
-                </View>
-                {animal.breed && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
-                      Breed
-                    </Text>
-                    <Text style={[styles.value, { color: colors.text }]}>
-                      {animal.breed}
-                    </Text>
-                  </View>
-                )}
-                {animal.tagId && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
-                      Tag ID
-                    </Text>
-                    <Text style={[styles.value, { color: colors.text }]}>
-                      {animal.tagId}
-                    </Text>
-                  </View>
-                )}
-                {animal.ownerName && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
-                      Owner
-                    </Text>
-                    <Text style={[styles.value, { color: colors.text }]}>
-                      {animal.ownerName}
-                    </Text>
-                  </View>
-                )}
-                {animal.ownerPhone && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
-                      Owner Phone
-                    </Text>
-                    <Text style={[styles.value, { color: colors.text }]}>
-                      {animal.ownerPhone}
-                    </Text>
-                  </View>
-                )}
-                <Button
-                  title="View Animal Profile"
-                  onPress={() =>
-                    router.push(`/animal-details?animalId=${animal.animalId}`)
-                  }
-                  variant="secondary"
-                  style={styles.actionButton}
-                />
-              </View>
-            )}
-          </Card>
+          </AccordionSection>
         )}
 
-        {/* Suggested diagnoses (from chief complaint) – fetch only after user taps */}
-        {visit.chiefComplaint?.trim() && (
-          <Card style={styles.card}>
-            {!suggestionsRequestedByUser ? (
-              <TouchableOpacity
-                style={[styles.suggestionsCtaCard, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}
-                onPress={() => setSuggestionsRequestedByUser(true)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.suggestionsCtaContent}>
-                  <View style={[styles.suggestionsCtaIconWrap, { backgroundColor: colors.primary }]}>
-                    <FontAwesome name="lightbulb-o" size={22} color={colors.surface} />
-                  </View>
-                  <View style={styles.suggestionsCtaTextWrap}>
-                    <Text style={[styles.suggestionsCtaTitle, { color: colors.text }]}>
-                      Suggested diagnoses
-                    </Text>
-                    <Text style={[styles.suggestionsCtaSubtitle, { color: colors.muted }]}>
-                      Tap to get AI suggestions from chief complaint
-                    </Text>
-                  </View>
-                  <FontAwesome name="chevron-right" size={ICON_CHEVRON} color={colors.muted} />
+        {/* 3. Diagnoses (with AI suggestions inline) */}
+        <AccordionSection
+          title="Diagnoses"
+          icon="stethoscope"
+          count={diagnoses.length}
+          expanded={expanded.diagnoses}
+          onToggle={() => toggleSection("diagnoses")}
+          colors={colors}
+          action={
+            <TouchableOpacity
+              onPress={() => router.push(`/add-diagnosis?visitId=${visit?.visitId}`)}
+              style={[styles.addChip, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="plus" size={12} color={colors.surface} />
+              <Text style={[styles.addChipText, { color: colors.surface }]}>Add</Text>
+            </TouchableOpacity>
+          }
+        >
+          {/* AI Suggestions (inline) */}
+          {visit.chiefComplaint?.trim() && (
+            <View style={[styles.aiBlock, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              {!suggestionsRequestedByUser ? (
+                <TouchableOpacity
+                  onPress={() => setSuggestionsRequestedByUser(true)}
+                  style={styles.aiCta}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="lightbulb-o" size={16} color={colors.primary} />
+                  <Text style={[styles.aiCtaText, { color: colors.primary }]}>Get AI suggestions</Text>
+                  <FontAwesome name="chevron-right" size={12} color={colors.primary} />
+                </TouchableOpacity>
+              ) : suggestionsLoading ? (
+                <View style={styles.aiLoading}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[styles.aiLoadingText, { color: colors.muted }]}>Suggesting…</Text>
                 </View>
-              </TouchableOpacity>
-            ) : (
-              <>
-                <View style={[styles.suggestionsSectionHeader, { borderBottomColor: colors.border }]}>
-                  <View style={styles.sectionTitleRow}>
-                    <FontAwesome name="lightbulb-o" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                      Suggested diagnoses
-                    </Text>
-                  </View>
-                </View>
-                {suggestionsLoading ? (
-                  <View style={[styles.suggestionsLoading, { backgroundColor: colors.surface }]}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={[styles.suggestionsLoadingText, { color: colors.muted }]}>
-                      AI suggesting based on chief complaint…
-                    </Text>
-                  </View>
-                ) : suggestedDiagnoses.length > 0 ? (
-                  <View style={styles.suggestionsList}>
-                    {suggestedDiagnoses.map((s, index) => (
-                      <View
-                        key={`${s.diagnosis_text}-${index}`}
-                        style={[styles.suggestionCard, { backgroundColor: colors.surface, borderColor: colors.border, borderLeftColor: colors.primary }]}
-                      >
-                        <View style={styles.suggestionCardContent}>
-                          <Text style={[styles.suggestionCardText, { color: colors.text }]} numberOfLines={4}>
-                            {s.diagnosis_text}
-                          </Text>
-                          <View style={styles.suggestionCardFooter}>
-                            <View style={[styles.suggestionCardBadge, { backgroundColor: s.status === "CONFIRMED" ? colors.success : colors.warning }]}>
-                              <Text style={[styles.suggestionCardBadgeText, { color: colors.surface }]}>{s.status}</Text>
-                            </View>
-                            <TouchableOpacity
-                              onPress={() => handleConfirmSuggestion(s, index)}
-                              disabled={confirmingSuggestionIndex !== null && confirmingSuggestionIndex !== index}
-                              style={[styles.suggestionAddBtn, { borderColor: colors.success, opacity: confirmingSuggestionIndex !== null && confirmingSuggestionIndex !== index ? 0.5 : 1 }]}
-                              activeOpacity={0.7}
-                            >
-                              {confirmingSuggestionIndex === index ? (
-                                <ActivityIndicator size="small" color={colors.success} />
-                              ) : (
-                                <>
-                                  <FontAwesome name="plus-circle" size={14} color={colors.success} style={{ marginRight: 6 }} />
-                                  <Text style={[styles.suggestionAddBtnText, { color: colors.success }]}>Add</Text>
-                                </>
-                              )}
-                            </TouchableOpacity>
-                          </View>
+              ) : suggestedDiagnoses.length > 0 ? (
+                <View style={styles.suggestionsList}>
+                  <Text style={[styles.aiLabel, { color: colors.muted }]}>Suggested</Text>
+                  {suggestedDiagnoses.map((s, index) => (
+                    <View key={`${s.diagnosis_text}-${index}`} style={[styles.suggestionRow, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}>
+                      <Text style={[styles.suggestionText, { color: colors.text }]} numberOfLines={3}>{s.diagnosis_text}</Text>
+                      <View style={styles.suggestionRowFooter}>
+                        <View style={[styles.statusBadge, { backgroundColor: s.status === "CONFIRMED" ? colors.success : colors.warning }]}>
+                          <Text style={styles.statusBadgeText}>{s.status}</Text>
                         </View>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.suggestionsEmptyRequested}>
-                    <FontAwesome name="info-circle" size={ICON_EMPTY} color={colors.muted} style={styles.emptyIcon} />
-                    <Text style={[styles.suggestionsEmptyText, { color: colors.muted }]}>
-                      No AI suggestions found for this chief complaint
-                    </Text>
-                    <Button
-                      title="Add Diagnosis"
-                      onPress={() => router.push(`/add-diagnosis?visitId=${visit?.visitId}`)}
-                      variant="secondary"
-                      style={styles.addButtonStandalone}
-                    />
-                  </View>
-                )}
-              </>
-            )}
-          </Card>
-        )}
-
-        {/* Diagnoses Section (saved); "Add Diagnosis" only when no suggestions) */}
-        <Card style={styles.card}>
-          <View style={styles.diagnosesSectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <FontAwesome name="stethoscope" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Diagnoses
-              </Text>
-            </View>
-            {suggestedDiagnoses.length === 0 && (
-              <Button
-                title="Add Diagnosis"
-                onPress={() => {
-                  router.push(`/add-diagnosis?visitId=${visit?.visitId}`);
-                }}
-                variant="secondary"
-                style={styles.addButton}
-              />
-            )}
-          </View>
-          {diagnoses.length > 0 ? (
-            <View style={styles.diagnosesList}>
-              {diagnoses.map((diagnosis) => {
-                const audioMedia = diagnosis.mediaId
-                  ? mediaFiles.find((m) => m.mediaId === diagnosis.mediaId)
-                  : null;
-                const suggestedForThis =
-                  treatmentSuggestionsByDiagnosisId[diagnosis.diagnosisId] ?? [];
-                const loadingTreatments =
-                  loadingTreatmentForDiagnosisId === diagnosis.diagnosisId;
-
-                return (
-                  <View
-                    key={diagnosis.diagnosisId}
-                    style={[styles.diagnosisBlock, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <View style={styles.diagnosisBlockRow}>
-                      <View style={styles.diagnosisBlockContent}>
-                        <DiagnosisItem
-                          diagnosis={diagnosis}
-                          audioMedia={audioMedia}
-                          colors={colors}
-                          getAudioUrl={getAudioUrl}
-                        />
-                      </View>
-                      <View style={styles.diagnosisBlockActions}>
                         <TouchableOpacity
-                          onPress={() => handleEditDiagnosis(diagnosis)}
-                          style={[
-                            styles.editDiagnosisBtn,
-                            { borderColor: colors.primary },
-                          ]}
-                          activeOpacity={0.7}
+                          onPress={() => handleConfirmSuggestion(s, index)}
+                          disabled={confirmingSuggestionIndex !== null && confirmingSuggestionIndex !== index}
+                          style={[styles.addChip, { backgroundColor: colors.success, opacity: confirmingSuggestionIndex !== null && confirmingSuggestionIndex !== index ? 0.5 : 1 }]}
+                          activeOpacity={0.8}
                         >
-                          <FontAwesome
-                            name="pencil"
-                            size={ICON_ACTION}
-                            color={colors.primary}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() =>
-                            handleFetchTreatmentsForDiagnosis(diagnosis)
-                          }
-                          disabled={loadingTreatmentForDiagnosisId !== null}
-                          style={[
-                            styles.getTreatmentsIconBtn,
-                            {
-                              borderColor: colors.primary,
-                              opacity:
-                                loadingTreatmentForDiagnosisId !== null ? 0.5 : 1,
-                            },
-                          ]}
-                          activeOpacity={0.7}
-                        >
-                          {loadingTreatments ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={colors.primary}
-                            />
+                          {confirmingSuggestionIndex === index ? (
+                            <ActivityIndicator size="small" color={colors.surface} />
                           ) : (
-                            <FontAwesome
-                              name="medkit"
-                              size={ICON_ACTION}
-                              color={colors.primary}
-                            />
+                            <>
+                              <FontAwesome name="plus" size={10} color={colors.surface} />
+                              <Text style={[styles.addChipText, { color: colors.surface }]}>Add</Text>
+                            </>
                           )}
                         </TouchableOpacity>
                       </View>
                     </View>
-                    {suggestedForThis.length > 0 && (
-                      <View style={[styles.suggestedTreatmentsContainer, { backgroundColor: colors.background }]}>
-                        <Text
-                          style={[
-                            styles.suggestedTreatmentsTitle,
-                            { color: colors.muted },
-                          ]}
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.aiEmptyText, { color: colors.muted }]}>No AI suggestions found</Text>
+              )}
+            </View>
+          )}
+
+          {/* Saved diagnoses */}
+          {diagnoses.length > 0 ? (
+            <View style={styles.diagnosesList}>
+              {diagnoses.map((diagnosis) => {
+                const audioMedia = diagnosis.mediaId ? mediaFiles.find((m) => m.mediaId === diagnosis.mediaId) : null;
+                const suggestedForThis = treatmentSuggestionsByDiagnosisId[diagnosis.diagnosisId] ?? [];
+                const loadingTreatments = loadingTreatmentForDiagnosisId === diagnosis.diagnosisId;
+                return (
+                  <View key={diagnosis.diagnosisId} style={[styles.diagnosisBlock, { borderColor: colors.border }]}>
+                    <View style={styles.diagnosisBlockRow}>
+                      <View style={styles.diagnosisBlockContent}>
+                        <DiagnosisItem diagnosis={diagnosis} audioMedia={audioMedia} colors={colors} getAudioUrl={getAudioUrl} />
+                      </View>
+                      <View style={styles.diagnosisBlockActions}>
+                        <TouchableOpacity onPress={() => handleEditDiagnosis(diagnosis)} style={[styles.iconBtn, { borderColor: colors.primary }]} activeOpacity={0.7}>
+                          <FontAwesome name="pencil" size={ICON_ACTION} color={colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleFetchTreatmentsForDiagnosis(diagnosis)}
+                          disabled={loadingTreatmentForDiagnosisId !== null}
+                          style={[styles.iconBtn, { borderColor: colors.primary, opacity: loadingTreatmentForDiagnosisId !== null ? 0.5 : 1 }]}
+                          activeOpacity={0.7}
                         >
-                          Suggested treatments
-                        </Text>
+                          {loadingTreatments ? <ActivityIndicator size="small" color={colors.primary} /> : <FontAwesome name="medkit" size={ICON_ACTION} color={colors.primary} />}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    {suggestedForThis.length > 0 && (
+                      <View style={[styles.suggestedTreatmentsContainer, { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 }]}>
+                        <Text style={[styles.suggestedTreatmentsTitle, { color: colors.muted }]}>Suggested treatments</Text>
                         {suggestedForThis.map((sug, idx) => {
                           const confirmKey = `${diagnosis.diagnosisId}-${idx}`;
-                          const isConfirming =
-                            confirmingTreatmentKey === confirmKey;
+                          const isConfirming = confirmingTreatmentKey === confirmKey;
                           return (
-                            <View
-                              key={idx}
-                              style={[
-                                styles.suggestedTreatmentRow,
-                                {
-                                  backgroundColor: colors.surface,
-                                  borderLeftColor: colors.accent,
-                                },
-                              ]}
-                            >
-                              <View
-                                style={
-                                  styles.suggestedTreatmentRowContent
-                                }
-                              >
-                                <Text
-                                  style={[
-                                    styles.suggestedTreatmentType,
-                                    { color: colors.primary },
-                                  ]}
-                                >
-                                  {sug.treatmentType}
-                                </Text>
-                                {sug.medicineNameFree != null && sug.medicineNameFree.trim() !== "" && (
-                                  <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}>
-                                    <Text style={styles.suggestedTreatmentLabel}>Medicine: </Text>
-                                    {sug.medicineNameFree}
-                                  </Text>
-                                )}
-                                {sug.dose != null && sug.dose.trim() !== "" && (
-                                  <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}>
-                                    <Text style={styles.suggestedTreatmentLabel}>Dose: </Text>
-                                    {sug.dose}
-                                  </Text>
-                                )}
-                                {sug.route != null && sug.route.trim() !== "" && (
-                                  <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}>
-                                    <Text style={styles.suggestedTreatmentLabel}>Route: </Text>
-                                    {sug.route}
-                                  </Text>
-                                )}
-                                {sug.frequency != null && sug.frequency.trim() !== "" && (
-                                  <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}>
-                                    <Text style={styles.suggestedTreatmentLabel}>Frequency: </Text>
-                                    {sug.frequency}
-                                  </Text>
-                                )}
-                                {sug.durationDays != null && (
-                                  <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}>
-                                    <Text style={styles.suggestedTreatmentLabel}>Duration: </Text>
-                                    {sug.durationDays} days
-                                  </Text>
-                                )}
-                                {sug.instructions != null && sug.instructions.trim() !== "" && (
-                                  <Text
-                                    style={[styles.suggestedTreatmentLine, styles.suggestedTreatmentInstructions, { color: colors.text }]}
-                                    numberOfLines={4}
-                                  >
-                                    <Text style={styles.suggestedTreatmentLabel}>Instructions: </Text>
-                                    {sug.instructions}
-                                  </Text>
-                                )}
+                            <View key={idx} style={[styles.suggestedTreatmentRow, { borderLeftColor: colors.accent }]}>
+                              <View style={styles.suggestedTreatmentRowContent}>
+                                <Text style={[styles.suggestedTreatmentType, { color: colors.primary }]}>{sug.treatmentType}</Text>
+                                {sug.medicineNameFree?.trim() && <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}><Text style={styles.bold}>Medicine: </Text>{sug.medicineNameFree}</Text>}
+                                {sug.dose?.trim() && <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}><Text style={styles.bold}>Dose: </Text>{sug.dose}</Text>}
+                                {sug.route?.trim() && <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}><Text style={styles.bold}>Route: </Text>{sug.route}</Text>}
+                                {sug.frequency?.trim() && <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}><Text style={styles.bold}>Frequency: </Text>{sug.frequency}</Text>}
+                                {sug.durationDays != null && <Text style={[styles.suggestedTreatmentLine, { color: colors.text }]}><Text style={styles.bold}>Duration: </Text>{sug.durationDays} days</Text>}
+                                {sug.instructions?.trim() && <Text style={[styles.suggestedTreatmentLine, styles.suggestedTreatmentInstructions, { color: colors.text }]} numberOfLines={3}><Text style={styles.bold}>Instructions: </Text>{sug.instructions}</Text>}
                               </View>
                               <TouchableOpacity
-                                onPress={() =>
-                                  handleConfirmTreatmentSuggestion(
-                                    diagnosis.diagnosisId,
-                                    sug,
-                                    idx,
-                                  )
-                                }
-                                disabled={
-                                  confirmingTreatmentKey !== null &&
-                                  confirmingTreatmentKey !== confirmKey
-                                }
-                                style={[
-                                  styles.suggestionIconBtn,
-                                  {
-                                    borderColor: colors.success,
-                                    backgroundColor: colors.surface,
-                                    opacity:
-                                      confirmingTreatmentKey !== null &&
-                                        confirmingTreatmentKey !== confirmKey
-                                        ? 0.5
-                                        : 1,
-                                  },
-                                ]}
+                                onPress={() => handleConfirmTreatmentSuggestion(diagnosis.diagnosisId, sug, idx)}
+                                disabled={confirmingTreatmentKey !== null && confirmingTreatmentKey !== confirmKey}
+                                style={[styles.iconBtn, { borderColor: colors.success, opacity: confirmingTreatmentKey !== null && confirmingTreatmentKey !== confirmKey ? 0.5 : 1 }]}
                                 activeOpacity={0.7}
                               >
-                                {isConfirming ? (
-                                  <ActivityIndicator
-                                    size="small"
-                                    color={colors.success}
-                                  />
-                                ) : (
-                                  <FontAwesome
-                                    name="check-circle"
-                                    size={ICON_ACTION}
-                                    color={colors.success}
-                                  />
-                                )}
+                                {isConfirming ? <ActivityIndicator size="small" color={colors.success} /> : <FontAwesome name="check-circle" size={ICON_ACTION} color={colors.success} />}
                               </TouchableOpacity>
                             </View>
                           );
@@ -874,256 +732,131 @@ export default function VisitDetailScreen() {
               })}
             </View>
           ) : (
-            <View style={styles.diagnosesEmptyState}>
+            <View style={styles.emptyState}>
               <FontAwesome name="clipboard" size={ICON_EMPTY} color={colors.muted} style={styles.emptyIcon} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No diagnoses yet
-              </Text>
-              <Text style={[styles.emptySubtext, { color: colors.muted }]}>
-                Add from suggestions above or tap Add Diagnosis
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>No diagnoses yet</Text>
+              <Text style={[styles.emptySubtext, { color: colors.muted }]}>Add from AI suggestions above or tap Add</Text>
             </View>
           )}
-        </Card>
+        </AccordionSection>
 
-        {/* Treatments Section */}
-        <Card style={styles.card}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <FontAwesome name="medkit" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Treatments
-              </Text>
-            </View>
-            <Button
-              title={
-                treatmentSuggestionsLoading ? "Suggesting…" : "Add Treatment"
-              }
+        {/* 4. Treatments */}
+        <AccordionSection
+          title="Treatments"
+          icon="medkit"
+          count={treatments.length}
+          expanded={expanded.treatments}
+          onToggle={() => toggleSection("treatments")}
+          colors={colors}
+          action={
+            <TouchableOpacity
               onPress={handleAddTreatment}
-              variant="secondary"
-              style={styles.addButton}
               disabled={treatmentSuggestionsLoading}
-              loading={treatmentSuggestionsLoading}
-            />
-          </View>
+              style={[styles.addChip, { backgroundColor: colors.primary, opacity: treatmentSuggestionsLoading ? 0.6 : 1 }]}
+              activeOpacity={0.8}
+            >
+              {treatmentSuggestionsLoading ? <ActivityIndicator size="small" color={colors.surface} /> : <FontAwesome name="plus" size={12} color={colors.surface} />}
+              <Text style={[styles.addChipText, { color: colors.surface }]}>{treatmentSuggestionsLoading ? "…" : "Add"}</Text>
+            </TouchableOpacity>
+          }
+        >
           {treatments.length > 0 ? (
             <View style={styles.listContainer}>
               {treatments.map((treatment) => {
-                // Find associated audio media file
-                const audioMedia = treatment.mediaId
-                  ? mediaFiles.find((m) => m.mediaId === treatment.mediaId)
-                  : null;
-
+                const audioMedia = treatment.mediaId ? mediaFiles.find((m) => m.mediaId === treatment.mediaId) : null;
                 return (
-                  <TreatmentItem
-                    key={treatment.treatmentId}
-                    treatment={treatment}
-                    audioMedia={audioMedia}
-                    colors={colors}
-                    getAudioUrl={getAudioUrl}
-                    onEdit={handleEditTreatment}
-                  />
+                  <TreatmentItem key={treatment.treatmentId} treatment={treatment} audioMedia={audioMedia} colors={colors} getAudioUrl={getAudioUrl} onEdit={handleEditTreatment} />
                 );
               })}
             </View>
           ) : (
             <View style={styles.emptyState}>
               <FontAwesome name="medkit" size={ICON_EMPTY} color={colors.muted} style={styles.emptyIcon} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No treatments added yet
-              </Text>
-              <Text style={[styles.emptySubtext, { color: colors.muted }]}>
-                Treatments are optional
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>No treatments yet</Text>
             </View>
           )}
-        </Card>
+        </AccordionSection>
 
-        {/* Notes Section */}
-        <Card style={styles.card}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <FontAwesome name="file-text-o" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Notes
-              </Text>
-            </View>
-            <Button
-              title="Add Note"
-              onPress={() => {
-                router.push(`/add-note?visitId=${visit?.visitId}`);
-              }}
-              variant="secondary"
-              style={styles.addButton}
-            />
-          </View>
+        {/* 5. Notes */}
+        <AccordionSection
+          title="Notes"
+          icon="file-text-o"
+          count={notes.length}
+          expanded={expanded.notes}
+          onToggle={() => toggleSection("notes")}
+          colors={colors}
+          action={
+            <TouchableOpacity
+              onPress={() => router.push(`/add-note?visitId=${visit?.visitId}`)}
+              style={[styles.addChip, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="plus" size={12} color={colors.surface} />
+              <Text style={[styles.addChipText, { color: colors.surface }]}>Add</Text>
+            </TouchableOpacity>
+          }
+        >
           {notes.length > 0 ? (
             <View style={styles.listContainer}>
               {notes.map((note) => {
-                // Find associated media file for voice transcripts
                 let audioMedia: MediaFile | null | undefined = null;
-
                 if (note.noteType === "VOICE_TRANSCRIPT") {
-                  // First try to find by mediaId (for new notes)
-                  if (note.mediaId) {
-                    audioMedia = mediaFiles.find(
-                      (m) => m.mediaId === note.mediaId,
-                    );
-                  }
-
-                  // Fallback: Find audio files for this visit that match the pattern
-                  // Voice recordings are stored as visits/{visitId}/audio/{timestamp}-{random}.m4a
+                  if (note.mediaId) audioMedia = mediaFiles.find((m) => m.mediaId === note.mediaId);
                   if (!audioMedia && visitId) {
-                    const audioFiles = mediaFiles.filter(
-                      (m) =>
-                        m.fileType === "AUDIO" &&
-                        m.visitId === visitId &&
-                        m.s3Key?.includes(`visits/${visitId}/audio/`),
-                    );
-                    // If there's only one audio file for this visit, use it
-                    // Otherwise, try to match by creation time (closest to note creation time)
+                    const audioFiles = mediaFiles.filter((m) => m.fileType === "AUDIO" && m.visitId === visitId && m.s3Key?.includes(`visits/${visitId}/audio/`));
                     if (audioFiles.length > 0) {
                       const noteCreatedAt = new Date(note.createdAt).getTime();
-                      audioMedia =
-                        audioFiles.reduce((closest, current) => {
-                          const currentTime = new Date(
-                            current.createdAt,
-                          ).getTime();
-                          const closestTime = new Date(
-                            closest.createdAt,
-                          ).getTime();
-                          const currentDiff = Math.abs(
-                            currentTime - noteCreatedAt,
-                          );
-                          const closestDiff = Math.abs(
-                            closestTime - noteCreatedAt,
-                          );
-                          return currentDiff < closestDiff ? current : closest;
-                        }) || audioFiles[0];
+                      audioMedia = audioFiles.reduce((closest, current) => {
+                        const currentDiff = Math.abs(new Date(current.createdAt).getTime() - noteCreatedAt);
+                        const closestDiff = Math.abs(new Date(closest.createdAt).getTime() - noteCreatedAt);
+                        return currentDiff < closestDiff ? current : closest;
+                      });
                     }
                   }
                 }
-
-                return (
-                  <NoteItem
-                    key={note.noteId}
-                    note={note}
-                    audioMedia={audioMedia}
-                    colors={colors}
-                    getAudioUrl={getAudioUrl}
-                  />
-                );
+                return <NoteItem key={note.noteId} note={note} audioMedia={audioMedia} colors={colors} getAudioUrl={getAudioUrl} />;
               })}
             </View>
           ) : (
             <View style={styles.emptyState}>
               <FontAwesome name="file-text-o" size={ICON_EMPTY} color={colors.muted} style={styles.emptyIcon} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No notes added yet
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>No notes yet</Text>
             </View>
           )}
-        </Card>
+        </AccordionSection>
 
-        {/* Media Section */}
-        <Card style={styles.card}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <FontAwesome name="image" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Media
-              </Text>
-            </View>
-            <Button
-              title="Upload Media"
-              onPress={() => {
-                router.push(`/add-media?visitId=${visit?.visitId}`);
-              }}
-              variant="secondary"
-              style={styles.addButton}
-            />
-          </View>
+        {/* 6. Media */}
+        <AccordionSection
+          title="Media"
+          icon="image"
+          count={mediaFiles.length}
+          expanded={expanded.media}
+          onToggle={() => toggleSection("media")}
+          colors={colors}
+          action={
+            <TouchableOpacity
+              onPress={() => router.push(`/add-media?visitId=${visit?.visitId}`)}
+              style={[styles.addChip, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="plus" size={12} color={colors.surface} />
+              <Text style={[styles.addChipText, { color: colors.surface }]}>Upload</Text>
+            </TouchableOpacity>
+          }
+        >
           {mediaFiles.length > 0 ? (
             <View style={styles.mediaContainer}>
-              {mediaFiles.map((media) => {
-                // Determine image URI - prefer url (which may be local file:// URI), fallback to s3Key-based URL
-                const imageUri =
-                  media.fileType === "IMAGE" && media.url
-                    ? media.url
-                    : media.fileType === "IMAGE" && media.s3Key
-                      ? `https://your-s3-bucket.s3.amazonaws.com/${media.s3Key}` // TODO: Replace with actual S3 bucket URL
-                      : null;
-
-                return (
-                  <View key={media.mediaId} style={styles.mediaItem}>
-                    {media.fileType === "IMAGE" && imageUri ? (
-                      <View
-                        style={[
-                          styles.imageWrapper,
-                          { backgroundColor: colors.border },
-                        ]}
-                      >
-                        <Image
-                          source={{ uri: imageUri }}
-                          style={styles.mediaImage}
-                          resizeMode="cover"
-                          onError={(error) => {
-                            console.warn(
-                              "Failed to load image:",
-                              imageUri,
-                              error,
-                            );
-                          }}
-                        />
-                        <View
-                          style={[
-                            styles.imageOverlay,
-                            { backgroundColor: colors.overlay },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.imageLabel,
-                              { color: colors.surface },
-                            ]}
-                          >
-                            IMAGE
-                          </Text>
-                        </View>
-                      </View>
-                    ) : (
-                      <View
-                        style={[
-                          styles.mediaPlaceholder,
-                          { backgroundColor: colors.border },
-                        ]}
-                      >
-                        <Text
-                          style={[styles.mediaType, { color: colors.text }]}
-                        >
-                          {media.fileType}
-                        </Text>
-                      </View>
-                    )}
-                    <Text style={[styles.mediaDate, { color: colors.muted }]}>
-                      {new Date(media.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </Text>
-                  </View>
-                );
-              })}
+              {mediaFiles.map((media) => (
+                <MediaThumbnail key={media.mediaId} media={media} colors={colors} getBucketName={getBucketName} getDownloadSignedUrl={getDownloadSignedUrl} />
+              ))}
             </View>
           ) : (
             <View style={styles.emptyState}>
               <FontAwesome name="image" size={ICON_EMPTY} color={colors.muted} style={styles.emptyIcon} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No media uploaded yet
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>No media yet</Text>
             </View>
           )}
-        </Card>
+        </AccordionSection>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1153,14 +886,28 @@ const styles = StyleSheet.create({
   backButton: {
     marginTop: 16,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 24,
-    letterSpacing: 0.3,
+  header: {
+    marginBottom: 20,
   },
-  card: {
-    marginBottom: 18,
+  headerDate: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  headerComplaint: {
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 24,
+    marginBottom: 4,
+  },
+  headerAnimal: {
+    fontSize: 14,
+  },
+  accordionCard: {
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    overflow: "hidden",
   },
   accordionHeader: {
     flexDirection: "row",
@@ -1175,9 +922,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   accordionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
     marginBottom: 0,
+  },
+  accordionRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 22,
+    alignItems: "center",
+  },
+  countBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  addChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addChipText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   accordionBody: {
     marginTop: 4,
@@ -1319,11 +1095,91 @@ const styles = StyleSheet.create({
     flex: 2,
     textAlign: "right",
   },
-  actionButton: {
+  linkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  linkButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  iconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aiBlock: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  aiCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  aiCtaText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  aiLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  aiLoadingText: {
+    fontSize: 14,
+  },
+  aiLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  aiEmptyText: {
+    fontSize: 14,
+  },
+  suggestionRow: {
+    padding: 10,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+  },
+  suggestionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  suggestionRowFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   emptyState: {
-    paddingVertical: 28,
+    paddingVertical: 24,
     paddingHorizontal: 16,
     alignItems: "center",
   },
