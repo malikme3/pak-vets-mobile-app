@@ -588,6 +588,14 @@ export default function CaseDetailScreen() {
                 <Text style={[styles.value, { color: colors.text }]}>{animal.ownerPhone}</Text>
               </View>
             )}
+            {animal.aiSummary && (
+              <View style={[styles.aiSummaryBlock, { borderTopColor: colors.border }]}>
+                <Text style={[styles.label, { color: colors.muted }]}>AI Summary</Text>
+                <Text style={[styles.aiSummaryText, { color: colors.text }]} selectable>
+                  {animal.aiSummary}
+                </Text>
+              </View>
+            )}
             <TouchableOpacity
               onPress={() => router.push(`/animal-details?animalId=${animal.animalId}`)}
               style={[styles.linkButton, { borderColor: colors.primary }]}
@@ -1108,6 +1116,16 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     flex: 2,
     textAlign: "right",
+  },
+  aiSummaryBlock: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  aiSummaryText: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 8,
   },
   linkButton: {
     flexDirection: "row",

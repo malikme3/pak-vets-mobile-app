@@ -163,6 +163,24 @@ export default function AnimalDetailsScreen() {
               </Text>
             </View>
           )}
+          {animal.aiSummary && (
+            <View
+              style={[
+                styles.aiSummarySection,
+                { borderTopColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.label, { color: colors.muted }]}>
+                AI Summary:
+              </Text>
+              <Text
+                style={[styles.aiSummaryText, { color: colors.text }]}
+                selectable
+              >
+                {animal.aiSummary}
+              </Text>
+            </View>
+          )}
         </Card>
 
         {/* Animal Photos */}
@@ -307,6 +325,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     fontWeight: "500",
+  },
+  aiSummarySection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  aiSummaryText: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 8,
   },
   createCaseButton: {
     marginBottom: 24,
