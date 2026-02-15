@@ -61,6 +61,7 @@ export default function VisitDetailScreen() {
     DiagnosisSuggestion[]
   >([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsRequestedByUser, setSuggestionsRequestedByUser] = useState(false);
   const { data: visit, isLoading: visitLoading } = useVisit(visitId || 0);
   const { data: animal, isLoading: animalLoading } = useAnimal(
     visit?.animalId || 0,
@@ -88,10 +89,10 @@ export default function VisitDetailScreen() {
     refetch: refetchMedia,
   } = useMediaFilesByVisit(visitId || 0);
 
-  // Fetch AI-suggested diagnoses when visit has chief complaint
+  // Fetch AI-suggested diagnoses only after user taps "Suggested diagnoses"
   useEffect(() => {
-    if (!visit?.chiefComplaint?.trim()) {
-      setSuggestedDiagnoses([]);
+    if (!suggestionsRequestedByUser || !visit?.chiefComplaint?.trim()) {
+      if (!suggestionsRequestedByUser) setSuggestedDiagnoses([]);
       return;
     }
     let cancelled = false;
@@ -110,7 +111,7 @@ export default function VisitDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [visit?.visitId, visit?.chiefComplaint]);
+  }, [suggestionsRequestedByUser, visit?.visitId, visit?.chiefComplaint]);
 
   // Refetch diagnoses, treatments, notes, and media when screen comes into focus (e.g., after adding)
   useFocusEffect(
@@ -455,7 +456,7 @@ export default function VisitDetailScreen() {
             />
           </TouchableOpacity>
           {visitInfoExpanded && (
-            <View style={styles.accordionBody}>
+            <View style={[styles.accordionBody, { borderTopColor: colors.border }]}>
               <View style={styles.infoRow}>
                 <Text style={[styles.label, { color: colors.muted }]}>
                   Date & Time
@@ -499,7 +500,7 @@ export default function VisitDetailScreen() {
               />
             </TouchableOpacity>
             {animalInfoExpanded && (
-              <View style={styles.accordionBody}>
+              <View style={[styles.accordionBody, { borderTopColor: colors.border }]}>
                 <View style={styles.infoRow}>
                   <Text style={[styles.label, { color: colors.muted }]}>
                     Species
@@ -561,90 +562,98 @@ export default function VisitDetailScreen() {
           </Card>
         )}
 
-        {/* Suggested diagnoses (from chief complaint) */}
+        {/* Suggested diagnoses (from chief complaint) – fetch only after user taps */}
         {visit.chiefComplaint?.trim() && (
           <Card style={styles.card}>
-            <View style={[styles.sectionTitleRow, styles.sectionTitleRowStandalone]}>
-              <FontAwesome name="lightbulb-o" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Suggested diagnoses
-              </Text>
-            </View>
-            {suggestionsLoading ? (
-              <View style={styles.suggestionsLoading}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.suggestionsLoadingText, { color: colors.muted }]}>
-                  AI suggesting based on chief complaint…
-                </Text>
-              </View>
-            ) : suggestedDiagnoses.length > 0 ? (
-              <View style={styles.listContainer}>
-                {suggestedDiagnoses.map((s, index) => (
-                  <View
-                    key={`${s.diagnosis_text}-${index}`}
-                    style={[
-                      styles.suggestionRow,
-                      { borderLeftColor: colors.primary },
-                    ]}
-                  >
-                    <View style={styles.suggestionRowContent}>
-                      <Text
-                        style={[styles.diagnosisText, { color: colors.text }]}
-                        numberOfLines={3}
-                      >
-                        {s.diagnosis_text}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.diagnosisStatus,
-                          {
-                            color:
-                              s.status === "CONFIRMED"
-                                ? colors.success
-                                : colors.warning,
-                          },
-                        ]}
-                      >
-                        {s.status}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => handleConfirmSuggestion(s, index)}
-                      disabled={
-                        confirmingSuggestionIndex !== null &&
-                        confirmingSuggestionIndex !== index
-                      }
-                      style={[
-                        styles.suggestionYesButton,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.success,
-                          opacity:
-                            confirmingSuggestionIndex !== null &&
-                              confirmingSuggestionIndex !== index
-                              ? 0.5
-                              : 1,
-                        },
-                      ]}
-                      activeOpacity={0.7}
-                    >
-                      {confirmingSuggestionIndex === index ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.success}
-                        />
-                      ) : (
-                        <FontAwesome
-                          name="check-circle"
-                          size={ICON_ACTION}
-                          color={colors.success}
-                        />
-                      )}
-                    </TouchableOpacity>
+            {!suggestionsRequestedByUser ? (
+              <TouchableOpacity
+                style={[styles.suggestionsCtaCard, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}
+                onPress={() => setSuggestionsRequestedByUser(true)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.suggestionsCtaContent}>
+                  <View style={[styles.suggestionsCtaIconWrap, { backgroundColor: colors.primary }]}>
+                    <FontAwesome name="lightbulb-o" size={22} color={colors.surface} />
                   </View>
-                ))}
-              </View>
-            ) : null}
+                  <View style={styles.suggestionsCtaTextWrap}>
+                    <Text style={[styles.suggestionsCtaTitle, { color: colors.text }]}>
+                      Suggested diagnoses
+                    </Text>
+                    <Text style={[styles.suggestionsCtaSubtitle, { color: colors.muted }]}>
+                      Tap to get AI suggestions from chief complaint
+                    </Text>
+                  </View>
+                  <FontAwesome name="chevron-right" size={ICON_CHEVRON} color={colors.muted} />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <View style={[styles.suggestionsSectionHeader, { borderBottomColor: colors.border }]}>
+                  <View style={styles.sectionTitleRow}>
+                    <FontAwesome name="lightbulb-o" size={ICON_SECTION} color={colors.primary} style={styles.sectionIcon} />
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                      Suggested diagnoses
+                    </Text>
+                  </View>
+                </View>
+                {suggestionsLoading ? (
+                  <View style={[styles.suggestionsLoading, { backgroundColor: colors.surface }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.suggestionsLoadingText, { color: colors.muted }]}>
+                      AI suggesting based on chief complaint…
+                    </Text>
+                  </View>
+                ) : suggestedDiagnoses.length > 0 ? (
+                  <View style={styles.suggestionsList}>
+                    {suggestedDiagnoses.map((s, index) => (
+                      <View
+                        key={`${s.diagnosis_text}-${index}`}
+                        style={[styles.suggestionCard, { backgroundColor: colors.surface, borderColor: colors.border, borderLeftColor: colors.primary }]}
+                      >
+                        <View style={styles.suggestionCardContent}>
+                          <Text style={[styles.suggestionCardText, { color: colors.text }]} numberOfLines={4}>
+                            {s.diagnosis_text}
+                          </Text>
+                          <View style={styles.suggestionCardFooter}>
+                            <View style={[styles.suggestionCardBadge, { backgroundColor: s.status === "CONFIRMED" ? colors.success : colors.warning }]}>
+                              <Text style={[styles.suggestionCardBadgeText, { color: colors.surface }]}>{s.status}</Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => handleConfirmSuggestion(s, index)}
+                              disabled={confirmingSuggestionIndex !== null && confirmingSuggestionIndex !== index}
+                              style={[styles.suggestionAddBtn, { borderColor: colors.success, opacity: confirmingSuggestionIndex !== null && confirmingSuggestionIndex !== index ? 0.5 : 1 }]}
+                              activeOpacity={0.7}
+                            >
+                              {confirmingSuggestionIndex === index ? (
+                                <ActivityIndicator size="small" color={colors.success} />
+                              ) : (
+                                <>
+                                  <FontAwesome name="plus-circle" size={14} color={colors.success} style={{ marginRight: 6 }} />
+                                  <Text style={[styles.suggestionAddBtnText, { color: colors.success }]}>Add</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.suggestionsEmptyRequested}>
+                    <FontAwesome name="info-circle" size={ICON_EMPTY} color={colors.muted} style={styles.emptyIcon} />
+                    <Text style={[styles.suggestionsEmptyText, { color: colors.muted }]}>
+                      No AI suggestions found for this chief complaint
+                    </Text>
+                    <Button
+                      title="Add Diagnosis"
+                      onPress={() => router.push(`/add-diagnosis?visitId=${visit?.visitId}`)}
+                      variant="secondary"
+                      style={styles.addButtonStandalone}
+                    />
+                  </View>
+                )}
+              </>
+            )}
           </Card>
         )}
 
@@ -1128,7 +1137,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: 20,
+    paddingBottom: 32,
   },
   errorContainer: {
     flex: 1,
@@ -1144,19 +1154,21 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 20,
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 24,
+    letterSpacing: 0.3,
   },
   card: {
-    marginBottom: 14,
+    marginBottom: 18,
   },
   accordionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 0,
-    minHeight: 44,
+    minHeight: 48,
+    paddingVertical: 4,
   },
   accordionTitleRow: {
     flexDirection: "row",
@@ -1168,7 +1180,9 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   accordionBody: {
-    marginTop: 12,
+    marginTop: 4,
+    paddingTop: 16,
+    borderTopWidth: 1,
   },
   sectionTitleRow: {
     flexDirection: "row",
@@ -1184,6 +1198,101 @@ const styles = StyleSheet.create({
   sectionTitleRowStandalone: {
     marginBottom: 12,
   },
+  suggestionsCtaCard: {
+    borderLeftWidth: 4,
+    borderRadius: 12,
+    padding: 18,
+    overflow: "hidden",
+    minHeight: 72,
+    justifyContent: "center",
+  },
+  suggestionsCtaContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  suggestionsCtaIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+  suggestionsCtaTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  suggestionsCtaTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  suggestionsCtaSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  suggestionsSectionHeader: {
+    paddingBottom: 12,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+  },
+  suggestionsList: {
+    gap: 10,
+  },
+  suggestionCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    padding: 14,
+    overflow: "hidden",
+  },
+  suggestionCardContent: {
+    minWidth: 0,
+  },
+  suggestionCardText: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  suggestionCardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  suggestionCardBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  suggestionCardBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  suggestionAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1.5,
+  },
+  suggestionAddBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  addButtonStandalone: {
+    alignSelf: "flex-start",
+  },
+  suggestionsEmptyRequested: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  suggestionsEmptyText: {
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: "center",
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1198,7 +1307,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 14,
   },
   label: {
     fontSize: 13,
@@ -1214,21 +1323,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   emptyState: {
-    paddingVertical: 24,
+    paddingVertical: 28,
+    paddingHorizontal: 16,
     alignItems: "center",
   },
   emptyIcon: {
-    marginBottom: 10,
-    opacity: 0.6,
+    marginBottom: 12,
+    opacity: 0.7,
   },
   emptyText: {
-    fontSize: 15,
-    fontWeight: "500",
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 6,
   },
   emptySubtext: {
-    fontSize: 13,
+    fontSize: 14,
     textAlign: "center",
+    lineHeight: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -1241,34 +1352,13 @@ const styles = StyleSheet.create({
   suggestionsLoading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
+    gap: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: 10,
   },
   suggestionsLoadingText: {
-    fontSize: 13,
-  },
-  suggestionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginBottom: 6,
-    borderLeftWidth: 3,
-    backgroundColor: "transparent",
-  },
-  suggestionRowContent: {
-    flex: 1,
-    marginRight: 10,
-    minWidth: 0,
-  },
-  suggestionYesButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
+    fontSize: 14,
   },
   suggestionIconBtn: {
     width: 32,
@@ -1288,10 +1378,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   diagnosisBlock: {
-    marginBottom: 8,
-    borderRadius: 10,
+    marginBottom: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 12,
+    padding: 14,
   },
   diagnosisBlockRow: {
     flexDirection: "row",
