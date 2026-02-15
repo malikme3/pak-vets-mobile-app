@@ -9,6 +9,7 @@ import type {
 export const animalKeys = {
   all: ["animal"] as const,
   detail: (id: number) => [...animalKeys.all, id] as const,
+  images: (id: number) => [...animalKeys.all, id, "images"] as const,
   list: (filters?: { species?: string }) =>
     [...animalKeys.all, "list", filters] as const,
   search: (query: string) => [...animalKeys.all, "search", query] as const,
@@ -18,6 +19,14 @@ export function useAnimal(animalId: number) {
   return useQuery({
     queryKey: animalKeys.detail(animalId),
     queryFn: () => animalApi.getAnimal(animalId),
+    enabled: animalId > 0,
+  });
+}
+
+export function useAnimalImages(animalId: number) {
+  return useQuery({
+    queryKey: animalKeys.images(animalId),
+    queryFn: () => animalApi.getAnimalImages(animalId),
     enabled: animalId > 0,
   });
 }

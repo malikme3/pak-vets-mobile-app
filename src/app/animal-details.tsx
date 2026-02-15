@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import {
   View,
   Text,
@@ -5,15 +6,17 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
-import { useAnimal } from "../features/animals/hooks";
+import { useAnimal, useAnimalImages } from "../features/animals/hooks";
 import { useVisitsByAnimal } from "../features/visits/hooks";
 import type { Visit } from "../types/api";
 
@@ -24,8 +27,21 @@ export default function AnimalDetailsScreen() {
 
   const animalId = params.animalId ? Number(params.animalId) : undefined;
   const { data: animal, isLoading: animalLoading } = useAnimal(animalId || 0);
+  const {
+    data: animalImages = [],
+    isLoading: animalImagesLoading,
+    refetch: refetchAnimalImages,
+  } = useAnimalImages(animalId || 0);
   const { data: visits = [], isLoading: visitsLoading } = useVisitsByAnimal(
     animalId || 0,
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (animalId) {
+        refetchAnimalImages();
+      }
+    }, [animalId, refetchAnimalImages]),
   );
 
   const formatDate = (dateString: string): string => {
@@ -149,6 +165,71 @@ export default function AnimalDetailsScreen() {
           )}
         </Card>
 
+        {/* Animal Photos */}
+        <Card style={styles.animalCard}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Animal Photos
+          </Text>
+          {animalImagesLoading ? (
+            <View style={styles.animalPhotosLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : animalImages.length > 0 ? (
+            <View style={styles.animalPhotosGrid}>
+              {(["FACE", "EAR", "BODY"] as const).map((imageType) => {
+                const img = animalImages.find(
+                  (i) => i.imageType === imageType,
+                );
+                return (
+                  <View
+                    key={imageType}
+                    style={[
+                      styles.animalPhotoItem,
+                      { backgroundColor: colors.border },
+                    ]}
+                  >
+                    {img?.s3Url ? (
+                      <Image
+                        source={{ uri: img.s3Url }}
+                        style={styles.animalPhotoImage}
+                        resizeMode="cover"
+                        onError={() => {}}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.animalPhotoPlaceholder,
+                          { backgroundColor: colors.surface },
+                        ]}
+                      >
+                        <FontAwesome
+                          name="image"
+                          size={24}
+                          color={colors.muted}
+                        />
+                      </View>
+                    )}
+                    <Text
+                      style={[
+                        styles.animalPhotoLabel,
+                        { color: colors.muted },
+                      ]}
+                    >
+                      {imageType}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.animalPhotosEmpty}>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>
+                No reference photos for this animal
+              </Text>
+            </View>
+          )}
+        </Card>
+
         {/* Create Visit Button */}
         <Button
           title="Create Visit"
@@ -202,6 +283,10 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
+  title: {
+    fontSize: 20,
+    fontWeight: "600",
+  },
   animalCard: {
     marginBottom: 16,
   },
@@ -246,6 +331,44 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "center",
+  },
+  animalPhotosLoading: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  animalPhotosGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 8,
+  },
+  animalPhotoItem: {
+    width: "31%",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  animalPhotoImage: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 8,
+  },
+  animalPhotoPlaceholder: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  animalPhotoLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    textAlign: "center",
+    paddingVertical: 6,
+  },
+  animalPhotosEmpty: {
+    paddingVertical: 24,
     alignItems: "center",
   },
 });

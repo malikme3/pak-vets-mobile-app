@@ -42,6 +42,8 @@ export default function VisitDetailScreen() {
   const { colors } = useTheme();
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const [visitInfoExpanded, setVisitInfoExpanded] = useState(false);
+  const [animalInfoExpanded, setAnimalInfoExpanded] = useState(false);
   const { data: visit, isLoading: visitLoading } = useVisit(visitId || 0);
   const { data: animal, isLoading: animalLoading } = useAnimal(
     visit?.animalId || 0,
@@ -104,6 +106,14 @@ export default function VisitDetailScreen() {
       minute: "2-digit",
     });
   };
+
+  // ScrollView-safe press (guideline: avoid onPress cancel inside ScrollView)
+  const handleToggleVisitInfo = useCallback(() => {
+    setTimeout(() => setVisitInfoExpanded((v) => !v), 50);
+  }, []);
+  const handleToggleAnimalInfo = useCallback(() => {
+    setTimeout(() => setAnimalInfoExpanded((v) => !v), 50);
+  }, []);
 
   // Helper to get audio URL from media file
   const getAudioUrl = async (media: MediaFile): Promise<string | null> => {
@@ -170,93 +180,123 @@ export default function VisitDetailScreen() {
           Visit Details
         </Text>
 
-        {/* Visit Information */}
+        {/* Visit Information (accordion) */}
         <Card style={styles.card}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Visit Information
-          </Text>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.muted }]}>
-              Date & Time
+          <TouchableOpacity
+            style={styles.accordionHeader}
+            onPress={handleToggleVisitInfo}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.accordionTitle, { color: colors.text }]}>
+              Visit Information
             </Text>
-            <Text style={[styles.value, { color: colors.text }]}>
-              {formatDate(visit.visitDatetime)}
-            </Text>
-          </View>
-          {visit.chiefComplaint && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Chief Complaint
-              </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
-                {visit.chiefComplaint}
-              </Text>
+            <FontAwesome
+              name={visitInfoExpanded ? "chevron-up" : "chevron-down"}
+              size={16}
+              color={colors.muted}
+            />
+          </TouchableOpacity>
+          {visitInfoExpanded && (
+            <View style={styles.accordionBody}>
+              <View style={styles.infoRow}>
+                <Text style={[styles.label, { color: colors.muted }]}>
+                  Date & Time
+                </Text>
+                <Text style={[styles.value, { color: colors.text }]}>
+                  {formatDate(visit.visitDatetime)}
+                </Text>
+              </View>
+              {visit.chiefComplaint && (
+                <View style={styles.infoRow}>
+                  <Text style={[styles.label, { color: colors.muted }]}>
+                    Chief Complaint
+                  </Text>
+                  <Text style={[styles.value, { color: colors.text }]}>
+                    {visit.chiefComplaint}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </Card>
 
-        {/* Animal Information */}
+        {/* Animal Information (accordion) */}
         {animal && (
           <Card style={styles.card}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Animal Information
-            </Text>
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Species
+            <TouchableOpacity
+              style={styles.accordionHeader}
+              onPress={handleToggleAnimalInfo}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.accordionTitle, { color: colors.text }]}>
+                Animal Information
               </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
-                {animal.species}
-              </Text>
-            </View>
-            {animal.breed && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Breed
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.breed}
-                </Text>
+              <FontAwesome
+                name={animalInfoExpanded ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={colors.muted}
+              />
+            </TouchableOpacity>
+            {animalInfoExpanded && (
+              <View style={styles.accordionBody}>
+                <View style={styles.infoRow}>
+                  <Text style={[styles.label, { color: colors.muted }]}>
+                    Species
+                  </Text>
+                  <Text style={[styles.value, { color: colors.text }]}>
+                    {animal.species}
+                  </Text>
+                </View>
+                {animal.breed && (
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      Breed
+                    </Text>
+                    <Text style={[styles.value, { color: colors.text }]}>
+                      {animal.breed}
+                    </Text>
+                  </View>
+                )}
+                {animal.tagId && (
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      Tag ID
+                    </Text>
+                    <Text style={[styles.value, { color: colors.text }]}>
+                      {animal.tagId}
+                    </Text>
+                  </View>
+                )}
+                {animal.ownerName && (
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      Owner
+                    </Text>
+                    <Text style={[styles.value, { color: colors.text }]}>
+                      {animal.ownerName}
+                    </Text>
+                  </View>
+                )}
+                {animal.ownerPhone && (
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.label, { color: colors.muted }]}>
+                      Owner Phone
+                    </Text>
+                    <Text style={[styles.value, { color: colors.text }]}>
+                      {animal.ownerPhone}
+                    </Text>
+                  </View>
+                )}
+                <Button
+                  title="View Animal Profile"
+                  onPress={() =>
+                    router.push(`/animal-details?animalId=${animal.animalId}`)
+                  }
+                  variant="secondary"
+                  style={styles.actionButton}
+                />
               </View>
             )}
-            {animal.tagId && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Tag ID
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.tagId}
-                </Text>
-              </View>
-            )}
-            {animal.ownerName && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Owner
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.ownerName}
-                </Text>
-              </View>
-            )}
-            {animal.ownerPhone && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Owner Phone
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.ownerPhone}
-                </Text>
-              </View>
-            )}
-            <Button
-              title="View Animal Profile"
-              onPress={() =>
-                router.push(`/animal-details?animalId=${animal.animalId}`)
-              }
-              variant="secondary"
-              style={styles.actionButton}
-            />
           </Card>
         )}
 
@@ -511,7 +551,12 @@ export default function VisitDetailScreen() {
                             console.log("Image loaded successfully:", imageUri);
                           }}
                         />
-                        <View style={styles.imageOverlay}>
+                        <View
+                          style={[
+                            styles.imageOverlay,
+                            { backgroundColor: colors.overlay },
+                          ]}
+                        >
                           <Text
                             style={[
                               styles.imageLabel,
@@ -594,6 +639,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     marginBottom: 16,
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 0,
+    minHeight: 44,
+  },
+  accordionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 0,
+  },
+  accordionBody: {
+    marginTop: 12,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -722,60 +782,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   audioPlayerCard: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
     marginTop: 4,
     borderWidth: 1,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   audioPlayerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
   playButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  playIcon: {
-    marginLeft: 2, // Slight offset for play icon to center it visually
-  },
-  audioInfo: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  audioInfoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  audioLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  audioDuration: {
-    fontSize: 11,
-  },
-  stopButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -784,11 +810,37 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  playIcon: {
+    marginLeft: 1, // Slight offset for play icon to center it visually
+  },
+  audioInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  audioInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  audioLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  audioDuration: {
+    fontSize: 11,
+  },
+  stopButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
   audioControls: {
     flexDirection: "row",
@@ -838,7 +890,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 8,
     right: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -1005,7 +1056,7 @@ function DiagnosisItem({
               ) : (
                 <FontAwesome
                   name={isPlaying ? "pause" : "play"}
-                  size={16}
+                  size={14}
                   color="#fff"
                   style={styles.playIcon}
                 />
@@ -1016,7 +1067,7 @@ function DiagnosisItem({
               <View style={styles.audioInfoRow}>
                 <FontAwesome
                   name="microphone"
-                  size={12}
+                  size={10}
                   color={colors.primary}
                 />
                 <Text
@@ -1045,7 +1096,7 @@ function DiagnosisItem({
                 onPress={handleStop}
                 activeOpacity={0.7}
               >
-                <FontAwesome name="stop" size={12} color="#fff" />
+                <FontAwesome name="stop" size={10} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
@@ -1229,7 +1280,7 @@ function TreatmentItem({
               ) : (
                 <FontAwesome
                   name={isPlaying ? "pause" : "play"}
-                  size={16}
+                  size={14}
                   color="#fff"
                   style={styles.playIcon}
                 />
@@ -1240,7 +1291,7 @@ function TreatmentItem({
               <View style={styles.audioInfoRow}>
                 <FontAwesome
                   name="microphone"
-                  size={12}
+                  size={10}
                   color={colors.primary}
                 />
                 <Text
@@ -1269,7 +1320,7 @@ function TreatmentItem({
                 onPress={handleStop}
                 activeOpacity={0.7}
               >
-                <FontAwesome name="stop" size={12} color="#fff" />
+                <FontAwesome name="stop" size={10} color="#fff" />
               </TouchableOpacity>
             )}
           </View>
@@ -1387,16 +1438,14 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
         <View style={styles.noteHeaderLeft}>
           <FontAwesome
             name={
-              note.noteType === "VOICE_TRANSCRIPT" ? "microphone" : "file-text"
+              "file-text"
             }
             size={14}
             color={colors.primary}
             style={styles.noteIcon}
           />
           <Text style={[styles.noteType, { color: colors.primary }]}>
-            {note.noteType === "VOICE_TRANSCRIPT"
-              ? "Voice Transcript"
-              : "Text Note"}
+            Notes
           </Text>
         </View>
         <Text style={[styles.noteDate, { color: colors.muted }]}>
@@ -1439,7 +1488,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
               ) : (
                 <FontAwesome
                   name={isPlaying ? "pause" : "play"}
-                  size={16}
+                  size={14}
                   color="#fff"
                   style={styles.playIcon}
                 />
@@ -1451,7 +1500,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
               <View style={styles.audioInfoRow}>
                 <FontAwesome
                   name="microphone"
-                  size={12}
+                  size={10}
                   color={colors.primary}
                 />
                 <Text
@@ -1481,7 +1530,7 @@ function NoteItem({ note, audioMedia, colors, getAudioUrl }: NoteItemProps) {
                 onPress={handleStop}
                 activeOpacity={0.7}
               >
-                <FontAwesome name="stop" size={12} color="#fff" />
+                <FontAwesome name="stop" size={10} color="#fff" />
               </TouchableOpacity>
             )}
           </View>

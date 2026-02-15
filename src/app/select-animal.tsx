@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Image,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -19,7 +21,7 @@ import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
-import { useSearchAnimals, useAnimals } from "../features/animals/hooks";
+import { useSearchAnimals, useAnimals, useAnimalImages } from "../features/animals/hooks";
 import { animalApi } from "../services/vetApi";
 import { getUploadSignedUrl, getBucketName } from "../services/sharedServicesApi";
 import type { Animal, MatchAnimalImageResponse } from "../types/api";
@@ -44,36 +46,49 @@ export default function SelectAnimalScreen() {
   const { data: searchResults, isLoading: searchLoading } =
     useSearchAnimals(searchQuery);
   const { data: allAnimals, isLoading: animalsLoading } = useAnimals();
+  const { data: matchedAnimalImages = [] } = useAnimalImages(
+    matchedAnimal?.animalId ?? 0,
+  );
+  const matchedFaceUrl = matchedAnimalImages.find(
+    (i) => i.imageType === "FACE",
+  )?.s3Url ?? null;
 
   // Filter results based on selected filter type
   const results = searchQuery.trim()
     ? (searchResults || []).filter((animal) => {
-        const query = searchQuery.toLowerCase();
-        switch (filter) {
-          case "tag":
-            return animal.tagId?.toLowerCase().includes(query);
-          case "owner_name":
-            return animal.ownerName?.toLowerCase().includes(query);
-          case "owner_phone":
-            return animal.ownerPhone?.includes(searchQuery);
-          default:
-            return false;
-        }
-      })
+      const query = searchQuery.toLowerCase();
+      switch (filter) {
+        case "tag":
+          return animal.tagId?.toLowerCase().includes(query);
+        case "owner_name":
+          return animal.ownerName?.toLowerCase().includes(query);
+        case "owner_phone":
+          return animal.ownerPhone?.includes(searchQuery);
+        default:
+          return false;
+      }
+    })
     : [];
 
   const isLoading = searchLoading || animalsLoading;
 
-  const handleAnimalSelect = (animal: Animal) => {
-    if (!returnTo || typeof returnTo !== "string") {
-      console.error("Invalid returnTo path:", returnTo);
-      return;
-    }
-    router.push({
-      pathname: returnTo as `/${string}`,
-      params: { animalId: String(animal.animalId) },
-    });
-  };
+  const handleAnimalSelect = useCallback(
+    (animal: Animal) => {
+      if (!returnTo || typeof returnTo !== "string") {
+        console.error("Invalid returnTo path:", returnTo);
+        return;
+      }
+      setTimeout(
+        () =>
+          router.push({
+            pathname: returnTo as `/${string}`,
+            params: { animalId: String(animal.animalId) },
+          }),
+        50,
+      );
+    },
+    [router, returnTo],
+  );
 
   const handleCreateAnimal = () => {
     router.push({
@@ -216,8 +231,14 @@ export default function SelectAnimalScreen() {
             }}
           />
           <Button
-            title={matching ? "Matching…" : "Choose photo"}
-            onPress={handleFindByImage}
+            title={
+              matching
+                ? "Matching…"
+                : matchResult
+                  ? "Try another photo"
+                  : "Choose photo"
+            }
+            onPress={matchResult ? clearMatchResult : handleFindByImage}
             disabled={matching}
             variant="secondary"
             style={styles.findByImageButton}
@@ -237,24 +258,39 @@ export default function SelectAnimalScreen() {
                   <Text style={[styles.matchStatusText, { color: colors.primary }]}>
                     Match found ({(matchResult.bestScore * 100).toFixed(0)}% match)
                   </Text>
-                  <ListRow
-                    title={formatAnimalTitle(matchedAnimal)}
-                    subtitle={formatAnimalSubtitle(matchedAnimal)}
+                  <TouchableOpacity
+                    style={styles.matchRow}
                     onPress={() => handleAnimalSelect(matchedAnimal)}
-                  />
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.matchAvatar, { backgroundColor: colors.border }]}>
+                      {matchedFaceUrl ? (
+                        <Image
+                          source={{ uri: matchedFaceUrl }}
+                          style={styles.matchAvatarImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text style={[styles.matchAvatarPlaceholder, { color: colors.muted }]}>
+                          ?
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.matchRowContent}>
+                      <Text style={[styles.matchRowTitle, { color: colors.text }]} numberOfLines={1}>
+                        {formatAnimalTitle(matchedAnimal)}
+                      </Text>
+                      <Text style={[styles.matchRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
+                        {formatAnimalSubtitle(matchedAnimal)}
+                      </Text>
+                    </View>
+                    <Text style={[styles.matchRowChevron, { color: colors.muted }]}>›</Text>
+                  </TouchableOpacity>
                 </>
               ) : (
-                <>
-                  <Text style={[styles.matchStatusText, { color: colors.muted }]}>
-                    No match found
-                  </Text>
-                  <Button
-                    title="Try another photo"
-                    onPress={clearMatchResult}
-                    variant="secondary"
-                    style={styles.tryAgainButton}
-                  />
-                </>
+                <Text style={[styles.matchStatusText, { color: colors.muted }]}>
+                  No match found
+                </Text>
               )}
             </View>
           )}
@@ -424,7 +460,43 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 8,
   },
-  tryAgainButton: {
-    marginTop: 8,
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+    minHeight: 44,
+  },
+  matchAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: "hidden",
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  matchAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  matchAvatarPlaceholder: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  matchRowContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  matchRowTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  matchRowSubtitle: {
+    fontSize: 14,
+  },
+  matchRowChevron: {
+    fontSize: 24,
   },
 });

@@ -266,3 +266,18 @@ export interface MatchAnimalImageResponse {
   matchStatus: "MATCH" | "NO_MATCH";
   candidates: MatchCandidate[];
 }
+
+export type AnimalImageType = "FACE" | "EAR" | "BODY";
+
+export interface AnimalImage {
+  animalImageId: number;
+  animalId: number;
+  imageType: AnimalImageType;
+  s3Key: string;
+  s3Url: string;
+  captureDate?: string;
+  notes?: string;
+  source?: string;
+  createdAt: string;
+  updatedAt: string;
+}

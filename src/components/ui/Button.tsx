@@ -30,7 +30,7 @@ export function Button({
 
   const handlePress = () => {
     if (!isDisabled) {
-      onPress();
+      setTimeout(() => onPress(), 50);
     }
   };
 
