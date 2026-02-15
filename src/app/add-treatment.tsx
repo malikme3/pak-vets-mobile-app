@@ -20,7 +20,7 @@ import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
-import { useCreateVisitTreatment } from "../features/treatments/hooks";
+import { useCreateVisitTreatment, useUpdateVisitTreatment } from "../features/treatments/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import {
   getBucketName,
@@ -41,6 +41,10 @@ export default function AddTreatmentScreen() {
       : Array.isArray(params[key])
         ? (params[key] as string[])[0]
         : "";
+  const paramTreatmentId = param("treatmentId");
+  const treatmentId = paramTreatmentId ? Number(paramTreatmentId) : undefined;
+  const isEditMode = treatmentId != null && treatmentId > 0;
+
   const paramTreatmentType = param("treatmentType");
   const validType: "MEDICATION" | "PROCEDURE" | "ADVICE" =
     paramTreatmentType === "PROCEDURE"
@@ -48,8 +52,18 @@ export default function AddTreatmentScreen() {
       : paramTreatmentType === "ADVICE"
         ? "ADVICE"
         : "MEDICATION";
+  const paramStatus = param("treatmentStatus");
+  const validStatus: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED" =
+    paramStatus === "ONGOING"
+      ? "ONGOING"
+      : paramStatus === "COMPLETED"
+        ? "COMPLETED"
+        : paramStatus === "STOPPED"
+          ? "STOPPED"
+          : "PLANNED";
 
   const createTreatmentMutation = useCreateVisitTreatment();
+  const updateTreatmentMutation = useUpdateVisitTreatment();
   const createMediaMutation = useCreateMediaFile();
 
   const [treatmentType, setTreatmentType] = useState<
@@ -57,7 +71,7 @@ export default function AddTreatmentScreen() {
   >(validType);
   const [treatmentStatus, setTreatmentStatus] = useState<
     "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED"
-  >("PLANNED");
+  >(validStatus);
   const [medicineNameFree, setMedicineNameFree] = useState(
     param("medicineNameFree"),
   );
@@ -469,7 +483,7 @@ export default function AddTreatmentScreen() {
     try {
       let mediaId: number | undefined = undefined;
 
-      // If there's a voice recording, create MediaFile first
+      // If there's a voice recording, create MediaFile first (new or edit)
       if (voiceRecording?.s3Key) {
         const bucketName = getBucketName();
         const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
@@ -484,25 +498,45 @@ export default function AddTreatmentScreen() {
         mediaId = mediaFile.mediaId;
       }
 
-      await createTreatmentMutation.mutateAsync({
-        visitId,
-        treatmentType,
-        treatmentStatus,
-        medicineNameFree: medicineNameFree.trim() || undefined,
-        dose: dose.trim() || undefined,
-        route: route.trim() || undefined,
-        frequency: frequency.trim() || undefined,
-        durationDays: durationDays ? Number(durationDays) : undefined,
-        instructions: instructions.trim() || undefined,
-        ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
-      });
+      if (isEditMode && treatmentId != null) {
+        await updateTreatmentMutation.mutateAsync({
+          treatmentId,
+          request: {
+            treatmentType,
+            treatmentStatus,
+            medicineNameFree: medicineNameFree.trim() || undefined,
+            dose: dose.trim() || undefined,
+            route: route.trim() || undefined,
+            frequency: frequency.trim() || undefined,
+            durationDays: durationDays ? Number(durationDays) : undefined,
+            instructions: instructions.trim() || undefined,
+          },
+        });
+      } else {
+        await createTreatmentMutation.mutateAsync({
+          visitId,
+          treatmentType,
+          treatmentStatus,
+          medicineNameFree: medicineNameFree.trim() || undefined,
+          dose: dose.trim() || undefined,
+          route: route.trim() || undefined,
+          frequency: frequency.trim() || undefined,
+          durationDays: durationDays ? Number(durationDays) : undefined,
+          instructions: instructions.trim() || undefined,
+          ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
+        });
+      }
 
       // Navigate back to visit detail
       router.replace(`/visit-detail?visitId=${visitId}`);
     } catch (error) {
       Alert.alert(
         "Error",
-        error instanceof Error ? error.message : "Failed to create treatment",
+        error instanceof Error
+          ? error.message
+          : isEditMode
+            ? "Failed to update treatment"
+            : "Failed to create treatment",
       );
     }
   };
@@ -539,7 +573,7 @@ export default function AddTreatmentScreen() {
       >
         <View style={styles.titleContainer}>
           <Text style={[styles.title, { color: colors.text }]}>
-            Add Treatment
+            {isEditMode ? "Edit Treatment" : "Add Treatment"}
           </Text>
           {/* Auto-fill from Audio Button */}
           <TouchableOpacity

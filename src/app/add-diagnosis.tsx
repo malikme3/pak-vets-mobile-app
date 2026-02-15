@@ -18,7 +18,7 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
-import { useCreateVisitDiagnosis } from "../features/diagnoses/hooks";
+import { useCreateVisitDiagnosis, useUpdateVisitDiagnosis } from "../features/diagnoses/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import { getBucketName } from "../services/sharedServicesApi";
 
@@ -28,6 +28,16 @@ export default function AddDiagnosisScreen() {
   const { colors } = useTheme();
 
   const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const param = (key: string) =>
+    typeof params[key] === "string"
+      ? params[key]
+      : Array.isArray(params[key])
+        ? (params[key] as string[])[0] ?? ""
+        : "";
+  const paramDiagnosisId = param("diagnosisId");
+  const diagnosisId = paramDiagnosisId ? Number(paramDiagnosisId) : undefined;
+  const isEditMode = diagnosisId != null && diagnosisId > 0;
+
   const paramText =
     typeof params.diagnosisText === "string"
       ? params.diagnosisText
@@ -44,6 +54,7 @@ export default function AddDiagnosisScreen() {
     paramStatus === "CONFIRMED" ? "CONFIRMED" : "SUSPECTED";
 
   const createDiagnosisMutation = useCreateVisitDiagnosis();
+  const updateDiagnosisMutation = useUpdateVisitDiagnosis();
   const createMediaMutation = useCreateMediaFile();
 
   const [diagnosisText, setDiagnosisText] = useState(paramText);
@@ -164,19 +175,33 @@ export default function AddDiagnosisScreen() {
         mediaId = mediaFile.mediaId;
       }
 
-      await createDiagnosisMutation.mutateAsync({
-        visitId,
-        diagnosisText: diagnosisText.trim(),
-        status,
-        ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
-      });
+      if (isEditMode && diagnosisId != null) {
+        await updateDiagnosisMutation.mutateAsync({
+          diagnosisId,
+          request: {
+            diagnosisText: diagnosisText.trim(),
+            status,
+          },
+        });
+      } else {
+        await createDiagnosisMutation.mutateAsync({
+          visitId,
+          diagnosisText: diagnosisText.trim(),
+          status,
+          ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
+        });
+      }
 
       // Navigate back to visit detail - use replace to ensure fresh data load
       router.replace(`/visit-detail?visitId=${visitId}`);
     } catch (error) {
       Alert.alert(
         "Error",
-        error instanceof Error ? error.message : "Failed to create diagnosis",
+        error instanceof Error
+          ? error.message
+          : isEditMode
+            ? "Failed to update diagnosis"
+            : "Failed to create diagnosis",
       );
     }
   };
@@ -212,7 +237,7 @@ export default function AddDiagnosisScreen() {
         contentContainerStyle={styles.content}
       >
         <Text style={[styles.title, { color: colors.text }]}>
-          Add Diagnosis
+          {isEditMode ? "Edit Diagnosis" : "Add Diagnosis"}
         </Text>
 
         {/* ChatGPT-style Input Area */}
