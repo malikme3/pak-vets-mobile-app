@@ -16,7 +16,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { useCreateVisitNote } from "../features/notes/hooks";
+import { useCreateCaseNote } from "../features/notes/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import { getBucketName } from "../services/sharedServicesApi";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
@@ -26,8 +26,8 @@ export default function AddNoteScreen() {
   const params = useLocalSearchParams();
   const { colors } = useTheme();
 
-  const visitId = params.visitId ? Number(params.visitId) : undefined;
-  const createNoteMutation = useCreateVisitNote();
+  const caseId = params.caseId ? Number(params.caseId) : undefined;
+  const createNoteMutation = useCreateCaseNote();
   const createMediaMutation = useCreateMediaFile();
 
   const [noteText, setNoteText] = useState("");
@@ -122,8 +122,8 @@ export default function AddNoteScreen() {
   }, [sound]);
 
   const handleSave = async () => {
-    if (!visitId) {
-      Alert.alert("Error", "Visit ID is missing");
+    if (!caseId) {
+      Alert.alert("Error", "Case ID is missing");
       return;
     }
 
@@ -147,7 +147,7 @@ export default function AddNoteScreen() {
         const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
 
         const mediaFile = await createMediaMutation.mutateAsync({
-          visitId,
+          caseId,
           fileType: "AUDIO",
           s3Key: voiceRecording.s3Key,
           url: s3Url,
@@ -158,7 +158,7 @@ export default function AddNoteScreen() {
 
       // Create the note with mediaId if it's a voice transcript
       await createNoteMutation.mutateAsync({
-        visitId,
+        caseId,
         noteType,
         noteText: noteText.trim(),
         ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
@@ -170,7 +170,7 @@ export default function AddNoteScreen() {
       }
 
       // Navigate back to visit detail
-      router.replace(`/visit-detail?visitId=${visitId}`);
+      router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       Alert.alert(
         "Error",
@@ -179,7 +179,7 @@ export default function AddNoteScreen() {
     }
   };
 
-  if (!visitId) {
+  if (!caseId) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -187,7 +187,7 @@ export default function AddNoteScreen() {
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.text }]}>
-            Invalid visit ID
+            Invalid case ID
           </Text>
           <Button
             title="Go Back"
@@ -292,7 +292,7 @@ export default function AddNoteScreen() {
                   }}
                   buttonSize={32}
                   buttonColor={colors.primary}
-                  visitId={visitId}
+                  caseId={caseId}
                 />
               </View>
             </View>

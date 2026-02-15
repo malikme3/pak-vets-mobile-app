@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   TouchableOpacity,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -17,7 +18,6 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
-import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
@@ -33,18 +33,26 @@ export default function SelectAnimalScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
-  const returnTo = (params.returnTo as string) || "/create-visit";
+  const returnTo = (params.returnTo as string) || "/create-case";
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [inputValue, setInputValue] = useState("");
   const [filter, setFilter] = useState<SearchFilter>("tag");
   const [imageMatchType, setImageMatchType] = useState<ImageMatchType>("BODY");
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<MatchAnimalImageResponse | null>(null);
   const [matchedAnimal, setMatchedAnimal] = useState<Animal | null>(null);
 
-  // Use search hook when query exists, otherwise use all animals
+  // Build effective search query: tag-001, 009-0333-6831-836, or raw for owner name
+  const searchQuery =
+    filter === "tag"
+      ? `tag-${inputValue}`
+      : filter === "owner_phone"
+        ? `009-${inputValue}`
+        : inputValue;
+
+  const queryForSearch = inputValue.trim() ? searchQuery : "";
   const { data: searchResults, isLoading: searchLoading } =
-    useSearchAnimals(searchQuery);
+    useSearchAnimals(queryForSearch);
   const { data: allAnimals, isLoading: animalsLoading } = useAnimals();
   const { data: matchedAnimalImages = [] } = useAnimalImages(
     matchedAnimal?.animalId ?? 0,
@@ -54,7 +62,7 @@ export default function SelectAnimalScreen() {
   )?.s3Url ?? null;
 
   // Filter results based on selected filter type
-  const results = searchQuery.trim()
+  const results = inputValue.trim()
     ? (searchResults || []).filter((animal) => {
       const query = searchQuery.toLowerCase();
       switch (filter) {
@@ -69,6 +77,30 @@ export default function SelectAnimalScreen() {
       }
     })
     : [];
+
+  // Format phone as user types: XXXX-XXXX-XXX
+  const formatPhoneInput = (text: string) => {
+    const digits = text.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
+  };
+
+  const handleInputChange = useCallback(
+    (text: string) => {
+      if (filter === "owner_phone") {
+        setInputValue(formatPhoneInput(text));
+      } else {
+        setInputValue(text);
+      }
+    },
+    [filter],
+  );
+
+  const handleFilterChange = useCallback((value: SearchFilter) => {
+    setFilter(value);
+    setInputValue("");
+  }, []);
 
   const isLoading = searchLoading || animalsLoading;
 
@@ -296,26 +328,10 @@ export default function SelectAnimalScreen() {
           )}
         </Card>
 
-        {/* Search Input */}
+        {/* Search section - filter first, then input */}
         <Card style={styles.card}>
-          <AppInput
-            label="Search"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={
-              filter === "tag"
-                ? "Search by Tag ID"
-                : filter === "owner_name"
-                  ? "Search by Owner Name"
-                  : "Search by Owner Phone"
-            }
-          />
-        </Card>
-
-        {/* Filter Segmented Control */}
-        <View style={styles.filterSection}>
           <Text style={[styles.filterLabel, { color: colors.text }]}>
-            Search by:
+            Search by
           </Text>
           <SegmentedControl
             options={[
@@ -324,9 +340,35 @@ export default function SelectAnimalScreen() {
               { label: "Phone", value: "owner_phone" },
             ]}
             selectedValue={filter}
-            onValueChange={(value) => setFilter(value as SearchFilter)}
+            onValueChange={(value) => handleFilterChange(value as SearchFilter)}
           />
-        </View>
+          <View style={[styles.searchInputRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            {(filter === "tag" || filter === "owner_phone") && (
+              <Text style={[styles.searchPrefix, { color: colors.text }]}>
+                {filter === "tag" ? "tag-" : "0092-"}
+              </Text>
+            )}
+            <TextInput
+              style={[
+                styles.searchInputField,
+                {
+                  color: colors.text,
+                },
+                (filter === "tag" || filter === "owner_phone") && styles.searchInputWithPrefix,
+              ]}
+              value={inputValue}
+              onChangeText={handleInputChange}
+              placeholder={
+                filter === "tag"
+                  ? "001"
+                  : filter === "owner_phone"
+                    ? "0333-6831-836"
+                    : "Owner name"
+              }
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+        </Card>
 
         {/* Loading State */}
         {isLoading && (
@@ -396,13 +438,32 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 16,
   },
-  filterSection: {
-    marginBottom: 16,
-  },
   filterLabel: {
     fontSize: 14,
     fontWeight: "500",
     marginBottom: 12,
+  },
+  searchInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+  },
+  searchPrefix: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  searchInputField: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+  },
+  searchInputWithPrefix: {
+    marginLeft: 4,
   },
   resultsSection: {
     marginBottom: 24,

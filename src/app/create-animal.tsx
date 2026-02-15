@@ -69,6 +69,7 @@ export default function CreateAnimalScreen() {
   const [color, setColor] = useState("");
   const [sex, setSex] = useState("");
   const [tagId, setTagId] = useState("");
+  const [aiSummary, setAiSummary] = useState("");
 
   const createAnimalMutation = useCreateAnimal();
 
@@ -206,6 +207,7 @@ export default function CreateAnimalScreen() {
       setWeightKg(animal.weight_kg != null ? String(animal.weight_kg) : "");
       setColor(animal.color ?? "");
       setSex(animal.sex ?? "");
+      setAiSummary(animal.ai_summary ?? "");
       setStep("attributes");
     } catch (error) {
       Alert.alert(
@@ -241,6 +243,7 @@ export default function CreateAnimalScreen() {
       color: color.trim() || undefined,
       ageMonths: ageMonths.trim() ? parseInt(ageMonths, 10) : undefined,
       weightKg: weightKg.trim() ? parseFloat(weightKg) : undefined,
+      aiSummary: aiSummary.trim() || undefined,
     };
 
     try {
@@ -513,6 +516,14 @@ export default function CreateAnimalScreen() {
               onChangeText={setTagId}
               placeholder="Optional"
             />
+            <AppInput
+              label="AI Summary"
+              value={aiSummary}
+              onChangeText={setAiSummary}
+              placeholder="Professional veterinary summary (auto-generated from images)"
+              multiline
+              numberOfLines={4}
+            />
           </Card>
           <Button
             title="Next"
@@ -578,6 +589,11 @@ export default function CreateAnimalScreen() {
           <Text style={[styles.summaryRow, { color: colors.text }]}>
             Tag ID: {tagId || "—"}
           </Text>
+          {aiSummary ? (
+            <Text style={[styles.summaryRow, styles.summaryBlock, { color: colors.text }]}>
+              AI Summary: {aiSummary}
+            </Text>
+          ) : null}
         </Card>
 
         <Button
@@ -632,4 +648,5 @@ const styles = StyleSheet.create({
   progressText: { fontSize: 12, textAlign: "right" },
   primaryButton: { marginTop: 8 },
   summaryRow: { fontSize: 15, marginBottom: 8 },
+  summaryBlock: { marginTop: 8, lineHeight: 22 },
 });

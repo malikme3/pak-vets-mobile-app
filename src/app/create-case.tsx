@@ -22,7 +22,7 @@ import { Button } from "../components/ui/Button";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useAnimal } from "../features/animals/hooks";
-import { useCreateVisit } from "../features/visits/hooks";
+import { useCreateCase } from "../features/cases/hooks";
 
 type VoiceRecording = {
   s3Key: string;
@@ -31,7 +31,7 @@ type VoiceRecording = {
   localUri: string;
 };
 
-export default function CreateVisitScreen() {
+export default function CreateCaseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
@@ -42,10 +42,10 @@ export default function CreateVisitScreen() {
     animalId || 0,
   );
 
-  const createVisitMutation = useCreateVisit();
+  const createCaseMutation = useCreateCase();
 
   const [chiefComplaint, setChiefComplaint] = useState("");
-  const [visitDatetime, setVisitDatetime] = useState<Date>(new Date()); // Default to current time
+  const [caseDatetime, setCaseDatetime] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [chiefComplaintVoiceRecording, setChiefComplaintVoiceRecording] =
@@ -54,7 +54,6 @@ export default function CreateVisitScreen() {
     useState<Audio.Sound | null>(null);
   const [isPlayingChiefComplaint, setIsPlayingChiefComplaint] = useState(false);
 
-  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       const cleanupAudio = async (sound: Audio.Sound | null) => {
@@ -63,7 +62,7 @@ export default function CreateVisitScreen() {
             await sound.unloadAsync();
           } catch (error) {
             if (__DEV__) {
-              console.error("[CreateVisit] Audio cleanup error:", error);
+              console.error("[CreateCase] Audio cleanup error:", error);
             }
           }
         }
@@ -86,7 +85,6 @@ export default function CreateVisitScreen() {
       .replace(",", "");
   };
 
-  // Chief Complaint Voice Handlers
   const handleChiefComplaintVoiceRecordingComplete = useCallback(
     (
       s3Key: string,
@@ -147,7 +145,7 @@ export default function CreateVisitScreen() {
     } catch (error) {
       Alert.alert("Error", "Failed to play audio");
       if (__DEV__) {
-        console.error("[CreateVisit] Chief Complaint playback error:", error);
+        console.error("[CreateCase] Chief Complaint playback error:", error);
       }
     }
   }, [
@@ -178,14 +176,12 @@ export default function CreateVisitScreen() {
     if (Platform.OS === "android") {
       setShowDatePicker(false);
       if (nativeEvent.type === "set" && selectedDate) {
-        setVisitDatetime(selectedDate);
-        // On Android, show time picker after date is selected
+        setCaseDatetime(selectedDate);
         setTimeout(() => setShowTimePicker(true), 300);
       }
     } else {
-      // iOS: update date immediately
       if (selectedDate) {
-        setVisitDatetime(selectedDate);
+        setCaseDatetime(selectedDate);
       }
     }
   };
@@ -195,19 +191,17 @@ export default function CreateVisitScreen() {
     if (Platform.OS === "android") {
       setShowTimePicker(false);
       if (nativeEvent.type === "set" && selectedTime) {
-        // Merge time with existing date
-        const newDate = new Date(visitDatetime);
+        const newDate = new Date(caseDatetime);
         newDate.setHours(selectedTime.getHours());
         newDate.setMinutes(selectedTime.getMinutes());
-        setVisitDatetime(newDate);
+        setCaseDatetime(newDate);
       }
     } else {
-      // iOS: update time immediately
       if (selectedTime) {
-        const newDate = new Date(visitDatetime);
+        const newDate = new Date(caseDatetime);
         newDate.setHours(selectedTime.getHours());
         newDate.setMinutes(selectedTime.getMinutes());
-        setVisitDatetime(newDate);
+        setCaseDatetime(newDate);
       }
     }
   };
@@ -219,35 +213,34 @@ export default function CreateVisitScreen() {
     }
 
     try {
-      // Cleanup audio before navigation
       if (chiefComplaintSound) {
         await chiefComplaintSound.unloadAsync();
       }
 
-      const visit = await createVisitMutation.mutateAsync({
+      const caseData = await createCaseMutation.mutateAsync({
         animalId: selectedAnimal.animalId,
         doctorId: doctor.doctorId,
-        visitDatetime: visitDatetime.toISOString(),
+        caseDatetime: caseDatetime.toISOString(),
         chiefComplaint: chiefComplaint.trim() || undefined,
       });
 
-      router.replace(`/visit-detail?visitId=${visit.visitId}`);
+      router.replace(`/case-detail?caseId=${caseData.caseId}`);
     } catch (error) {
       Alert.alert(
         "Error",
-        error instanceof Error ? error.message : "Failed to create visit",
+        error instanceof Error ? error.message : "Failed to create case",
       );
     }
   };
 
   const isLoading =
-    doctorLoading || animalLoading || createVisitMutation.isPending;
+    doctorLoading || animalLoading || createCaseMutation.isPending;
   const isDisabled = !selectedAnimal;
 
   const handleSelectAnimal = () => {
     router.push({
       pathname: "/select-animal",
-      params: { returnTo: "/create-visit" },
+      params: { returnTo: "/create-case" },
     });
   };
 
@@ -273,11 +266,20 @@ export default function CreateVisitScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
-        <Text style={[styles.title, { color: colors.text }]}>
-          Create New Visit
-        </Text>
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Create New Case
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.push("/")}
+            style={[styles.homeButton, { borderColor: colors.primary }]}
+            activeOpacity={0.7}
+          >
+            <FontAwesome name="home" size={18} color={colors.primary} />
+            <Text style={[styles.homeButtonText, { color: colors.primary }]}>Home</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Animal Selection */}
         <Card style={styles.card}>
           <Text style={[styles.label, { color: colors.text }]}>Animal</Text>
           {selectedAnimal ? (
@@ -303,10 +305,9 @@ export default function CreateVisitScreen() {
           )}
         </Card>
 
-        {/* Visit Date/Time */}
         <Card style={styles.card}>
           <Text style={[styles.label, { color: colors.text }]}>
-            Visit Date & Time
+            Case Date & Time
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -330,7 +331,7 @@ export default function CreateVisitScreen() {
                 { color: isDisabled ? colors.muted : colors.text },
               ]}
             >
-              {formatDateTime(visitDatetime)}
+              {formatDateTime(caseDatetime)}
             </Text>
             <Text style={[styles.datePickerHint, { color: colors.muted }]}>
               Tap to change
@@ -339,7 +340,7 @@ export default function CreateVisitScreen() {
 
           {showDatePicker && (
             <DateTimePicker
-              value={visitDatetime}
+              value={caseDatetime}
               mode="date"
               display={Platform.OS === "ios" ? "spinner" : "default"}
               onChange={handleDateChange}
@@ -351,7 +352,7 @@ export default function CreateVisitScreen() {
           {Platform.OS === "ios" && showDatePicker && (
             <View style={styles.timePickerContainer}>
               <DateTimePicker
-                value={visitDatetime}
+                value={caseDatetime}
                 mode="time"
                 display="spinner"
                 onChange={handleTimeChange}
@@ -370,7 +371,7 @@ export default function CreateVisitScreen() {
 
           {Platform.OS === "android" && showTimePicker && (
             <DateTimePicker
-              value={visitDatetime}
+              value={caseDatetime}
               mode="time"
               display="default"
               onChange={handleTimeChange}
@@ -379,13 +380,11 @@ export default function CreateVisitScreen() {
           )}
         </Card>
 
-        {/* Chief Complaint with Voice Input */}
         <Card style={styles.inputCard}>
           <Text style={[styles.label, { color: colors.text }]}>
             Chief Complaint
           </Text>
           <View style={styles.inputContainer}>
-            {/* Voice Recording Playback (if exists) */}
             {chiefComplaintVoiceRecording && (
               <View
                 style={[
@@ -435,7 +434,6 @@ export default function CreateVisitScreen() {
               </View>
             )}
 
-            {/* Text Input Area */}
             <View style={styles.textInputWrapper}>
               <TextInput
                 style={[
@@ -455,7 +453,6 @@ export default function CreateVisitScreen() {
                 textAlignVertical="top"
                 editable={!isDisabled}
               />
-              {/* Microphone Button - Bottom Right */}
               {!isDisabled && (
                 <View style={styles.micButtonWrapper}>
                   <VoiceMessageRecorder
@@ -468,7 +465,7 @@ export default function CreateVisitScreen() {
                     }}
                     buttonSize={32}
                     buttonColor={colors.primary}
-                    visitId={undefined}
+                    caseId={undefined}
                   />
                 </View>
               )}
@@ -476,13 +473,12 @@ export default function CreateVisitScreen() {
           </View>
         </Card>
 
-        {/* Save Button */}
         <Button
-          title={createVisitMutation.isPending ? "Creating..." : "Create Visit"}
+          title={createCaseMutation.isPending ? "Creating..." : "Create Case"}
           onPress={handleSave}
           variant="primary"
-          disabled={isDisabled || !doctor || createVisitMutation.isPending}
-          loading={createVisitMutation.isPending}
+          disabled={isDisabled || !doctor || createCaseMutation.isPending}
+          loading={createCaseMutation.isPending}
           style={styles.saveButton}
         />
       </ScrollView>
@@ -500,10 +496,29 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
   title: {
     fontSize: 24,
     fontWeight: "600",
-    marginBottom: 24,
+    marginBottom: 0,
+  },
+  homeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  homeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   card: {
     marginBottom: 16,

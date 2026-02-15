@@ -31,7 +31,7 @@ interface VoiceMessageRecorderProps {
   buttonSize?: number;
   buttonColor?: string;
   disabled?: boolean;
-  visitId?: number;
+  caseId?: number;
 }
 
 // Constants
@@ -50,7 +50,7 @@ export function VoiceMessageRecorder({
   buttonSize = 36,
   buttonColor = "#007AFF",
   disabled = false,
-  visitId,
+  caseId,
 }: VoiceMessageRecorderProps) {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingStatus, setRecordingStatus] =
@@ -86,9 +86,9 @@ export function VoiceMessageRecorder({
   const generateS3Key = useCallback((): string => {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 9);
-    const prefix = visitId ? `visits/${visitId}/audio` : "audio";
+    const prefix = caseId ? `cases/${caseId}/audio` : "audio";
     return `${prefix}/${timestamp}-${random}.m4a`;
-  }, [visitId]);
+  }, [caseId]);
 
   const startRecording = useCallback(async () => {
     if (
@@ -335,7 +335,7 @@ export function VoiceMessageRecorder({
     resetRecording,
     generateS3Key,
     formatErrorMessage,
-    visitId,
+    caseId,
   ]);
 
   const handleButtonPress = useCallback(() => {

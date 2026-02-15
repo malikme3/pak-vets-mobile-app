@@ -1,60 +1,58 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { visitTreatmentApi } from "../../services/vetApi";
+import { caseTreatmentApi } from "../../services/vetApi";
 import type {
-  VisitTreatment,
-  CreateVisitTreatmentRequest,
-  UpdateVisitTreatmentRequest,
+  CaseTreatment,
+  CreateCaseTreatmentRequest,
+  UpdateCaseTreatmentRequest,
 } from "../../types/api";
-import { visitKeys } from "../visits/hooks";
+import { caseKeys } from "../cases/hooks";
 
 export const treatmentKeys = {
   all: ["treatment"] as const,
   detail: (id: number) => [...treatmentKeys.all, id] as const,
-  byVisit: (visitId: number) =>
-    [...treatmentKeys.all, "visit", visitId] as const,
+  byCase: (caseId: number) =>
+    [...treatmentKeys.all, "case", caseId] as const,
 };
 
-export function useVisitTreatment(treatmentId: number) {
+export function useCaseTreatment(treatmentId: number) {
   return useQuery({
     queryKey: treatmentKeys.detail(treatmentId),
-    queryFn: () => visitTreatmentApi.getVisitTreatment(treatmentId),
+    queryFn: () => caseTreatmentApi.getCaseTreatment(treatmentId),
     enabled: treatmentId > 0,
   });
 }
 
-export function useVisitTreatments(visitId: number) {
+export function useCaseTreatments(caseId: number) {
   return useQuery({
-    queryKey: treatmentKeys.byVisit(visitId),
-    queryFn: () => visitTreatmentApi.getVisitTreatmentsByVisit(visitId),
-    enabled: visitId > 0,
+    queryKey: treatmentKeys.byCase(caseId),
+    queryFn: () => caseTreatmentApi.getCaseTreatmentsByCase(caseId),
+    enabled: caseId > 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
 }
 
-export function useCreateVisitTreatment() {
+export function useCreateCaseTreatment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: CreateVisitTreatmentRequest) =>
-      visitTreatmentApi.createVisitTreatment(request),
+    mutationFn: (request: CreateCaseTreatmentRequest) =>
+      caseTreatmentApi.createCaseTreatment(request),
     onSuccess: (data) => {
-      // Invalidate treatment queries for this visit
       queryClient.invalidateQueries({
-        queryKey: treatmentKeys.byVisit(data.visitId),
+        queryKey: treatmentKeys.byCase(data.caseId),
       });
       queryClient.invalidateQueries({
         queryKey: treatmentKeys.detail(data.treatmentId),
       });
-      // Also invalidate visit queries
       queryClient.invalidateQueries({
-        queryKey: visitKeys.detail(data.visitId),
+        queryKey: caseKeys.detail(data.caseId),
       });
     },
   });
 }
 
-export function useUpdateVisitTreatment() {
+export function useUpdateCaseTreatment() {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -63,43 +61,40 @@ export function useUpdateVisitTreatment() {
       request,
     }: {
       treatmentId: number;
-      request: UpdateVisitTreatmentRequest;
-    }) => visitTreatmentApi.updateVisitTreatment(treatmentId, request),
+      request: UpdateCaseTreatmentRequest;
+    }) => caseTreatmentApi.updateCaseTreatment(treatmentId, request),
     onSuccess: (data) => {
-      // Invalidate specific treatment and visit queries
       queryClient.invalidateQueries({
         queryKey: treatmentKeys.detail(data.treatmentId),
       });
       queryClient.invalidateQueries({
-        queryKey: treatmentKeys.byVisit(data.visitId),
+        queryKey: treatmentKeys.byCase(data.caseId),
       });
       queryClient.invalidateQueries({
-        queryKey: visitKeys.detail(data.visitId),
+        queryKey: caseKeys.detail(data.caseId),
       });
     },
   });
 }
 
-export function useDeleteVisitTreatment() {
+export function useDeleteCaseTreatment() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
       treatmentId,
-      visitId,
+      caseId,
     }: {
       treatmentId: number;
-      visitId: number;
-    }) => visitTreatmentApi.deleteVisitTreatment(treatmentId),
+      caseId: number;
+    }) => caseTreatmentApi.deleteCaseTreatment(treatmentId),
     onSuccess: (_, variables) => {
-      // Invalidate treatment queries for this visit
       queryClient.invalidateQueries({
-        queryKey: treatmentKeys.byVisit(variables.visitId),
+        queryKey: treatmentKeys.byCase(variables.caseId),
       });
       queryClient.invalidateQueries({ queryKey: treatmentKeys.all });
-      // Also invalidate visit queries
       queryClient.invalidateQueries({
-        queryKey: visitKeys.detail(variables.visitId),
+        queryKey: caseKeys.detail(variables.caseId),
       });
     },
   });

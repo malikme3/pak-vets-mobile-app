@@ -18,7 +18,7 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
-import { useCreateVisitDiagnosis, useUpdateVisitDiagnosis } from "../features/diagnoses/hooks";
+import { useCreateCaseDiagnosis, useUpdateCaseDiagnosis } from "../features/diagnoses/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import { getBucketName } from "../services/sharedServicesApi";
 
@@ -27,7 +27,7 @@ export default function AddDiagnosisScreen() {
   const params = useLocalSearchParams();
   const { colors } = useTheme();
 
-  const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const caseId = params.caseId ? Number(params.caseId) : undefined;
   const param = (key: string) =>
     typeof params[key] === "string"
       ? params[key]
@@ -53,8 +53,8 @@ export default function AddDiagnosisScreen() {
   const validStatus: "SUSPECTED" | "CONFIRMED" =
     paramStatus === "CONFIRMED" ? "CONFIRMED" : "SUSPECTED";
 
-  const createDiagnosisMutation = useCreateVisitDiagnosis();
-  const updateDiagnosisMutation = useUpdateVisitDiagnosis();
+  const createDiagnosisMutation = useCreateCaseDiagnosis();
+  const updateDiagnosisMutation = useUpdateCaseDiagnosis();
   const createMediaMutation = useCreateMediaFile();
 
   const [diagnosisText, setDiagnosisText] = useState(paramText);
@@ -147,8 +147,8 @@ export default function AddDiagnosisScreen() {
   }, [sound]);
 
   const handleSave = async () => {
-    if (!visitId) {
-      Alert.alert("Error", "Visit ID is missing");
+    if (!caseId) {
+      Alert.alert("Error", "Case ID is missing");
       return;
     }
 
@@ -166,7 +166,7 @@ export default function AddDiagnosisScreen() {
         const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
 
         const mediaFile = await createMediaMutation.mutateAsync({
-          visitId,
+          caseId,
           fileType: "AUDIO",
           s3Key: voiceRecording.s3Key,
           url: s3Url,
@@ -185,7 +185,7 @@ export default function AddDiagnosisScreen() {
         });
       } else {
         await createDiagnosisMutation.mutateAsync({
-          visitId,
+          caseId,
           diagnosisText: diagnosisText.trim(),
           status,
           ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
@@ -193,7 +193,7 @@ export default function AddDiagnosisScreen() {
       }
 
       // Navigate back to visit detail - use replace to ensure fresh data load
-      router.replace(`/visit-detail?visitId=${visitId}`);
+      router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       Alert.alert(
         "Error",
@@ -206,7 +206,7 @@ export default function AddDiagnosisScreen() {
     }
   };
 
-  if (!visitId) {
+  if (!caseId) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -214,7 +214,7 @@ export default function AddDiagnosisScreen() {
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.text }]}>
-            Invalid visit ID
+            Invalid case ID
           </Text>
           <Button
             title="Go Back"
@@ -321,7 +321,7 @@ export default function AddDiagnosisScreen() {
                   }}
                   buttonSize={32}
                   buttonColor={colors.primary}
-                  visitId={visitId}
+                  caseId={caseId}
                 />
               </View>
             </View>

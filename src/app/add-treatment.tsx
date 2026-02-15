@@ -20,7 +20,7 @@ import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
-import { useCreateVisitTreatment, useUpdateVisitTreatment } from "../features/treatments/hooks";
+import { useCreateCaseTreatment, useUpdateCaseTreatment } from "../features/treatments/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import {
   getBucketName,
@@ -34,7 +34,7 @@ export default function AddTreatmentScreen() {
   const params = useLocalSearchParams();
   const { colors } = useTheme();
 
-  const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const caseId = params.caseId ? Number(params.caseId) : undefined;
   const param = (key: string) =>
     typeof params[key] === "string"
       ? params[key]
@@ -62,8 +62,8 @@ export default function AddTreatmentScreen() {
           ? "STOPPED"
           : "PLANNED";
 
-  const createTreatmentMutation = useCreateVisitTreatment();
-  const updateTreatmentMutation = useUpdateVisitTreatment();
+  const createTreatmentMutation = useCreateCaseTreatment();
+  const updateTreatmentMutation = useUpdateCaseTreatment();
   const createMediaMutation = useCreateMediaFile();
 
   const [treatmentType, setTreatmentType] = useState<
@@ -174,17 +174,17 @@ export default function AddTreatmentScreen() {
   const generateS3Key = useCallback((): string => {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 9);
-    const prefix = visitId ? `visits/${visitId}/audio` : "audio";
+    const prefix = caseId ? `cases/${caseId}/audio` : "audio";
     return `${prefix}/${timestamp}-${random}.m4a`;
-  }, [visitId]);
+  }, [caseId]);
 
   const handleStartAutoFillRecording = useCallback(async () => {
-    if (isAutoFillRecording || isProcessingStructured || !visitId) {
+    if (isAutoFillRecording || isProcessingStructured || !caseId) {
       console.log("******************Auto-fill from audio******************");
       console.log("[Auto-fill] Cannot start recording:", {
         isAutoFillRecording,
         isProcessingStructured,
-        visitId,
+        caseId,
       });
       return;
     }
@@ -235,14 +235,14 @@ export default function AddTreatmentScreen() {
       );
       setIsAutoFillRecording(false);
     }
-  }, [isAutoFillRecording, isProcessingStructured, visitId, autoFillRecording]);
+  }, [isAutoFillRecording, isProcessingStructured, caseId, autoFillRecording]);
 
   const handleStopAutoFillRecording = useCallback(async () => {
-    if (!autoFillRecording || !visitId) {
+    if (!autoFillRecording || !caseId) {
       console.log("******************Auto-fill from audio******************");
       console.log("[Auto-fill] Cannot stop recording:", {
         hasRecording: !!autoFillRecording,
-        visitId,
+        caseId,
       });
       return;
     }
@@ -460,7 +460,7 @@ export default function AddTreatmentScreen() {
       setAutoFillRecording(null);
       console.log("[Auto-fill] Processing completed, state reset");
     }
-  }, [autoFillRecording, visitId, generateS3Key]);
+  }, [autoFillRecording, caseId, generateS3Key]);
 
   const handleAutoFillButtonPress = useCallback(() => {
     if (isAutoFillRecording) {
@@ -475,8 +475,8 @@ export default function AddTreatmentScreen() {
   ]);
 
   const handleSave = async () => {
-    if (!visitId) {
-      Alert.alert("Error", "Visit ID is missing");
+    if (!caseId) {
+      Alert.alert("Error", "Case ID is missing");
       return;
     }
 
@@ -489,7 +489,7 @@ export default function AddTreatmentScreen() {
         const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
 
         const mediaFile = await createMediaMutation.mutateAsync({
-          visitId,
+          caseId,
           fileType: "AUDIO",
           s3Key: voiceRecording.s3Key,
           url: s3Url,
@@ -514,7 +514,7 @@ export default function AddTreatmentScreen() {
         });
       } else {
         await createTreatmentMutation.mutateAsync({
-          visitId,
+          caseId,
           treatmentType,
           treatmentStatus,
           medicineNameFree: medicineNameFree.trim() || undefined,
@@ -528,7 +528,7 @@ export default function AddTreatmentScreen() {
       }
 
       // Navigate back to visit detail
-      router.replace(`/visit-detail?visitId=${visitId}`);
+      router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       Alert.alert(
         "Error",
@@ -541,7 +541,7 @@ export default function AddTreatmentScreen() {
     }
   };
 
-  if (!visitId) {
+  if (!caseId) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -549,7 +549,7 @@ export default function AddTreatmentScreen() {
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.text }]}>
-            Invalid visit ID
+            Invalid case ID
           </Text>
           <Button
             title="Go Back"
@@ -785,7 +785,7 @@ export default function AddTreatmentScreen() {
                   }}
                   buttonSize={32}
                   buttonColor={colors.primary}
-                  visitId={visitId}
+                  caseId={caseId}
                 />
               </View>
             </View>

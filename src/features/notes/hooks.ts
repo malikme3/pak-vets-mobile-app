@@ -1,57 +1,55 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { visitNoteApi } from "../../services/vetApi";
+import { caseNoteApi } from "../../services/vetApi";
 import type {
-  VisitNote,
-  CreateVisitNoteRequest,
-  UpdateVisitNoteRequest,
+  CaseNote,
+  CreateCaseNoteRequest,
+  UpdateCaseNoteRequest,
 } from "../../types/api";
-import { visitKeys } from "../visits/hooks";
+import { caseKeys } from "../cases/hooks";
 
 export const noteKeys = {
   all: ["note"] as const,
   detail: (id: number) => [...noteKeys.all, id] as const,
-  byVisit: (visitId: number) => [...noteKeys.all, "visit", visitId] as const,
+  byCase: (caseId: number) => [...noteKeys.all, "case", caseId] as const,
 };
 
-export function useVisitNote(noteId: number) {
+export function useCaseNote(noteId: number) {
   return useQuery({
     queryKey: noteKeys.detail(noteId),
-    queryFn: () => visitNoteApi.getVisitNote(noteId),
+    queryFn: () => caseNoteApi.getCaseNote(noteId),
     enabled: noteId > 0,
   });
 }
 
-export function useVisitNotes(visitId: number) {
+export function useCaseNotes(caseId: number) {
   return useQuery({
-    queryKey: noteKeys.byVisit(visitId),
-    queryFn: () => visitNoteApi.getVisitNotesByVisit(visitId),
-    enabled: visitId > 0,
+    queryKey: noteKeys.byCase(caseId),
+    queryFn: () => caseNoteApi.getCaseNotesByCase(caseId),
+    enabled: caseId > 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
 }
 
-export function useCreateVisitNote() {
+export function useCreateCaseNote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (request: CreateVisitNoteRequest) =>
-      visitNoteApi.createVisitNote(request),
+    mutationFn: (request: CreateCaseNoteRequest) =>
+      caseNoteApi.createCaseNote(request),
     onSuccess: (data) => {
-      // Invalidate note queries for this visit
       queryClient.invalidateQueries({
-        queryKey: noteKeys.byVisit(data.visitId),
+        queryKey: noteKeys.byCase(data.caseId),
       });
       queryClient.invalidateQueries({ queryKey: noteKeys.detail(data.noteId) });
-      // Also invalidate visit queries
       queryClient.invalidateQueries({
-        queryKey: visitKeys.detail(data.visitId),
+        queryKey: caseKeys.detail(data.caseId),
       });
     },
   });
 }
 
-export function useUpdateVisitNote() {
+export function useUpdateCaseNote() {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -60,36 +58,33 @@ export function useUpdateVisitNote() {
       request,
     }: {
       noteId: number;
-      request: UpdateVisitNoteRequest;
-    }) => visitNoteApi.updateVisitNote(noteId, request),
+      request: UpdateCaseNoteRequest;
+    }) => caseNoteApi.updateCaseNote(noteId, request),
     onSuccess: (data) => {
-      // Invalidate specific note and visit queries
       queryClient.invalidateQueries({ queryKey: noteKeys.detail(data.noteId) });
       queryClient.invalidateQueries({
-        queryKey: noteKeys.byVisit(data.visitId),
+        queryKey: noteKeys.byCase(data.caseId),
       });
       queryClient.invalidateQueries({
-        queryKey: visitKeys.detail(data.visitId),
+        queryKey: caseKeys.detail(data.caseId),
       });
     },
   });
 }
 
-export function useDeleteVisitNote() {
+export function useDeleteCaseNote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ noteId, visitId }: { noteId: number; visitId: number }) =>
-      visitNoteApi.deleteVisitNote(noteId),
+    mutationFn: ({ noteId, caseId }: { noteId: number; caseId: number }) =>
+      caseNoteApi.deleteCaseNote(noteId),
     onSuccess: (_, variables) => {
-      // Invalidate note queries for this visit
       queryClient.invalidateQueries({
-        queryKey: noteKeys.byVisit(variables.visitId),
+        queryKey: noteKeys.byCase(variables.caseId),
       });
       queryClient.invalidateQueries({ queryKey: noteKeys.all });
-      // Also invalidate visit queries
       queryClient.invalidateQueries({
-        queryKey: visitKeys.detail(variables.visitId),
+        queryKey: caseKeys.detail(variables.caseId),
       });
     },
   });

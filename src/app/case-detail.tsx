@@ -16,27 +16,27 @@ import { Audio } from "expo-av";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Button } from "../components/ui/Button";
-import { useVisit } from "../features/visits/hooks";
+import { useCase } from "../features/cases/hooks";
 import { useAnimal } from "../features/animals/hooks";
 import {
-  useVisitDiagnoses,
-  useCreateVisitDiagnosis,
+  useCaseDiagnoses,
+  useCreateCaseDiagnosis,
 } from "../features/diagnoses/hooks";
 import {
-  useVisitTreatments,
-  useCreateVisitTreatment,
+  useCaseTreatments,
+  useCreateCaseTreatment,
 } from "../features/treatments/hooks";
-import { useVisitNotes } from "../features/notes/hooks";
-import { useMediaFilesByVisit } from "../features/media/hooks";
+import { useCaseNotes } from "../features/notes/hooks";
+import { useMediaFilesByCase } from "../features/media/hooks";
 import {
   getBucketName,
   getDownloadSignedUrl,
 } from "../services/sharedServicesApi";
-import { visitDiagnosisApi, visitTreatmentApi } from "../services/vetApi";
+import { caseDiagnosisApi, caseTreatmentApi } from "../services/vetApi";
 import type {
-  VisitDiagnosis,
-  VisitTreatment,
-  VisitNote,
+  CaseDiagnosis,
+  CaseTreatment,
+  CaseNote,
   MediaFile,
   DiagnosisSuggestion,
   TreatmentSuggestion,
@@ -123,18 +123,18 @@ function MediaThumbnail({
 }
 
 // Accordion sections - Visit, Animal, Diagnoses expanded by default
-type AccordionKey = "visit" | "animal" | "diagnoses" | "treatments" | "notes" | "media";
-const DEFAULT_EXPANDED: AccordionKey[] = ["visit", "animal", "diagnoses"];
+type AccordionKey = "case" | "animal" | "diagnoses" | "treatments" | "notes" | "media";
+const DEFAULT_EXPANDED: AccordionKey[] = ["case", "animal", "diagnoses"];
 
-export default function VisitDetailScreen() {
+export default function CaseDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { colors } = useTheme();
 
-  const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const caseId = params.caseId ? Number(params.caseId) : undefined;
   const [expanded, setExpanded] = useState<Record<AccordionKey, boolean>>(() =>
     Object.fromEntries(
-      (["visit", "animal", "diagnoses", "treatments", "notes", "media"] as AccordionKey[]).map((k) => [
+      (["case", "animal", "diagnoses", "treatments", "notes", "media"] as AccordionKey[]).map((k) => [
         k,
         DEFAULT_EXPANDED.includes(k),
       ])
@@ -145,43 +145,44 @@ export default function VisitDetailScreen() {
   >([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsRequestedByUser, setSuggestionsRequestedByUser] = useState(false);
-  const { data: visit, isLoading: visitLoading } = useVisit(visitId || 0);
+  const [suggestionsListExpanded, setSuggestionsListExpanded] = useState(true);
+  const { data: caseData, isLoading: caseLoading } = useCase(caseId || 0);
   const { data: animal, isLoading: animalLoading } = useAnimal(
-    visit?.animalId || 0,
+    caseData?.animalId || 0,
   );
   const {
     data: diagnoses = [],
     isLoading: diagnosesLoading,
     refetch: refetchDiagnoses,
-  } = useVisitDiagnoses(visitId || 0);
-  const createDiagnosisMutation = useCreateVisitDiagnosis();
+  } = useCaseDiagnoses(caseId || 0);
+  const createDiagnosisMutation = useCreateCaseDiagnosis();
   const {
     data: treatments = [],
     isLoading: treatmentsLoading,
     refetch: refetchTreatments,
-  } = useVisitTreatments(visitId || 0);
-  const createTreatmentMutation = useCreateVisitTreatment();
+  } = useCaseTreatments(caseId || 0);
+  const createTreatmentMutation = useCreateCaseTreatment();
   const {
     data: notes = [],
     isLoading: notesLoading,
     refetch: refetchNotes,
-  } = useVisitNotes(visitId || 0);
+  } = useCaseNotes(caseId || 0);
   const {
     data: mediaFiles = [],
     isLoading: mediaLoading,
     refetch: refetchMedia,
-  } = useMediaFilesByVisit(visitId || 0);
+  } = useMediaFilesByCase(caseId || 0);
 
   // Fetch AI-suggested diagnoses only after user taps "Suggested diagnoses"
   useEffect(() => {
-    if (!suggestionsRequestedByUser || !visit?.chiefComplaint?.trim()) {
+    if (!suggestionsRequestedByUser || !caseData?.chiefComplaint?.trim()) {
       if (!suggestionsRequestedByUser) setSuggestedDiagnoses([]);
       return;
     }
     let cancelled = false;
     setSuggestionsLoading(true);
-    visitDiagnosisApi
-      .suggestDiagnoses(visit.chiefComplaint.trim())
+    caseDiagnosisApi
+      .suggestDiagnoses(caseData.chiefComplaint.trim())
       .then((data) => {
         if (!cancelled) setSuggestedDiagnoses(data || []);
       })
@@ -194,19 +195,19 @@ export default function VisitDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [suggestionsRequestedByUser, visit?.visitId, visit?.chiefComplaint]);
+  }, [suggestionsRequestedByUser, caseData?.caseId, caseData?.chiefComplaint]);
 
   // Refetch diagnoses, treatments, notes, and media when screen comes into focus (e.g., after adding)
   useFocusEffect(
     useCallback(() => {
-      if (visitId) {
+      if (caseId) {
         refetchDiagnoses();
         refetchTreatments();
         refetchNotes();
         refetchMedia();
       }
     }, [
-      visitId,
+      caseId,
       refetchDiagnoses,
       refetchTreatments,
       refetchNotes,
@@ -234,12 +235,12 @@ export default function VisitDetailScreen() {
 
   const handleConfirmSuggestion = useCallback(
     async (s: DiagnosisSuggestion, index: number) => {
-      const vid = visit?.visitId;
+      const vid = caseData?.caseId;
       if (!vid) return;
       setConfirmingSuggestionIndex(index);
       try {
         await createDiagnosisMutation.mutateAsync({
-          visitId: vid,
+          caseId: vid,
           diagnosisText: s.diagnosis_text.trim(),
           status: s.status,
         });
@@ -254,7 +255,7 @@ export default function VisitDetailScreen() {
         setConfirmingSuggestionIndex(null);
       }
     },
-    [visit?.visitId, createDiagnosisMutation, refetchDiagnoses],
+    [caseData?.caseId, createDiagnosisMutation, refetchDiagnoses],
   );
 
   // Per-diagnosis treatment suggestions: diagnosisId -> list of suggestions
@@ -267,12 +268,12 @@ export default function VisitDetailScreen() {
   >(null); // "diagnosisId-index"
 
   const handleFetchTreatmentsForDiagnosis = useCallback(
-    async (diagnosis: VisitDiagnosis) => {
-      const vid = visit?.visitId;
+    async (diagnosis: CaseDiagnosis) => {
+      const vid = caseData?.caseId;
       if (!vid) return;
       setLoadingTreatmentForDiagnosisId(diagnosis.diagnosisId);
       try {
-        const suggestions = await visitTreatmentApi.suggestTreatments([
+        const suggestions = await caseTreatmentApi.suggestTreatments([
           {
             diagnosis_text: diagnosis.diagnosisText,
             status: diagnosis.status,
@@ -288,7 +289,7 @@ export default function VisitDetailScreen() {
         setLoadingTreatmentForDiagnosisId(null);
       }
     },
-    [visit?.visitId],
+    [caseData?.caseId],
   );
 
   const handleConfirmTreatmentSuggestion = useCallback(
@@ -297,13 +298,13 @@ export default function VisitDetailScreen() {
       suggestion: TreatmentSuggestion,
       index: number,
     ) => {
-      const vid = visit?.visitId;
+      const vid = caseData?.caseId;
       if (!vid) return;
       const key = `${diagnosisId}-${index}`;
       setConfirmingTreatmentKey(key);
       try {
         await createTreatmentMutation.mutateAsync({
-          visitId: vid,
+          caseId: vid,
           treatmentType: suggestion.treatmentType,
           treatmentStatus: "PLANNED",
           medicineNameFree: suggestion.medicineNameFree ?? undefined,
@@ -332,11 +333,11 @@ export default function VisitDetailScreen() {
         setConfirmingTreatmentKey(null);
       }
     },
-    [visit?.visitId, createTreatmentMutation, refetchTreatments],
+    [caseData?.caseId, createTreatmentMutation, refetchTreatments],
   );
 
   const isLoading =
-    visitLoading ||
+    caseLoading ||
     animalLoading ||
     diagnosesLoading ||
     treatmentsLoading ||
@@ -362,7 +363,7 @@ export default function VisitDetailScreen() {
   const [treatmentSuggestionsLoading, setTreatmentSuggestionsLoading] =
     useState(false);
   const handleAddTreatment = useCallback(async () => {
-    const vid = visit?.visitId;
+    const vid = caseData?.caseId;
     if (!vid) return;
     const diagnosisPayload = (
       diagnoses.length > 0 ? diagnoses : suggestedDiagnoses
@@ -371,11 +372,11 @@ export default function VisitDetailScreen() {
         "diagnosis_text" in d ? d.diagnosis_text : d.diagnosisText,
       status: d.status,
     }));
-    const params: Record<string, string> = { visitId: String(vid) };
+    const params: Record<string, string> = { caseId: String(vid) };
     if (diagnosisPayload.length > 0) {
       setTreatmentSuggestionsLoading(true);
       try {
-        const suggestions = await visitTreatmentApi.suggestTreatments(
+        const suggestions = await caseTreatmentApi.suggestTreatments(
           diagnosisPayload,
         );
         const first = suggestions?.[0];
@@ -402,16 +403,16 @@ export default function VisitDetailScreen() {
       50,
     );
   }, [
-    visit?.visitId,
+    caseData?.caseId,
     diagnoses,
     suggestedDiagnoses,
   ]);
 
   // Open diagnosis form pre-filled for editing
   const handleEditDiagnosis = useCallback(
-    (diagnosis: VisitDiagnosis) => {
+    (diagnosis: CaseDiagnosis) => {
       const params: Record<string, string> = {
-        visitId: String(visit?.visitId ?? ""),
+        caseId: String(caseData?.caseId ?? ""),
         diagnosisId: String(diagnosis.diagnosisId),
         diagnosisText: diagnosis.diagnosisText ?? "",
         status: diagnosis.status,
@@ -421,14 +422,14 @@ export default function VisitDetailScreen() {
         50,
       );
     },
-    [visit?.visitId],
+    [caseData?.caseId],
   );
 
   // Open treatment form pre-filled for editing
   const handleEditTreatment = useCallback(
-    (treatment: VisitTreatment) => {
+    (treatment: CaseTreatment) => {
       const params: Record<string, string> = {
-        visitId: String(visit?.visitId ?? ""),
+        caseId: String(caseData?.caseId ?? ""),
         treatmentId: String(treatment.treatmentId),
         treatmentType: treatment.treatmentType ?? "MEDICATION",
         treatmentStatus: treatment.treatmentStatus,
@@ -447,7 +448,7 @@ export default function VisitDetailScreen() {
         50,
       );
     },
-    [visit?.visitId],
+    [caseData?.caseId],
   );
 
   // Helper to get audio URL from media file
@@ -481,7 +482,7 @@ export default function VisitDetailScreen() {
     );
   }
 
-  if (!visit) {
+  if (!caseData) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -489,7 +490,7 @@ export default function VisitDetailScreen() {
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.text }]}>
-            Visit not found
+            Case not found
           </Text>
           <Button
             title="Go Back"
@@ -515,11 +516,11 @@ export default function VisitDetailScreen() {
         {/* Compact header */}
         <View style={[styles.header, { borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 16 }]}>
           <Text style={[styles.headerDate, { color: colors.muted }]}>
-            {visit ? formatDate(visit.visitDatetime) : ""}
+            {caseData ? formatDate(caseData.caseDatetime) : ""}
           </Text>
-          {visit?.chiefComplaint && (
+          {caseData?.chiefComplaint && (
             <Text style={[styles.headerComplaint, { color: colors.text }]} numberOfLines={2}>
-              {visit.chiefComplaint}
+              {caseData.chiefComplaint}
             </Text>
           )}
           {animal && (
@@ -530,22 +531,22 @@ export default function VisitDetailScreen() {
           )}
         </View>
 
-        {/* 1. Visit Information */}
+        {/* 1. Case Information */}
         <AccordionSection
-          title="Visit"
+          title="Case"
           icon="calendar"
-          expanded={expanded.visit}
-          onToggle={() => toggleSection("visit")}
+          expanded={expanded.case}
+          onToggle={() => toggleSection("case")}
           colors={colors}
         >
           <View style={styles.infoRow}>
             <Text style={[styles.label, { color: colors.muted }]}>Date & Time</Text>
-            <Text style={[styles.value, { color: colors.text }]}>{formatDate(visit.visitDatetime)}</Text>
+            <Text style={[styles.value, { color: colors.text }]}>{formatDate(caseData.caseDatetime)}</Text>
           </View>
-          {visit.chiefComplaint && (
+          {caseData.chiefComplaint && (
             <View style={styles.infoRow}>
               <Text style={[styles.label, { color: colors.muted }]}>Chief Complaint</Text>
-              <Text style={[styles.value, { color: colors.text }]}>{visit.chiefComplaint}</Text>
+              <Text style={[styles.value, { color: colors.text }]}>{caseData.chiefComplaint}</Text>
             </View>
           )}
         </AccordionSection>
@@ -608,7 +609,7 @@ export default function VisitDetailScreen() {
           colors={colors}
           action={
             <TouchableOpacity
-              onPress={() => router.push(`/add-diagnosis?visitId=${visit?.visitId}`)}
+              onPress={() => router.push(`/add-diagnosis?caseId=${caseData?.caseId}`)}
               style={[styles.addChip, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
             >
@@ -618,7 +619,7 @@ export default function VisitDetailScreen() {
           }
         >
           {/* AI Suggestions (inline) */}
-          {visit.chiefComplaint?.trim() && (
+          {caseData.chiefComplaint?.trim() && (
             <View style={[styles.aiBlock, { backgroundColor: colors.background, borderColor: colors.border }]}>
               {!suggestionsRequestedByUser ? (
                 <TouchableOpacity
@@ -637,8 +638,21 @@ export default function VisitDetailScreen() {
                 </View>
               ) : suggestedDiagnoses.length > 0 ? (
                 <View style={styles.suggestionsList}>
-                  <Text style={[styles.aiLabel, { color: colors.muted }]}>Suggested</Text>
-                  {suggestedDiagnoses.map((s, index) => (
+                  <TouchableOpacity
+                    style={styles.suggestionsListHeader}
+                    onPress={() => setSuggestionsListExpanded((v) => !v)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.aiLabel, { color: colors.muted, marginBottom: 0 }]}>
+                      Suggested ({suggestedDiagnoses.length})
+                    </Text>
+                    <FontAwesome
+                      name={suggestionsListExpanded ? "chevron-up" : "chevron-down"}
+                      size={14}
+                      color={colors.muted}
+                    />
+                  </TouchableOpacity>
+                  {suggestionsListExpanded && suggestedDiagnoses.map((s, index) => (
                     <View key={`${s.diagnosis_text}-${index}`} style={[styles.suggestionRow, { borderLeftColor: colors.primary, backgroundColor: colors.surface }]}>
                       <Text style={[styles.suggestionText, { color: colors.text }]} numberOfLines={3}>{s.diagnosis_text}</Text>
                       <View style={styles.suggestionRowFooter}>
@@ -787,7 +801,7 @@ export default function VisitDetailScreen() {
           colors={colors}
           action={
             <TouchableOpacity
-              onPress={() => router.push(`/add-note?visitId=${visit?.visitId}`)}
+              onPress={() => router.push(`/add-note?caseId=${caseData?.caseId}`)}
               style={[styles.addChip, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
             >
@@ -802,8 +816,8 @@ export default function VisitDetailScreen() {
                 let audioMedia: MediaFile | null | undefined = null;
                 if (note.noteType === "VOICE_TRANSCRIPT") {
                   if (note.mediaId) audioMedia = mediaFiles.find((m) => m.mediaId === note.mediaId);
-                  if (!audioMedia && visitId) {
-                    const audioFiles = mediaFiles.filter((m) => m.fileType === "AUDIO" && m.visitId === visitId && m.s3Key?.includes(`visits/${visitId}/audio/`));
+                  if (!audioMedia && caseId) {
+                    const audioFiles = mediaFiles.filter((m) => m.fileType === "AUDIO" && m.caseId === caseId && m.s3Key?.includes(`cases/${caseId}/audio/`));
                     if (audioFiles.length > 0) {
                       const noteCreatedAt = new Date(note.createdAt).getTime();
                       audioMedia = audioFiles.reduce((closest, current) => {
@@ -835,7 +849,7 @@ export default function VisitDetailScreen() {
           colors={colors}
           action={
             <TouchableOpacity
-              onPress={() => router.push(`/add-media?visitId=${visit?.visitId}`)}
+              onPress={() => router.push(`/add-media?caseId=${caseData?.caseId}`)}
               style={[styles.addChip, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
             >
@@ -1145,6 +1159,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  suggestionsListHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
   aiEmptyText: {
@@ -1537,7 +1557,7 @@ const styles = StyleSheet.create({
 
 // Diagnosis Item Component with Audio Playback
 interface DiagnosisItemProps {
-  diagnosis: VisitDiagnosis;
+  diagnosis: CaseDiagnosis;
   audioMedia: MediaFile | null | undefined;
   colors: ReturnType<typeof useTheme>["colors"];
   getAudioUrl: (media: MediaFile) => Promise<string | null>;
@@ -1730,11 +1750,11 @@ function DiagnosisItem({
 
 // Treatment Item Component with Audio Playback
 interface TreatmentItemProps {
-  treatment: VisitTreatment;
+  treatment: CaseTreatment;
   audioMedia: MediaFile | null | undefined;
   colors: ReturnType<typeof useTheme>["colors"];
   getAudioUrl: (media: MediaFile) => Promise<string | null>;
-  onEdit?: (treatment: VisitTreatment) => void;
+  onEdit?: (treatment: CaseTreatment) => void;
 }
 
 function TreatmentItem({
@@ -1982,7 +2002,7 @@ function TreatmentItem({
 
 // Voice Note Item Component with Audio Playback
 interface NoteItemProps {
-  note: VisitNote;
+  note: CaseNote;
   audioMedia: MediaFile | null | undefined;
   colors: ReturnType<typeof useTheme>["colors"];
   getAudioUrl: (media: MediaFile) => Promise<string | null>;

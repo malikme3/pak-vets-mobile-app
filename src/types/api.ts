@@ -61,6 +61,7 @@ export interface Animal {
   color?: string;
   weightKg?: number;
   tagId?: string;
+  aiSummary?: string;
   locationName?: string;
   latitude?: number;
   longitude?: number;
@@ -78,6 +79,7 @@ export interface CreateAnimalRequest {
   color?: string;
   weightKg?: number;
   tagId?: string;
+  aiSummary?: string;
   locationName?: string;
   latitude?: number;
   longitude?: number;
@@ -93,41 +95,42 @@ export interface UpdateAnimalRequest {
   color?: string;
   weightKg?: number;
   tagId?: string;
+  aiSummary?: string;
   locationName?: string;
   latitude?: number;
   longitude?: number;
 }
 
-export interface Visit {
-  visitId: number;
+export interface Case {
+  caseId: number;
   animalId: number;
   doctorId: number;
-  visitDatetime: string;
+  caseDatetime: string;
   chiefComplaint?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface CreateVisitRequest {
+export interface CreateCaseRequest {
   animalId: number;
   doctorId: number;
-  visitDatetime: string;
+  caseDatetime: string;
   chiefComplaint?: string;
   notes?: string;
 }
 
-export interface UpdateVisitRequest {
+export interface UpdateCaseRequest {
   animalId?: number;
   doctorId?: number;
-  visitDatetime?: string;
+  caseDatetime?: string;
   chiefComplaint?: string;
   notes?: string;
 }
 
-export interface VisitDiagnosis {
+export interface CaseDiagnosis {
   diagnosisId: number;
-  visitId: number;
+  caseId: number;
   diagnosisText: string;
   status: "SUSPECTED" | "CONFIRMED";
   mediaId?: number;
@@ -139,14 +142,14 @@ export interface DiagnosisSuggestion {
   status: "SUSPECTED" | "CONFIRMED";
 }
 
-export interface CreateVisitDiagnosisRequest {
-  visitId: number;
+export interface CreateCaseDiagnosisRequest {
+  caseId: number;
   diagnosisText: string;
   status?: "SUSPECTED" | "CONFIRMED";
   mediaId?: number;
 }
 
-export interface UpdateVisitDiagnosisRequest {
+export interface UpdateCaseDiagnosisRequest {
   diagnosisText?: string;
   status?: "SUSPECTED" | "CONFIRMED";
 }
@@ -161,9 +164,9 @@ export interface TreatmentSuggestion {
   instructions?: string | null;
 }
 
-export interface VisitTreatment {
+export interface CaseTreatment {
   treatmentId: number;
-  visitId: number;
+  caseId: number;
   treatmentType?: "MEDICATION" | "PROCEDURE" | "ADVICE";
   treatmentStatus: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED";
   medicineId?: number;
@@ -177,8 +180,8 @@ export interface VisitTreatment {
   createdAt: string;
 }
 
-export interface CreateVisitTreatmentRequest {
-  visitId: number;
+export interface CreateCaseTreatmentRequest {
+  caseId: number;
   treatmentType?: "MEDICATION" | "PROCEDURE" | "ADVICE";
   treatmentStatus?: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED";
   medicineId?: number;
@@ -191,7 +194,7 @@ export interface CreateVisitTreatmentRequest {
   mediaId?: number;
 }
 
-export interface UpdateVisitTreatmentRequest {
+export interface UpdateCaseTreatmentRequest {
   treatmentType?: "MEDICATION" | "PROCEDURE" | "ADVICE";
   treatmentStatus?: "PLANNED" | "ONGOING" | "COMPLETED" | "STOPPED";
   medicineId?: number;
@@ -203,23 +206,23 @@ export interface UpdateVisitTreatmentRequest {
   instructions?: string;
 }
 
-export interface VisitNote {
+export interface CaseNote {
   noteId: number;
-  visitId: number;
+  caseId: number;
   noteType: "TEXT" | "VOICE_TRANSCRIPT";
   noteText: string;
   mediaId?: number;
   createdAt: string;
 }
 
-export interface CreateVisitNoteRequest {
-  visitId: number;
+export interface CreateCaseNoteRequest {
+  caseId: number;
   noteType?: "TEXT" | "VOICE_TRANSCRIPT";
   noteText: string;
   mediaId?: number;
 }
 
-export interface UpdateVisitNoteRequest {
+export interface UpdateCaseNoteRequest {
   noteType?: "TEXT" | "VOICE_TRANSCRIPT";
   noteText?: string;
   mediaId?: number;
@@ -227,7 +230,7 @@ export interface UpdateVisitNoteRequest {
 
 export interface MediaFile {
   mediaId: number;
-  visitId?: number;
+  caseId?: number;
   animalId?: number;
   fileType: "AUDIO" | "IMAGE" | "VIDEO" | "DOC";
   s3Key?: string;
@@ -236,7 +239,7 @@ export interface MediaFile {
 }
 
 export interface CreateMediaFileRequest {
-  visitId?: number;
+  caseId?: number;
   animalId?: number;
   fileType: "AUDIO" | "IMAGE" | "VIDEO" | "DOC";
   s3Key?: string;
@@ -244,7 +247,7 @@ export interface CreateMediaFileRequest {
 }
 
 export interface UpdateMediaFileRequest {
-  visitId?: number;
+  caseId?: number;
   animalId?: number;
   fileType?: "AUDIO" | "IMAGE" | "VIDEO" | "DOC";
   s3Key?: string;

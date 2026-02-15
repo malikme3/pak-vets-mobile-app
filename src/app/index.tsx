@@ -8,17 +8,19 @@ import {
   ActivityIndicator,
   Image,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { useCurrentDoctor } from "../features/doctors/hooks";
-import { useVisitsByDoctor } from "../features/visits/hooks";
+import { useCasesByDoctor, useDeleteCase } from "../features/cases/hooks";
 import { useAnimalImages } from "../features/animals/hooks";
-import type { Visit } from "../types/api";
+import type { Case } from "../types/api";
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -29,17 +31,17 @@ export default function DashboardScreen() {
     error: doctorError,
     refetch: refetchDoctor,
   } = useCurrentDoctor();
-  const { data: allVisits, isLoading: visitsLoading } = useVisitsByDoctor(
+  const { data: allCases, isLoading: casesLoading } = useCasesByDoctor(
     doctor?.doctorId || 0,
   );
+  const deleteCaseMutation = useDeleteCase();
 
-  // Get recent 5 visits
-  const recentVisits = allVisits
-    ? [...allVisits]
+  const recentCases = allCases
+    ? [...allCases]
         .sort(
           (a, b) =>
-            new Date(b.visitDatetime).getTime() -
-            new Date(a.visitDatetime).getTime(),
+            new Date(b.caseDatetime).getTime() -
+            new Date(a.caseDatetime).getTime(),
         )
         .slice(0, 5)
     : [];
@@ -55,29 +57,58 @@ export default function DashboardScreen() {
     });
   };
 
-  const handleVisitPress = useCallback(
-    (visitId: number) => {
+  const handleCasePress = useCallback(
+    (caseId: number) => {
       setTimeout(
-        () => router.push(`/visit-detail?visitId=${visitId}`),
+        () => router.push(`/case-detail?caseId=${caseId}`),
         50,
       );
     },
     [router],
   );
 
-  const renderVisitItem = ({ item }: { item: Visit }) => {
-    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
+  const handleDeleteCase = useCallback(
+    (caseItem: Case) => {
+      Alert.alert(
+        "Delete Case",
+        `Delete Case #${caseItem.caseId}? This will remove the case and all related diagnoses, treatments, and notes.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deleteCaseMutation.mutateAsync(caseItem.caseId);
+              } catch (error) {
+                Alert.alert(
+                  "Error",
+                  error instanceof Error ? error.message : "Failed to delete case",
+                );
+              }
+            },
+          },
+        ],
+      );
+    },
+    [deleteCaseMutation],
+  );
+
+  const renderCaseItem = ({ item }: { item: Case }) => {
+    const subtitle = `${formatDate(item.caseDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
     return (
-      <VisitRow
+      <CaseRow
         animalId={item.animalId}
-        title={`Visit #${item.visitId}`}
+        title={`Case #${item.caseId}`}
         subtitle={subtitle}
-        onPress={() => handleVisitPress(item.visitId)}
+        onPress={() => handleCasePress(item.caseId)}
+        onDelete={() => handleDeleteCase(item)}
+        isDeleting={deleteCaseMutation.isPending}
       />
     );
   };
 
-  if (doctorLoading || visitsLoading) {
+  if (doctorLoading || casesLoading) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -118,8 +149,8 @@ export default function DashboardScreen() {
     );
   }
 
-  const handleNewVisit = () => {
-    router.push("/create-visit");
+  const handleNewCase = () => {
+    router.push("/create-case");
   };
 
   // Guard: ensure doctor exists before rendering
@@ -163,23 +194,23 @@ export default function DashboardScreen() {
           <View style={styles.quickActionsSection}>
             {/* <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text> */}
             <Button
-              title="New Visit"
-              onPress={handleNewVisit}
+              title="New Case"
+              onPress={handleNewCase}
               variant="primary"
             />
           </View>
 
-          {/* Recent Visits */}
-          <View style={styles.recentVisitsSection}>
+          {/* Recent Cases */}
+          <View style={styles.recentCasesSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Recent Visits
+              Recent Cases
             </Text>
-            {recentVisits.length > 0 ? (
-              <Card style={styles.visitsCard}>
+            {recentCases.length > 0 ? (
+              <Card style={styles.casesCard}>
                 <FlatList
-                  data={recentVisits}
-                  renderItem={renderVisitItem}
-                  keyExtractor={(item) => String(item.visitId)}
+                  data={recentCases}
+                  renderItem={renderCaseItem}
+                  keyExtractor={(item) => String(item.caseId)}
                   scrollEnabled={false}
                   ItemSeparatorComponent={() => (
                     <View
@@ -194,7 +225,7 @@ export default function DashboardScreen() {
             ) : (
               <Card style={styles.emptyCard}>
                 <Text style={[styles.emptyText, { color: colors.muted }]}>
-                  No recent visits
+                  No recent cases
                 </Text>
               </Card>
             )}
@@ -246,10 +277,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 16,
   },
-  recentVisitsSection: {
+  recentCasesSection: {
     marginTop: 24,
   },
-  visitsCard: {
+  casesCard: {
     paddingVertical: 0,
   },
   separator: {
@@ -293,6 +324,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     minHeight: 44,
   },
+  visitRowTap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  visitDeleteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
   visitAvatar: {
     width: 44,
     height: 44,
@@ -327,57 +372,79 @@ const styles = StyleSheet.create({
   },
 });
 
-// Row with animal face avatar for dashboard recent visits
-interface VisitRowProps {
+// Row with animal face avatar for dashboard recent cases
+interface CaseRowProps {
   animalId: number;
   title: string;
   subtitle: string;
   onPress: () => void;
+  onDelete: () => void;
+  isDeleting?: boolean;
 }
 
-function VisitRow({
+function CaseRow({
   animalId,
   title,
   subtitle,
   onPress,
-}: VisitRowProps) {
+  onDelete,
+  isDeleting,
+}: CaseRowProps) {
   const { colors } = useTheme();
   const { data: animalImages = [] } = useAnimalImages(animalId);
   const faceUrl =
     animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
 
   return (
-    <TouchableOpacity
-      style={styles.visitRow}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View
-        style={[styles.visitAvatar, { backgroundColor: colors.border }]}
+    <View style={styles.visitRow}>
+      <TouchableOpacity
+        style={styles.visitRowTap}
+        onPress={onPress}
+        activeOpacity={0.7}
       >
-        {faceUrl ? (
-          <Image
-            source={{ uri: faceUrl }}
-            style={styles.visitAvatarImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <Text
-            style={[styles.visitAvatarPlaceholder, { color: colors.muted }]}
-          >
-            ?
+        <View
+          style={[styles.visitAvatar, { backgroundColor: colors.border }]}
+        >
+          {faceUrl ? (
+            <Image
+              source={{ uri: faceUrl }}
+              style={styles.visitAvatarImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text
+              style={[styles.visitAvatarPlaceholder, { color: colors.muted }]}
+            >
+              ?
+            </Text>
+          )}
+        </View>
+        <View style={styles.visitRowContent}>
+          <Text style={[styles.visitRowTitle, { color: colors.text }]} numberOfLines={1}>
+            {title}
           </Text>
+          <Text style={[styles.visitRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        <Text style={[styles.visitRowChevron, { color: colors.muted }]}>›</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onDelete}
+        disabled={isDeleting}
+        style={[
+          styles.visitDeleteBtn,
+          { borderColor: colors.danger },
+          isDeleting && { opacity: 0.5 },
+        ]}
+        activeOpacity={0.7}
+      >
+        {isDeleting ? (
+          <ActivityIndicator size="small" color={colors.danger} />
+        ) : (
+          <FontAwesome name="trash-o" size={16} color={colors.danger} />
         )}
-      </View>
-      <View style={styles.visitRowContent}>
-        <Text style={[styles.visitRowTitle, { color: colors.text }]} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={[styles.visitRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
-          {subtitle}
-        </Text>
-      </View>
-      <Text style={[styles.visitRowChevron, { color: colors.muted }]}>›</Text>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }

@@ -112,6 +112,7 @@ export interface AnimalInfoFromImage {
   weight_kg?: number | null;
   color?: string | null;
   sex?: string | null;
+  ai_summary?: string | null;
 }
 
 export interface AnalyzeAnimalImageRequest {
@@ -138,14 +139,19 @@ export interface AnalyzeAnimalImageApiResponse {
   };
 }
 
+// Vet API base URL (analyze-animal moved to pak-vets-api)
+const VET_API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  "https://pak-vets-dev.roundrocktennis.com";
+
 /**
- * Analyze animal from 3 image URLs (face, ear, body) via shared-services Groq vision.
+ * Analyze animal from 3 image URLs (face, ear, body) via pak-vets Groq vision.
  */
 export async function analyzeAnimalImage(
   request: AnalyzeAnimalImageRequest,
 ): Promise<AnimalInfoFromImage> {
   const response = await axios.post<AnalyzeAnimalImageApiResponse>(
-    `${SHARED_SERVICES_API_URL}/image/analyze-animal`,
+    `${VET_API_URL}/image/analyze-animal`,
     request,
     { headers: { "Content-Type": "application/json" } },
   );

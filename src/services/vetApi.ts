@@ -6,20 +6,20 @@ import type {
   Animal,
   CreateAnimalRequest,
   UpdateAnimalRequest,
-  Visit,
-  CreateVisitRequest,
-  UpdateVisitRequest,
-  VisitDiagnosis,
-  CreateVisitDiagnosisRequest,
-  UpdateVisitDiagnosisRequest,
+  Case,
+  CreateCaseRequest,
+  UpdateCaseRequest,
+  CaseDiagnosis,
+  CreateCaseDiagnosisRequest,
+  UpdateCaseDiagnosisRequest,
   DiagnosisSuggestion,
-  VisitTreatment,
-  CreateVisitTreatmentRequest,
-  UpdateVisitTreatmentRequest,
+  CaseTreatment,
+  CreateCaseTreatmentRequest,
+  UpdateCaseTreatmentRequest,
   TreatmentSuggestion,
-  VisitNote,
-  CreateVisitNoteRequest,
-  UpdateVisitNoteRequest,
+  CaseNote,
+  CreateCaseNoteRequest,
+  UpdateCaseNoteRequest,
   MediaFile,
   CreateMediaFileRequest,
   UpdateMediaFileRequest,
@@ -178,74 +178,74 @@ export const animalApi = {
   },
 };
 
-// Visits API
-export const visitApi = {
-  getVisit: async (visitId: number): Promise<Visit> => {
-    const response = await apiClient.instance.get<ApiSuccessResponse<Visit>>(
-      `/visits/${visitId}`,
+// Cases API
+export const caseApi = {
+  getCase: async (caseId: number): Promise<Case> => {
+    const response = await apiClient.instance.get<ApiSuccessResponse<Case>>(
+      `/cases/${caseId}`,
     );
     return response.data.data;
   },
 
-  getAllVisits: async (): Promise<Visit[]> => {
+  getAllCases: async (): Promise<Case[]> => {
     const response =
-      await apiClient.instance.get<ApiSuccessResponse<Visit[]>>("/visits");
+      await apiClient.instance.get<ApiSuccessResponse<Case[]>>("/cases");
     return response.data.data;
   },
 
-  getVisitsByAnimal: async (animalId: number): Promise<Visit[]> => {
-    const response = await apiClient.instance.get<ApiSuccessResponse<Visit[]>>(
-      `/animals/${animalId}/visits`,
+  getCasesByAnimal: async (animalId: number): Promise<Case[]> => {
+    const response = await apiClient.instance.get<ApiSuccessResponse<Case[]>>(
+      `/animals/${animalId}/cases`,
     );
     return response.data.data;
   },
 
-  getVisitsByDoctor: async (doctorId: number): Promise<Visit[]> => {
-    const response = await apiClient.instance.get<ApiSuccessResponse<Visit[]>>(
-      `/doctors/${doctorId}/visits`,
+  getCasesByDoctor: async (doctorId: number): Promise<Case[]> => {
+    const response = await apiClient.instance.get<ApiSuccessResponse<Case[]>>(
+      `/doctors/${doctorId}/cases`,
     );
     return response.data.data;
   },
 
-  createVisit: async (request: CreateVisitRequest): Promise<Visit> => {
-    const response = await apiClient.instance.post<ApiSuccessResponse<Visit>>(
-      "/visits",
+  createCase: async (request: CreateCaseRequest): Promise<Case> => {
+    const response = await apiClient.instance.post<ApiSuccessResponse<Case>>(
+      "/cases",
       request,
     );
     return response.data.data;
   },
 
-  updateVisit: async (
-    visitId: number,
-    request: UpdateVisitRequest,
-  ): Promise<Visit> => {
-    const response = await apiClient.instance.put<ApiSuccessResponse<Visit>>(
-      `/visits/${visitId}`,
+  updateCase: async (
+    caseId: number,
+    request: UpdateCaseRequest,
+  ): Promise<Case> => {
+    const response = await apiClient.instance.put<ApiSuccessResponse<Case>>(
+      `/cases/${caseId}`,
       request,
     );
     return response.data.data;
   },
 
-  deleteVisit: async (visitId: number): Promise<void> => {
-    await apiClient.instance.delete(`/visits/${visitId}`);
+  deleteCase: async (caseId: number): Promise<void> => {
+    await apiClient.instance.delete(`/cases/${caseId}`);
   },
 };
 
-// Visit Diagnoses API
-export const visitDiagnosisApi = {
-  getVisitDiagnosis: async (diagnosisId: number): Promise<VisitDiagnosis> => {
+// Case Diagnoses API
+export const caseDiagnosisApi = {
+  getCaseDiagnosis: async (diagnosisId: number): Promise<CaseDiagnosis> => {
     const response = await apiClient.instance.get<
-      ApiSuccessResponse<VisitDiagnosis>
-    >(`/visit-diagnoses/${diagnosisId}`);
+      ApiSuccessResponse<CaseDiagnosis>
+    >(`/case-diagnoses/${diagnosisId}`);
     return response.data.data;
   },
 
-  getVisitDiagnosesByVisit: async (
-    visitId: number,
-  ): Promise<VisitDiagnosis[]> => {
+  getCaseDiagnosesByCase: async (
+    caseId: number,
+  ): Promise<CaseDiagnosis[]> => {
     const response = await apiClient.instance.get<
-      ApiSuccessResponse<VisitDiagnosis[]>
-    >(`/visits/${visitId}/diagnoses`);
+      ApiSuccessResponse<CaseDiagnosis[]>
+    >(`/cases/${caseId}/diagnoses`);
     return response.data.data;
   },
 
@@ -254,136 +254,136 @@ export const visitDiagnosisApi = {
   ): Promise<DiagnosisSuggestion[]> => {
     const response = await apiClient.instance.post<
       ApiSuccessResponse<DiagnosisSuggestion[]>
-    >("/visit-diagnoses/suggest", { complaint });
+    >("/case-diagnoses/suggest", { complaint });
     return response.data.data;
   },
 
-  createVisitDiagnosis: async (
-    request: CreateVisitDiagnosisRequest,
-  ): Promise<VisitDiagnosis> => {
+  createCaseDiagnosis: async (
+    request: CreateCaseDiagnosisRequest,
+  ): Promise<CaseDiagnosis> => {
     const response = await apiClient.instance.post<
-      ApiSuccessResponse<VisitDiagnosis>
-    >("/visit-diagnoses", request);
+      ApiSuccessResponse<CaseDiagnosis>
+    >("/case-diagnoses", request);
     return response.data.data;
   },
 
-  updateVisitDiagnosis: async (
+  updateCaseDiagnosis: async (
     diagnosisId: number,
-    request: UpdateVisitDiagnosisRequest,
-  ): Promise<VisitDiagnosis> => {
+    request: UpdateCaseDiagnosisRequest,
+  ): Promise<CaseDiagnosis> => {
     const response = await apiClient.instance.put<
-      ApiSuccessResponse<VisitDiagnosis>
-    >(`/visit-diagnoses/${diagnosisId}`, request);
+      ApiSuccessResponse<CaseDiagnosis>
+    >(`/case-diagnoses/${diagnosisId}`, request);
     return response.data.data;
   },
 
-  deleteVisitDiagnosis: async (diagnosisId: number): Promise<void> => {
-    await apiClient.instance.delete(`/visit-diagnoses/${diagnosisId}`);
+  deleteCaseDiagnosis: async (diagnosisId: number): Promise<void> => {
+    await apiClient.instance.delete(`/case-diagnoses/${diagnosisId}`);
   },
 };
 
-// Visit Treatments API
-export const visitTreatmentApi = {
+// Case Treatments API
+export const caseTreatmentApi = {
   suggestTreatments: async (
     diagnoses: Array<{ diagnosis_text: string; status: "SUSPECTED" | "CONFIRMED" }>,
   ): Promise<TreatmentSuggestion[]> => {
     const response = await apiClient.instance.post<
       ApiSuccessResponse<TreatmentSuggestion[]>
-    >("/visit-treatments/suggest", { diagnoses });
+    >("/case-treatments/suggest", { diagnoses });
     return response.data.data;
   },
 
-  getVisitTreatment: async (treatmentId: number): Promise<VisitTreatment> => {
+  getCaseTreatment: async (treatmentId: number): Promise<CaseTreatment> => {
     const response = await apiClient.instance.get<
-      ApiSuccessResponse<VisitTreatment>
-    >(`/visit-treatments/${treatmentId}`);
+      ApiSuccessResponse<CaseTreatment>
+    >(`/case-treatments/${treatmentId}`);
     return response.data.data;
   },
 
-  getVisitTreatmentsByVisit: async (
-    visitId: number,
-  ): Promise<VisitTreatment[]> => {
+  getCaseTreatmentsByCase: async (
+    caseId: number,
+  ): Promise<CaseTreatment[]> => {
     const response = await apiClient.instance.get<
-      ApiSuccessResponse<VisitTreatment[]>
-    >(`/visits/${visitId}/treatments`);
+      ApiSuccessResponse<CaseTreatment[]>
+    >(`/cases/${caseId}/treatments`);
     return response.data.data;
   },
 
-  createVisitTreatment: async (
-    request: CreateVisitTreatmentRequest,
-  ): Promise<VisitTreatment> => {
+  createCaseTreatment: async (
+    request: CreateCaseTreatmentRequest,
+  ): Promise<CaseTreatment> => {
     const response = await apiClient.instance.post<
-      ApiSuccessResponse<VisitTreatment>
-    >("/visit-treatments", request);
+      ApiSuccessResponse<CaseTreatment>
+    >("/case-treatments", request);
     return response.data.data;
   },
 
-  updateVisitTreatment: async (
+  updateCaseTreatment: async (
     treatmentId: number,
-    request: UpdateVisitTreatmentRequest,
-  ): Promise<VisitTreatment> => {
+    request: UpdateCaseTreatmentRequest,
+  ): Promise<CaseTreatment> => {
     const response = await apiClient.instance.put<
-      ApiSuccessResponse<VisitTreatment>
-    >(`/visit-treatments/${treatmentId}`, request);
+      ApiSuccessResponse<CaseTreatment>
+    >(`/case-treatments/${treatmentId}`, request);
     return response.data.data;
   },
 
-  deleteVisitTreatment: async (treatmentId: number): Promise<void> => {
-    await apiClient.instance.delete(`/visit-treatments/${treatmentId}`);
+  deleteCaseTreatment: async (treatmentId: number): Promise<void> => {
+    await apiClient.instance.delete(`/case-treatments/${treatmentId}`);
   },
 };
 
-// Visit Notes API
-export const visitNoteApi = {
-  getVisitNote: async (noteId: number): Promise<VisitNote> => {
+// Case Notes API
+export const caseNoteApi = {
+  getCaseNote: async (noteId: number): Promise<CaseNote> => {
     const response = await apiClient.instance.get<
-      ApiSuccessResponse<VisitNote>
-    >(`/visit-notes/${noteId}`);
+      ApiSuccessResponse<CaseNote>
+    >(`/case-notes/${noteId}`);
     return response.data.data;
   },
 
-  getVisitNotesByVisit: async (visitId: number): Promise<VisitNote[]> => {
+  getCaseNotesByCase: async (caseId: number): Promise<CaseNote[]> => {
     const response = await apiClient.instance.get<
-      ApiSuccessResponse<VisitNote[]>
-    >(`/visits/${visitId}/notes`);
+      ApiSuccessResponse<CaseNote[]>
+    >(`/cases/${caseId}/notes`);
     return response.data.data;
   },
 
-  createVisitNote: async (
-    request: CreateVisitNoteRequest,
-  ): Promise<VisitNote> => {
+  createCaseNote: async (
+    request: CreateCaseNoteRequest,
+  ): Promise<CaseNote> => {
     const response = await apiClient.instance.post<
-      ApiSuccessResponse<VisitNote>
-    >("/visit-notes", request);
+      ApiSuccessResponse<CaseNote>
+    >("/case-notes", request);
     return response.data.data;
   },
 
-  updateVisitNote: async (
+  updateCaseNote: async (
     noteId: number,
-    request: UpdateVisitNoteRequest,
-  ): Promise<VisitNote> => {
+    request: UpdateCaseNoteRequest,
+  ): Promise<CaseNote> => {
     const response = await apiClient.instance.put<
-      ApiSuccessResponse<VisitNote>
-    >(`/visit-notes/${noteId}`, request);
+      ApiSuccessResponse<CaseNote>
+    >(`/case-notes/${noteId}`, request);
     return response.data.data;
   },
 
-  deleteVisitNote: async (noteId: number): Promise<void> => {
-    await apiClient.instance.delete(`/visit-notes/${noteId}`);
+  deleteCaseNote: async (noteId: number): Promise<void> => {
+    await apiClient.instance.delete(`/case-notes/${noteId}`);
   },
 };
 
 // Media Files API
 export const mediaFileApi = {
   getPresignedUrl: async (
-    visitId: number,
+    caseId: number,
     fileType: "AUDIO" | "IMAGE" | "VIDEO" | "DOC",
     fileName: string,
   ): Promise<PresignedUrlResponse> => {
     const response = await apiClient.instance.post<
       ApiSuccessResponse<PresignedUrlResponse>
     >("/media-files/presigned-url", {
-      visitId,
+      caseId,
       fileType,
       fileName,
     });
@@ -397,10 +397,10 @@ export const mediaFileApi = {
     return response.data.data;
   },
 
-  getMediaFilesByVisit: async (visitId: number): Promise<MediaFile[]> => {
+  getMediaFilesByCase: async (caseId: number): Promise<MediaFile[]> => {
     const response = await apiClient.instance.get<
       ApiSuccessResponse<MediaFile[]>
-    >(`/visits/${visitId}/media-files`);
+    >(`/cases/${caseId}/media-files`);
     return response.data.data;
   },
 

@@ -25,7 +25,7 @@ export default function AddMediaScreen() {
   const params = useLocalSearchParams();
   const { colors } = useTheme();
 
-  const visitId = params.visitId ? Number(params.visitId) : undefined;
+  const caseId = params.caseId ? Number(params.caseId) : undefined;
   const createMediaMutation = useCreateMediaFile();
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -126,8 +126,8 @@ export default function AddMediaScreen() {
   };
 
   const handleUpload = async () => {
-    if (!visitId) {
-      Alert.alert("Error", "Visit ID is missing");
+    if (!caseId) {
+      Alert.alert("Error", "Case ID is missing");
       return;
     }
 
@@ -147,7 +147,7 @@ export default function AddMediaScreen() {
 
       try {
         const presignedResponse = await mediaFileApi.getPresignedUrl(
-          visitId,
+          caseId,
           "IMAGE",
           selectedImageName,
         );
@@ -183,7 +183,7 @@ export default function AddMediaScreen() {
 
         if (is404 || is404Message) {
           // Generate a temporary s3Key for testing
-          s3Key = `visits/${visitId}/images/${Date.now()}_${selectedImageName}`;
+          s3Key = `cases/${caseId}/images/${Date.now()}_${selectedImageName}`;
           url = selectedImage; // Use local URI temporarily
           setUploadProgress(50); // Skip S3 upload step
         } else {
@@ -195,15 +195,15 @@ export default function AddMediaScreen() {
       // Step 3: Create media file record with s3Key
       setUploadProgress(80);
       await createMediaMutation.mutateAsync({
-        visitId,
+        caseId,
         fileType: "IMAGE",
         s3Key,
         url,
       });
       setUploadProgress(100);
 
-      // Navigate back to visit detail
-      router.replace(`/visit-detail?visitId=${visitId}`);
+      // Navigate back to case detail
+      router.replace(`/case-detail?caseId=${caseId}`);
     } catch (error) {
       console.error("Upload error:", error);
       Alert.alert(
@@ -217,7 +217,7 @@ export default function AddMediaScreen() {
     }
   };
 
-  if (!visitId) {
+  if (!caseId) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -225,7 +225,7 @@ export default function AddMediaScreen() {
         <StatusBar style="auto" />
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.text }]}>
-            Invalid visit ID
+            Invalid case ID
           </Text>
           <Button
             title="Go Back"

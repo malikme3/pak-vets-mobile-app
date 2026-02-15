@@ -17,8 +17,8 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
 import { useAnimal, useAnimalImages } from "../features/animals/hooks";
-import { useVisitsByAnimal } from "../features/visits/hooks";
-import type { Visit } from "../types/api";
+import { useCasesByAnimal } from "../features/cases/hooks";
+import type { Case } from "../types/api";
 
 export default function AnimalDetailsScreen() {
   const router = useRouter();
@@ -32,7 +32,7 @@ export default function AnimalDetailsScreen() {
     isLoading: animalImagesLoading,
     refetch: refetchAnimalImages,
   } = useAnimalImages(animalId || 0);
-  const { data: visits = [], isLoading: visitsLoading } = useVisitsByAnimal(
+  const { data: cases = [], isLoading: casesLoading } = useCasesByAnimal(
     animalId || 0,
   );
 
@@ -55,20 +55,20 @@ export default function AnimalDetailsScreen() {
     });
   };
 
-  const renderVisitItem = ({ item }: { item: Visit }) => {
-    const subtitle = `${formatDate(item.visitDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
+  const renderCaseItem = ({ item }: { item: Case }) => {
+    const subtitle = `${formatDate(item.caseDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
     return (
       <ListRow
-        title="Visit"
+        title="Case"
         subtitle={subtitle}
-        onPress={() => router.push(`/visit-detail?visitId=${item.visitId}`)}
+        onPress={() => router.push(`/case-detail?caseId=${item.caseId}`)}
       />
     );
   };
 
-  const handleCreateVisit = () => {
+  const handleCreateCase = () => {
     router.push({
-      pathname: "/create-visit",
+      pathname: "/create-case",
       params: { animalId: String(animalId) },
     });
   };
@@ -230,25 +230,25 @@ export default function AnimalDetailsScreen() {
           )}
         </Card>
 
-        {/* Create Visit Button */}
+        {/* Create Case Button */}
         <Button
-          title="Create Visit"
-          onPress={handleCreateVisit}
+          title="Create Case"
+          onPress={handleCreateCase}
           variant="primary"
-          style={styles.createVisitButton}
+          style={styles.createCaseButton}
         />
 
-        {/* Visit History */}
-        <View style={styles.visitsSection}>
+        {/* Case History */}
+        <View style={styles.casesSection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Visit History
+            Case History
           </Text>
-          {visits.length > 0 ? (
-            <Card style={styles.visitsCard}>
+          {cases.length > 0 ? (
+            <Card style={styles.casesCard}>
               <FlatList
-                data={visits}
-                renderItem={renderVisitItem}
-                keyExtractor={(item) => String(item.visitId)}
+                data={cases}
+                renderItem={renderCaseItem}
+                keyExtractor={(item) => String(item.caseId)}
                 scrollEnabled={false}
                 ItemSeparatorComponent={() => (
                   <View
@@ -263,7 +263,7 @@ export default function AnimalDetailsScreen() {
           ) : (
             <Card style={styles.emptyCard}>
               <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No visits recorded
+                No cases recorded
               </Text>
             </Card>
           )}
@@ -308,13 +308,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: "500",
   },
-  createVisitButton: {
+  createCaseButton: {
     marginBottom: 24,
   },
-  visitsSection: {
+  casesSection: {
     marginTop: 8,
   },
-  visitsCard: {
+  casesCard: {
     paddingVertical: 0,
   },
   separator: {
