@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pak Vets Mobile App - Case Flow Book</title>
+  <style>
+    @media print {
+      .page-break { page-break-before: always; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    .cover {
+      text-align: center;
+      padding: 60px 20px;
+      min-height: 80vh;
+    }
+    .cover h1 {
+      font-size: 28px;
+      margin-bottom: 12px;
+      color: #1a1a1a;
+    }
+    .cover .subtitle {
+      font-size: 16px;
+      color: #666;
+    }
+    .cover .context {
+      margin-top: 40px;
+      font-size: 14px;
+      color: #888;
+    }
+    h2 {
+      font-size: 20px;
+      color: #1a1a1a;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #22c55e;
+    }
+    .step {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .step-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+    .step-desc {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .screenshot {
+      width: 100%;
+      max-width: 375px;
+      margin: 0 auto;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .flow-arrow {
+      text-align: center;
+      color: #22c55e;
+      font-size: 24px;
+      margin: 8px 0;
+    }
+    .toc {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+    }
+    .toc h2 { margin-top: 0; }
+    .toc ol {
+      padding-left: 24px;
+      line-height: 2;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <h1>Pak Vets Mobile App</h1>
+    <p class="subtitle">Case Creation Flow Book</p>
+    <p class="context">Assumes doctor is registered and signed in</p>
+    <p class="context">Flow: Create Case → Select Animal → Case Detail → Add Diagnoses/Treatments/Notes → Save → Home</p>
+  </div>
+
+  <div class="toc page-break">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>Dashboard (Home)</li>
+      <li>Create New Case – Select Animal</li>
+      <li>Search Animal (Find by Image / Search by Tag)</li>
+      <li>Create New Case – Form Complete</li>
+      <li>Case Detail – Overview</li>
+      <li>Case Detail – Diagnoses (AI Suggestions)</li>
+      <li>Case Detail – Add Diagnosis & Treatments</li>
+      <li>Case Detail – Treatments & Notes</li>
+      <li>Case Detail – Save & Return Home</li>
+    </ol>
+  </div>
+
+  <h2>1. Dashboard (Home)</h2>
+  <div class="step">
+    <div class="step-title">Entry Point</div>
+    <div class="step-desc">Doctor lands on the dashboard. Shows welcome, doctor info (name, location), New Case button, and recent cases. Tap New Case to start, or tap a recent case to open it.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.56.07-f96aed65-724a-49de-a0e8-cb5b2e8e561b.png" alt="Dashboard" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>2. Create New Case – Select Animal</h2>
+  <div class="step">
+    <div class="step-title">Initial Case Form</div>
+    <div class="step-desc">Create New Case screen. Must select an animal first. Tap Select Animal to search or create. Case Date & Time and Chief Complaint (text or voice) can be filled. Create Case is disabled until animal is selected.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.56.14-7de0a4d0-a623-46de-8b43-c04fc2ab0474.png" alt="Create Case - No animal" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>3. Search Animal</h2>
+  <div class="step">
+    <div class="step-title">Find by Image or Search</div>
+    <div class="step-desc">Search Animal screen. Find by image: choose Body/Ear/Face, pick photo to match enrolled animal. Search by: Tag ID, Owner Name, or Phone. If not found, Create New Animal. When match found, select animal to return to Create Case.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.56.33-94ff38f6-be61-4714-a5bc-92c2db78eb6f.png" alt="Search Animal - Matching" class="screenshot" />
+  </div>
+
+  <div class="step">
+    <div class="step-title">Match Found</div>
+    <div class="step-desc">Image match shows confidence (e.g. 99% match). Tap the matched animal row to select and return to Create Case.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.56.55-00ab9cf7-eed6-43ea-aeea-6c8152470b04.png" alt="Search Animal - Match found" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>4. Create New Case – Form Complete</h2>
+  <div class="step">
+    <div class="step-title">Ready to Create</div>
+    <div class="step-desc">Animal selected (avatar, species, tagline, owner). Case Date & Time set. Chief Complaint entered (text or voice). Tap Create Case to create and go to Case Detail.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.57.32-4b3fa64a-455d-4197-ba49-d00dbaba7b4b.png" alt="Create Case - With animal" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>5. Case Detail – Overview</h2>
+  <div class="step">
+    <div class="step-title">Case Summary & Sections</div>
+    <div class="step-desc">Header shows date, chief complaint, animal. Collapsible sections: Case, Animal, Diagnoses, Treatments, Notes, Media. Expand to view or add content.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.57.25-7cac5752-1fb4-423f-aedf-70cffedbcb72.png" alt="Case Detail - Overview" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>6. Case Detail – Diagnoses (AI Suggestions)</h2>
+  <div class="step">
+    <div class="step-title">Get AI Suggestions</div>
+    <div class="step-desc">Diagnoses section. Tap Get AI suggestions to receive diagnosis suggestions based on chief complaint. Suggested diagnoses show with CONFIRMED/SUSPECTED status. Tap + Add to add each to the case.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.57.47-f9006263-d015-441d-bde7-a02ce76f00ab.png" alt="Case Detail - Suggested diagnoses" class="screenshot" />
+  </div>
+
+  <div class="step">
+    <div class="step-title">Animal Details</div>
+    <div class="step-desc">Animal section expanded: Species, Tagline, Short Summary, Owner, Phone, AI Summary. Link to View profile.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.57.37-2563e227-0d16-4339-bc67-efd9c5651b54.png" alt="Case Detail - Animal" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>7. Case Detail – Add Diagnosis & Treatments</h2>
+  <div class="step">
+    <div class="step-title">Confirmed Diagnosis & Suggested Treatments</div>
+    <div class="step-desc">After adding a diagnosis (e.g. Left side intestinal obstruction – CONFIRMED), AI suggests treatments: PROCEDURE, MEDICATION, ADVICE. Tap checkmark to add each. Edit icon to modify.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.57.56-40cbe4d9-cc7f-4ed9-945e-f6906fcc60fe.png" alt="Case Detail - Treatments suggested" class="screenshot" />
+  </div>
+
+  <div class="step">
+    <div class="step-title">Treatments with Suggested Items</div>
+    <div class="step-desc">Treatments section shows added items (e.g. exploratory surgery, Metronidazole, supportive care). Each can be marked complete or edited.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.58.08-1f92b7bf-d07b-4c2b-9a8f-7f1fd7c36ac6.png" alt="Case Detail - Treatments list" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>8. Case Detail – Treatments & Notes</h2>
+  <div class="step">
+    <div class="step-title">Completed Advice & Medication</div>
+    <div class="step-desc">ADVICE and MEDICATION with checkmarks (completed). Planned treatments (e.g. Metronidazole) show PLANNED status with edit option. Notes and Media sections available to add.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.58.38-d6a6cf80-00c4-493d-bf59-b6ae82f779d2.png" alt="Case Detail - Treatments completed" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <h2>9. Case Detail – Save & Return Home</h2>
+  <div class="step">
+    <div class="step-title">Final Step – Save</div>
+    <div class="step-desc">Scroll to bottom. Tap Save to finalize the case and return to the Home (Dashboard). The new case appears in Recent Cases.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.58.41-005713ce-d862-4308-9cc1-0fd1465b3da6.png" alt="Case Detail - Save button" class="screenshot" />
+  </div>
+
+  <div class="flow-arrow">↓</div>
+
+  <div class="step">
+    <div class="step-title">Back to Dashboard</div>
+    <div class="step-desc">After Save, user returns to Home. New case (e.g. Case #5) appears in Recent Cases list. Flow complete.</div>
+    <img src="assets/Simulator_Screenshot_-_iPhone_13_Pro_Max_-_2026-02-15_at_21.58.47-53828b4d-78c0-45da-a09f-4ea08ca31768.png" alt="Dashboard - After save" class="screenshot" />
+  </div>
+
+  <div class="page-break" style="padding: 40px 0; text-align: center; color: #888; font-size: 14px;">
+    — End of Flow Book —
+  </div>
+</body>
+</html>
