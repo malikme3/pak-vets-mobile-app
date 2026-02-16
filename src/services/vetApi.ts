@@ -121,7 +121,7 @@ export const animalApi = {
     await apiClient.instance.delete(`/animals/${animalId}`);
   },
 
-  // Search animals by tag ID, owner name, or owner phone
+  // Search animals by tag ID, farmer name, or farmer phone
   searchAnimals: async (query: string): Promise<Animal[]> => {
     // Since backend doesn't have a search endpoint, we'll fetch all and filter client-side
     // TODO: Implement proper search endpoint on backend
@@ -130,8 +130,8 @@ export const animalApi = {
     return allAnimals.filter(
       (animal) =>
         animal.tagId?.toLowerCase().includes(lowerQuery) ||
-        animal.ownerName?.toLowerCase().includes(lowerQuery) ||
-        animal.ownerPhone?.includes(query),
+        animal.farmer?.fullName?.toLowerCase().includes(lowerQuery) ||
+        animal.farmer?.phoneNumber?.includes(query),
     );
   },
 

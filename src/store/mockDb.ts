@@ -11,24 +11,36 @@ export const mockDoctors: Doctor[] = [
 export const mockAnimals: Animal[] = [
   {
     id: "1",
-    owner_name: "Ali Hassan",
-    owner_phone: "+92-300-1111111",
+    farmer_id: 1,
+    farmer: {
+      fullName: "Ali Hassan",
+      phoneNumber: "+92-300-1111111",
+      villageName: "Village A",
+    },
     species: "Cattle",
     breed: "Sahiwal",
     tag_id: "TAG-001",
   },
   {
     id: "2",
-    owner_name: "Fatima Bibi",
-    owner_phone: "+92-300-2222222",
+    farmer_id: 2,
+    farmer: {
+      fullName: "Fatima Bibi",
+      phoneNumber: "+92-300-2222222",
+      villageName: "Village B",
+    },
     species: "Goat",
     breed: "Beetal",
     tag_id: "TAG-002",
   },
   {
     id: "3",
-    owner_name: "Muhammad Asif",
-    owner_phone: "+92-300-3333333",
+    farmer_id: 3,
+    farmer: {
+      fullName: "Muhammad Asif",
+      phoneNumber: "+92-300-3333333",
+      villageName: "Village C",
+    },
     species: "Buffalo",
     breed: "Nili-Ravi",
     tag_id: "TAG-003",

@@ -26,7 +26,7 @@ import { animalApi } from "../services/vetApi";
 import { getUploadSignedUrl, getBucketName } from "../services/sharedServicesApi";
 import type { Animal, MatchAnimalImageResponse } from "../types/api";
 
-type SearchFilter = "tag" | "owner_name" | "owner_phone";
+type SearchFilter = "tag" | "farmer_name" | "farmer_phone";
 type ImageMatchType = "FACE" | "EAR" | "BODY";
 
 export default function SelectAnimalScreen() {
@@ -42,11 +42,11 @@ export default function SelectAnimalScreen() {
   const [matchResult, setMatchResult] = useState<MatchAnimalImageResponse | null>(null);
   const [matchedAnimal, setMatchedAnimal] = useState<Animal | null>(null);
 
-  // Build effective search query: tag-001, 009-0333-6831-836, or raw for owner name
+  // Build effective search query: tag-001, 009-0333-6831-836, or raw for farmer name
   const searchQuery =
     filter === "tag"
       ? `tag-${inputValue}`
-      : filter === "owner_phone"
+      : filter === "farmer_phone"
         ? `009-${inputValue}`
         : inputValue;
 
@@ -68,10 +68,10 @@ export default function SelectAnimalScreen() {
       switch (filter) {
         case "tag":
           return animal.tagId?.toLowerCase().includes(query);
-        case "owner_name":
-          return animal.ownerName?.toLowerCase().includes(query);
-        case "owner_phone":
-          return animal.ownerPhone?.includes(searchQuery);
+        case "farmer_name":
+          return animal.farmer?.fullName?.toLowerCase().includes(query);
+        case "farmer_phone":
+          return animal.farmer?.phoneNumber?.includes(searchQuery);
         default:
           return false;
       }
@@ -88,7 +88,7 @@ export default function SelectAnimalScreen() {
 
   const handleInputChange = useCallback(
     (text: string) => {
-      if (filter === "owner_phone") {
+      if (filter === "farmer_phone") {
         setInputValue(formatPhoneInput(text));
       } else {
         setInputValue(text);
@@ -120,6 +120,14 @@ export default function SelectAnimalScreen() {
       );
     },
     [router, returnTo],
+  );
+
+  // ScrollView button pattern: delay press to avoid cancel (see development-guidelines.md)
+  const handlePressAnimal = useCallback(
+    (animal: Animal) => {
+      setTimeout(() => handleAnimalSelect(animal), 50);
+    },
+    [handleAnimalSelect],
   );
 
   const handleCreateAnimal = () => {
@@ -221,8 +229,8 @@ export default function SelectAnimalScreen() {
   const formatAnimalSubtitle = (a: Animal) => {
     const parts: string[] = [];
     if (a.animalTagline) parts.push(a.animalTagline);
-    parts.push(a.ownerName || "Unknown Owner");
-    if (a.ownerPhone) parts.push(a.ownerPhone);
+    parts.push(a.farmer?.fullName || "Unknown Farmer");
+    if (a.farmer?.phoneNumber) parts.push(a.farmer.phoneNumber);
     return parts.join(" • ");
   };
 
@@ -230,7 +238,7 @@ export default function SelectAnimalScreen() {
     <ListRow
       title={formatAnimalTitle(item)}
       subtitle={formatAnimalSubtitle(item)}
-      onPress={() => handleAnimalSelect(item)}
+      onPress={() => handlePressAnimal(item)}
     />
   );
 
@@ -347,14 +355,14 @@ export default function SelectAnimalScreen() {
           <SegmentedControl
             options={[
               { label: "Tag ID", value: "tag" },
-              { label: "Owner Name", value: "owner_name" },
-              { label: "Phone", value: "owner_phone" },
+              { label: "Farmer Name", value: "farmer_name" },
+              { label: "Phone", value: "farmer_phone" },
             ]}
             selectedValue={filter}
             onValueChange={(value) => handleFilterChange(value as SearchFilter)}
           />
           <View style={[styles.searchInputRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-            {(filter === "tag" || filter === "owner_phone") && (
+            {(filter === "tag" || filter === "farmer_phone") && (
               <Text style={[styles.searchPrefix, { color: colors.text }]}>
                 {filter === "tag" ? "tag-" : "0092-"}
               </Text>
@@ -365,16 +373,16 @@ export default function SelectAnimalScreen() {
                 {
                   color: colors.text,
                 },
-                (filter === "tag" || filter === "owner_phone") && styles.searchInputWithPrefix,
+                (filter === "tag" || filter === "farmer_phone") && styles.searchInputWithPrefix,
               ]}
               value={inputValue}
               onChangeText={handleInputChange}
               placeholder={
                 filter === "tag"
                   ? "001"
-                  : filter === "owner_phone"
+                  : filter === "farmer_phone"
                     ? "0333-6831-836"
-                    : "Owner name"
+                    : "Farmer name"
               }
               placeholderTextColor={colors.muted}
             />

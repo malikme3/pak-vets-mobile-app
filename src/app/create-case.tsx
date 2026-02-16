@@ -332,7 +332,7 @@ export default function CreateCaseScreen() {
                     style={[styles.speciesOwnerText, styles.speciesOwnerRight, { color: colors.text }]}
                     numberOfLines={1}
                   >
-                    {selectedAnimal.ownerName ? `Owner: ${capitalizeFirst(selectedAnimal.ownerName)}` : "—"}
+                    {selectedAnimal.farmer?.fullName ? `Farmer: ${capitalizeFirst(selectedAnimal.farmer.fullName)}` : "—"}
                   </Text>
                 </View>
                 {selectedAnimal.animalTagline && (

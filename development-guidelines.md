@@ -6,6 +6,7 @@
 | Domain Concept | Screen(s) | API Service | React Query Key |
 |---|---|---|---|
 | Doctor | Dashboard | `getCurrentDoctor()` | `['doctor','me']` |
+| Farmer | Create Animal (link), future list | (future: `getFarmers`, `getFarmer`, `createFarmer`) | `['farmers']` |
 | Animal | Search / Profile / Create | `searchAnimals`, `getAnimal`, `createAnimal` | `['animals', query]`, `['animal', id]` |
 | Case | Create / Detail / History | `createCase`, `getCase`, `listCases` | `['case', id]`, `['cases', filters]` |
 | Diagnosis | Add / List | `addDiagnosis`, `listDiagnoses` | `['case', id]` invalidate |

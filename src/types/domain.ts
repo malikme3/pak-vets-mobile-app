@@ -4,10 +4,17 @@ export type Doctor = {
   location?: string;
 };
 
+export type FarmerInfo = {
+  fullName: string;
+  phoneNumber: string;
+  nicNo?: string;
+  villageName?: string;
+};
+
 export type Animal = {
   id: string;
-  owner_name: string;
-  owner_phone: string;
+  farmer_id?: number;
+  farmer?: FarmerInfo;
   species: string;
   breed?: string;
   tag_id?: string;

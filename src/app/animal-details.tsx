@@ -192,26 +192,31 @@ export default function AnimalDetailsScreen() {
           )}
         </View>
 
-        {/* Owner Section */}
-        {(animal.ownerName || animal.ownerPhone) && (
+        {/* Farmer (owner) section – theme-aware */}
+        {(animal.farmer?.fullName || animal.farmer?.phoneNumber) && (
           <Card style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <FontAwesome name="user" size={14} color={colors.primary} />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Owner
+                Farmer
               </Text>
             </View>
-            {animal.ownerName && (
-              <Text style={[styles.ownerName, { color: colors.text }]}>
-                {capitalizeFirst(animal.ownerName)}
+            {animal.farmer?.fullName && (
+              <Text style={[styles.farmerName, { color: colors.text }]}>
+                {capitalizeFirst(animal.farmer.fullName)}
               </Text>
             )}
-            {animal.ownerPhone && (
+            {animal.farmer?.phoneNumber && (
               <Text
-                style={[styles.ownerPhone, { color: colors.muted }]}
+                style={[styles.farmerDetail, { color: colors.muted }]}
                 selectable
               >
-                {animal.ownerPhone}
+                {animal.farmer.phoneNumber}
+              </Text>
+            )}
+            {animal.farmer?.villageName && (
+              <Text style={[styles.farmerDetail, { color: colors.muted }]}>
+                {animal.farmer.villageName}
               </Text>
             )}
           </Card>
@@ -447,6 +452,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ownerPhone: {
+    fontSize: 15,
+  },
+  farmerName: {
+    fontSize: 17,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  farmerDetail: {
     fontSize: 15,
   },
   summaryText: {

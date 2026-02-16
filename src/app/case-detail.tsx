@@ -590,16 +590,16 @@ export default function CaseDetailScreen() {
                 </Text>
               </View>
             )}
-            {animal.ownerName && (
+            {animal.farmer?.fullName && (
               <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>Owner</Text>
-                <Text style={[styles.value, { color: colors.text }]}>{animal.ownerName}</Text>
+                <Text style={[styles.label, { color: colors.muted }]}>Farmer</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.farmer.fullName}</Text>
               </View>
             )}
-            {animal.ownerPhone && (
+            {animal.farmer?.phoneNumber && (
               <View style={styles.infoRow}>
                 <Text style={[styles.label, { color: colors.muted }]}>Phone</Text>
-                <Text style={[styles.value, { color: colors.text }]}>{animal.ownerPhone}</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.farmer.phoneNumber}</Text>
               </View>
             )}
             {animal.aiSummary && (

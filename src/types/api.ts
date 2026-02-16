@@ -50,10 +50,17 @@ export interface UpdateDoctorRequest {
   locationName?: string;
 }
 
+export interface FarmerInfo {
+  fullName: string;
+  phoneNumber: string;
+  nicNo?: string;
+  villageName?: string;
+}
+
 export interface Animal {
   animalId: number;
-  ownerName?: string;
-  ownerPhone?: string;
+  farmerId?: number;
+  farmer?: FarmerInfo;
   species: string;
   breed?: string;
   sex?: string;
@@ -72,8 +79,7 @@ export interface Animal {
 }
 
 export interface CreateAnimalRequest {
-  ownerName?: string;
-  ownerPhone?: string;
+  farmerId?: number;
   species: string;
   breed?: string;
   sex?: string;
@@ -90,8 +96,7 @@ export interface CreateAnimalRequest {
 }
 
 export interface UpdateAnimalRequest {
-  ownerName?: string;
-  ownerPhone?: string;
+  farmerId?: number;
   species?: string;
   breed?: string;
   sex?: string;

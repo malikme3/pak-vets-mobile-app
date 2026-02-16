@@ -28,7 +28,7 @@ import type { CreateAnimalRequest } from "../types/api";
 import type { AnimalInfoFromImage } from "../services/sharedServicesApi";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
-type Step = "owner" | "upload" | "attributes" | "summary";
+type Step = "farmer" | "upload" | "attributes" | "summary";
 type ImageType = "face" | "ear" | "body";
 
 interface SelectedImage {
@@ -42,11 +42,12 @@ export default function CreateAnimalScreen() {
   const { colors } = useTheme();
   const returnTo = (params.returnTo as string) || "/create-case";
 
-  const [step, setStep] = useState<Step>("owner");
+  const [step, setStep] = useState<Step>("farmer");
 
-  // Step 1: Owner
-  const [ownerName, setOwnerName] = useState("");
-  const [ownerPhone, setOwnerPhone] = useState("");
+  // Step 1: Farmer (optional farmerId links animal to existing farmer)
+  const [farmerId, setFarmerId] = useState("");
+  const [farmerName, setFarmerName] = useState("");
+  const [farmerPhone, setFarmerPhone] = useState("");
 
   // Step 2: Upload
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
@@ -238,8 +239,7 @@ export default function CreateAnimalScreen() {
     }
 
     const request: CreateAnimalRequest = {
-      ownerName: ownerName.trim() || undefined,
-      ownerPhone: ownerPhone.trim() || undefined,
+      farmerId: farmerId.trim() ? parseInt(farmerId.trim(), 10) : undefined,
       species: species.trim(),
       breed: breed.trim() || undefined,
       tagId: tagId.trim() || undefined,
@@ -284,8 +284,8 @@ export default function CreateAnimalScreen() {
   };
 
   const goBack = () => {
-    if (step === "owner") router.back();
-    else if (step === "upload") setStep("owner");
+    if (step === "farmer") router.back();
+    else if (step === "upload") setStep("farmer");
     else if (step === "attributes") setStep("upload");
     else setStep("attributes");
   };
@@ -304,8 +304,8 @@ export default function CreateAnimalScreen() {
     </View>
   );
 
-  // Step 1: Owner Information
-  if (step === "owner") {
+  // Step 1: Farmer (optional link to existing farmer)
+  if (step === "farmer") {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -317,23 +317,30 @@ export default function CreateAnimalScreen() {
         >
           {renderHeader("Create New Animal")}
           <Text style={[styles.subtitle, { color: colors.muted }]}>
-            Step 1 of 4: Owner information
+            Step 1 of 4: Farmer (optional)
           </Text>
           <Card style={styles.card}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Owner Information
+              Farmer
             </Text>
             <AppInput
-              label="Owner Name"
-              value={ownerName}
-              onChangeText={setOwnerName}
-              placeholder="Enter owner name (optional)"
+              label="Farmer ID"
+              value={farmerId}
+              onChangeText={setFarmerId}
+              placeholder="Existing farmer ID (optional)"
+              keyboardType="number-pad"
             />
             <AppInput
-              label="Phone Number"
-              value={ownerPhone}
-              onChangeText={setOwnerPhone}
-              placeholder="Enter phone (optional)"
+              label="Farmer Name"
+              value={farmerName}
+              onChangeText={setFarmerName}
+              placeholder="For reference (optional)"
+            />
+            <AppInput
+              label="Farmer Phone"
+              value={farmerPhone}
+              onChangeText={setFarmerPhone}
+              placeholder="For reference (optional)"
               keyboardType="phone-pad"
             />
           </Card>
@@ -574,13 +581,16 @@ export default function CreateAnimalScreen() {
 
         <Card style={styles.card}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Owner
+            Farmer
           </Text>
           <Text style={[styles.summaryRow, { color: colors.text }]}>
-            Name: {ownerName || "—"}
+            Farmer ID: {farmerId ? farmerId : "—"}
           </Text>
           <Text style={[styles.summaryRow, { color: colors.text }]}>
-            Phone: {ownerPhone || "—"}
+            Name: {farmerName || "—"}
+          </Text>
+          <Text style={[styles.summaryRow, { color: colors.text }]}>
+            Phone: {farmerPhone || "—"}
           </Text>
         </Card>
 
