@@ -576,6 +576,20 @@ export default function CaseDetailScreen() {
                 <Text style={[styles.value, { color: colors.text }]}>{animal.tagId}</Text>
               </View>
             )}
+            {animal.animalTagline && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.label, { color: colors.muted }]}>Tagline</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{animal.animalTagline}</Text>
+              </View>
+            )}
+            {animal.aiShortSummary && (
+              <View style={[styles.aiSummaryBlock, { borderTopColor: colors.border }]}>
+                <Text style={[styles.label, { color: colors.muted }]}>Short Summary</Text>
+                <Text style={[styles.aiSummaryText, { color: colors.text }]} selectable>
+                  {animal.aiShortSummary}
+                </Text>
+              </View>
+            )}
             {animal.ownerName && (
               <View style={styles.infoRow}>
                 <Text style={[styles.label, { color: colors.muted }]}>Owner</Text>
@@ -879,6 +893,14 @@ export default function CaseDetailScreen() {
             </View>
           )}
         </AccordionSection>
+
+        {/* Save / Done - redirect to home */}
+        <Button
+          title="Save"
+          onPress={() => router.replace("/")}
+          variant="primary"
+          style={styles.saveButton}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -907,6 +929,10 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 16,
+  },
+  saveButton: {
+    marginTop: 24,
+    marginBottom: 24,
   },
   header: {
     marginBottom: 20,

@@ -61,6 +61,8 @@ export interface Animal {
   color?: string;
   weightKg?: number;
   tagId?: string;
+  animalTagline?: string;
+  aiShortSummary?: string;
   aiSummary?: string;
   locationName?: string;
   latitude?: number;
@@ -79,6 +81,8 @@ export interface CreateAnimalRequest {
   color?: string;
   weightKg?: number;
   tagId?: string;
+  animalTagline?: string;
+  aiShortSummary?: string;
   aiSummary?: string;
   locationName?: string;
   latitude?: number;
@@ -95,6 +99,8 @@ export interface UpdateAnimalRequest {
   color?: string;
   weightKg?: number;
   tagId?: string;
+  animalTagline?: string;
+  aiShortSummary?: string;
   aiSummary?: string;
   locationName?: string;
   latitude?: number;

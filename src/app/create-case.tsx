@@ -9,6 +9,7 @@ import {
   Platform,
   TouchableOpacity,
   TextInput,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -21,7 +22,7 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 import { useCurrentDoctor } from "../features/doctors/hooks";
-import { useAnimal } from "../features/animals/hooks";
+import { useAnimal, useAnimalImages } from "../features/animals/hooks";
 import { useCreateCase } from "../features/cases/hooks";
 
 type VoiceRecording = {
@@ -41,6 +42,13 @@ export default function CreateCaseScreen() {
   const { data: selectedAnimal, isLoading: animalLoading } = useAnimal(
     animalId || 0,
   );
+  const { data: animalImages = [] } = useAnimalImages(animalId || 0);
+  const [faceImageError, setFaceImageError] = useState(false);
+  const faceImageUrl = animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+
+  useEffect(() => {
+    setFaceImageError(false);
+  }, [animalId]);
 
   const createCaseMutation = useCreateCase();
 
@@ -71,6 +79,14 @@ export default function CreateCaseScreen() {
       cleanupAudio(chiefComplaintSound);
     };
   }, [chiefComplaintSound]);
+
+  const capitalizeFirst = (s: string) =>
+    s
+      ? s
+          .split(" ")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ")
+      : "";
 
   const formatDateTime = (date: Date): string => {
     return date
@@ -283,18 +299,49 @@ export default function CreateCaseScreen() {
         <Card style={styles.card}>
           <Text style={[styles.label, { color: colors.text }]}>Animal</Text>
           {selectedAnimal ? (
-            <View style={styles.animalInfo}>
-              <Text style={[styles.animalText, { color: colors.text }]}>
-                {selectedAnimal.species}
-                {selectedAnimal.breed ? ` - ${selectedAnimal.breed}` : ""}
-                {selectedAnimal.tagId ? ` (${selectedAnimal.tagId})` : ""}
-              </Text>
-              {selectedAnimal.ownerName && (
-                <Text style={[styles.ownerText, { color: colors.muted }]}>
-                  Owner: {selectedAnimal.ownerName}
-                </Text>
-              )}
-            </View>
+            <TouchableOpacity
+              style={[styles.animalCard, { borderColor: colors.border }]}
+              onPress={() =>
+                router.push(`/animal-details?animalId=${selectedAnimal.animalId}`)
+              }
+              activeOpacity={0.7}
+            >
+              <View style={[styles.animalAvatar, { backgroundColor: colors.border }]}>
+                {faceImageUrl && !faceImageError ? (
+                  <Image
+                    source={{ uri: faceImageUrl }}
+                    style={styles.animalAvatarImage}
+                    resizeMode="cover"
+                    onError={() => setFaceImageError(true)}
+                  />
+                ) : (
+                  <FontAwesome name="paw" size={22} color={colors.muted} />
+                )}
+              </View>
+              <View style={styles.animalCardContent}>
+                <View style={styles.speciesOwnerRow}>
+                  <Text
+                    style={[styles.speciesOwnerText, styles.speciesOwnerLeft, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {capitalizeFirst(selectedAnimal.species)}
+                    {selectedAnimal.breed ? ` - ${capitalizeFirst(selectedAnimal.breed)}` : ""}
+                    {selectedAnimal.tagId ? ` (${selectedAnimal.tagId})` : ""}
+                  </Text>
+                  <Text
+                    style={[styles.speciesOwnerText, styles.speciesOwnerRight, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {selectedAnimal.ownerName ? `Owner: ${capitalizeFirst(selectedAnimal.ownerName)}` : "—"}
+                  </Text>
+                </View>
+                {selectedAnimal.animalTagline && (
+                  <Text style={[styles.taglineText, { color: colors.muted }]}>
+                    {selectedAnimal.animalTagline}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
           ) : (
             <Button
               title="Select Animal"
@@ -528,16 +575,52 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: 8,
   },
-  animalInfo: {
+  animalCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  animalAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 24,
+    overflow: "hidden",
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  animalAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  animalCardContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  taglineText: {
+    fontSize: 13,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  speciesOwnerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 8,
   },
-  animalText: {
+  speciesOwnerText: {
     fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
+    fontWeight: "600",
   },
-  ownerText: {
-    fontSize: 14,
+  speciesOwnerLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  speciesOwnerRight: {
+    textAlign: "right",
   },
   selectButton: {
     marginTop: 8,

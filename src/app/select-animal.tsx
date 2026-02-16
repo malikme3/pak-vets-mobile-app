@@ -218,8 +218,13 @@ export default function SelectAnimalScreen() {
 
   const formatAnimalTitle = (a: Animal) =>
     `${a.species}${a.breed ? ` - ${a.breed}` : ""}${a.tagId ? ` (${a.tagId})` : ""}`;
-  const formatAnimalSubtitle = (a: Animal) =>
-    `${a.ownerName || "Unknown Owner"}${a.ownerPhone ? ` • ${a.ownerPhone}` : ""}`;
+  const formatAnimalSubtitle = (a: Animal) => {
+    const parts: string[] = [];
+    if (a.animalTagline) parts.push(a.animalTagline);
+    parts.push(a.ownerName || "Unknown Owner");
+    if (a.ownerPhone) parts.push(a.ownerPhone);
+    return parts.join(" • ");
+  };
 
   const renderAnimalItem = ({ item }: { item: Animal }) => (
     <ListRow
@@ -295,7 +300,13 @@ export default function SelectAnimalScreen() {
                     onPress={() => handleAnimalSelect(matchedAnimal)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.matchAvatar, { backgroundColor: colors.border }]}>
+                    <TouchableOpacity
+                      style={[styles.matchAvatar, { backgroundColor: colors.border }]}
+                      onPress={() =>
+                        router.push(`/animal-details?animalId=${matchedAnimal.animalId}`)
+                      }
+                      activeOpacity={0.7}
+                    >
                       {matchedFaceUrl ? (
                         <Image
                           source={{ uri: matchedFaceUrl }}
@@ -307,7 +318,7 @@ export default function SelectAnimalScreen() {
                           ?
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
                     <View style={styles.matchRowContent}>
                       <Text style={[styles.matchRowTitle, { color: colors.text }]} numberOfLines={1}>
                         {formatAnimalTitle(matchedAnimal)}

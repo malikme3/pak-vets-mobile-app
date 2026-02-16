@@ -69,6 +69,8 @@ export default function CreateAnimalScreen() {
   const [color, setColor] = useState("");
   const [sex, setSex] = useState("");
   const [tagId, setTagId] = useState("");
+  const [animalTagline, setAnimalTagline] = useState("");
+  const [aiShortSummary, setAiShortSummary] = useState("");
   const [aiSummary, setAiSummary] = useState("");
 
   const createAnimalMutation = useCreateAnimal();
@@ -207,6 +209,8 @@ export default function CreateAnimalScreen() {
       setWeightKg(animal.weight_kg != null ? String(animal.weight_kg) : "");
       setColor(animal.color ?? "");
       setSex(animal.sex ?? "");
+      setAnimalTagline(animal.animal_tagline ?? "");
+      setAiShortSummary(animal.ai_short_summary ?? "");
       setAiSummary(animal.ai_summary ?? "");
       setStep("attributes");
     } catch (error) {
@@ -243,6 +247,8 @@ export default function CreateAnimalScreen() {
       color: color.trim() || undefined,
       ageMonths: ageMonths.trim() ? parseInt(ageMonths, 10) : undefined,
       weightKg: weightKg.trim() ? parseFloat(weightKg) : undefined,
+      animalTagline: animalTagline.trim() || undefined,
+      aiShortSummary: aiShortSummary.trim() || undefined,
       aiSummary: aiSummary.trim() || undefined,
     };
 
@@ -517,6 +523,20 @@ export default function CreateAnimalScreen() {
               placeholder="Optional"
             />
             <AppInput
+              label="Animal Tagline"
+              value={animalTagline}
+              onChangeText={setAnimalTagline}
+              placeholder="Short phrase for main distinguishing characteristic"
+            />
+            <AppInput
+              label="AI Short Summary"
+              value={aiShortSummary}
+              onChangeText={setAiShortSummary}
+              placeholder="1–2 sentence brief summary"
+              multiline
+              numberOfLines={2}
+            />
+            <AppInput
               label="AI Summary"
               value={aiSummary}
               onChangeText={setAiSummary}
@@ -589,6 +609,16 @@ export default function CreateAnimalScreen() {
           <Text style={[styles.summaryRow, { color: colors.text }]}>
             Tag ID: {tagId || "—"}
           </Text>
+          {animalTagline ? (
+            <Text style={[styles.summaryRow, { color: colors.text }]}>
+              Tagline: {animalTagline}
+            </Text>
+          ) : null}
+          {aiShortSummary ? (
+            <Text style={[styles.summaryRow, styles.summaryBlock, { color: colors.text }]}>
+              Short Summary: {aiShortSummary}
+            </Text>
+          ) : null}
           {aiSummary ? (
             <Text style={[styles.summaryRow, styles.summaryBlock, { color: colors.text }]}>
               AI Summary: {aiSummary}

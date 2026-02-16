@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
   Image,
+  ImageBackground,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -19,6 +20,14 @@ import { ListRow } from "../components/ui/ListRow";
 import { useAnimal, useAnimalImages } from "../features/animals/hooks";
 import { useCasesByAnimal } from "../features/cases/hooks";
 import type { Case } from "../types/api";
+
+const capitalizeFirst = (s: string) =>
+  s
+    ? s
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ")
+    : "";
 
 export default function AnimalDetailsScreen() {
   const router = useRouter();
@@ -101,6 +110,14 @@ export default function AnimalDetailsScreen() {
     );
   }
 
+  const faceImageUrl = animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+  const profileTitle = [
+    capitalizeFirst(animal.species),
+    animal.breed ? capitalizeFirst(animal.breed) : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -109,70 +126,115 @@ export default function AnimalDetailsScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Animal Summary Card */}
-        <Card style={styles.animalCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Animal Information
-          </Text>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.muted }]}>
-              Species:
-            </Text>
-            <Text style={[styles.value, { color: colors.text }]}>
-              {animal.species}
-            </Text>
-          </View>
-          {animal.breed && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Breed:
+        {/* Profile Header - face image as background */}
+        <View
+          style={[
+            styles.profileHeader,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              overflow: "hidden",
+            },
+          ]}
+        >
+          {faceImageUrl ? (
+            <ImageBackground
+              source={{ uri: faceImageUrl }}
+              style={styles.profileHeaderBg}
+              resizeMode="cover"
+            >
+              <View
+                style={[styles.profileHeaderOverlay, { backgroundColor: "rgba(0,0,0,0.45)" }]}
+              />
+              <View style={styles.profileHeaderContent}>
+                <Text style={styles.profileTitle} numberOfLines={1}>
+                  {profileTitle}
+                </Text>
+                {animal.tagId && (
+                  <Text style={styles.profileTagId} numberOfLines={1}>
+                    {animal.tagId}
+                  </Text>
+                )}
+                {animal.animalTagline && (
+                  <Text
+                    style={styles.taglineText}
+                    numberOfLines={2}
+                    selectable
+                  >
+                    {animal.animalTagline}
+                  </Text>
+                )}
+              </View>
+            </ImageBackground>
+          ) : (
+            <View style={[styles.profileHeaderContent, styles.profileHeaderFallback]}>
+              <FontAwesome name="paw" size={24} color={colors.muted} />
+              <Text style={[styles.profileTitle, { color: colors.text }]} numberOfLines={1}>
+                {profileTitle}
               </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
-                {animal.breed}
-              </Text>
+              {animal.tagId && (
+                <Text style={[styles.profileTagId, { color: colors.muted }]} numberOfLines={1}>
+                  {animal.tagId}
+                </Text>
+              )}
+              {animal.animalTagline && (
+                <Text
+                  style={[styles.taglineText, { color: colors.text }]}
+                  numberOfLines={2}
+                  selectable
+                >
+                  {animal.animalTagline}
+                </Text>
+              )}
             </View>
           )}
-          {animal.tagId && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Tag ID:
-              </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
-                {animal.tagId}
-              </Text>
-            </View>
-          )}
-          {animal.ownerName && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Owner:
-              </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
-                {animal.ownerName}
+        </View>
+
+        {/* Owner Section */}
+        {(animal.ownerName || animal.ownerPhone) && (
+          <Card style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <FontAwesome name="user" size={14} color={colors.primary} />
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Owner
               </Text>
             </View>
-          )}
-          {animal.ownerPhone && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Phone:
+            {animal.ownerName && (
+              <Text style={[styles.ownerName, { color: colors.text }]}>
+                {capitalizeFirst(animal.ownerName)}
               </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
+            )}
+            {animal.ownerPhone && (
+              <Text
+                style={[styles.ownerPhone, { color: colors.muted }]}
+                selectable
+              >
                 {animal.ownerPhone}
               </Text>
-            </View>
+            )}
+          </Card>
+        )}
+
+        {/* Identification & Summary */}
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="info-circle" size={14} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Identification
+            </Text>
+          </View>
+          {animal.aiShortSummary && (
+            <Text
+              style={[styles.summaryText, { color: colors.text }]}
+              selectable
+            >
+              {animal.aiShortSummary}
+            </Text>
           )}
           {animal.aiSummary && (
-            <View
-              style={[
-                styles.aiSummarySection,
-                { borderTopColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.label, { color: colors.muted }]}>
-                AI Summary:
-              </Text>
+            <View style={[styles.aiBlock, { borderTopColor: colors.border }]}>
               <Text
                 style={[styles.aiSummaryText, { color: colors.text }]}
                 selectable
@@ -181,13 +243,21 @@ export default function AnimalDetailsScreen() {
               </Text>
             </View>
           )}
+          {!animal.aiShortSummary && !animal.aiSummary && (
+            <Text style={[styles.emptyHint, { color: colors.muted }]}>
+              No identification details recorded
+            </Text>
+          )}
         </Card>
 
-        {/* Animal Photos */}
-        <Card style={styles.animalCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Animal Photos
-          </Text>
+        {/* Reference Photos */}
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="camera" size={14} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Reference Photos
+            </Text>
+          </View>
           {animalImagesLoading ? (
             <View style={styles.animalPhotosLoading}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -248,9 +318,9 @@ export default function AnimalDetailsScreen() {
           )}
         </Card>
 
-        {/* Create Case Button */}
+        {/* Create Case CTA */}
         <Button
-          title="Create Case"
+          title="Create New Case"
           onPress={handleCreateCase}
           variant="primary"
           style={styles.createCaseButton}
@@ -258,9 +328,17 @@ export default function AnimalDetailsScreen() {
 
         {/* Case History */}
         <View style={styles.casesSection}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Case History
-          </Text>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="folder-open" size={14} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Case History
+            </Text>
+            {cases.length > 0 && (
+              <Text style={[styles.caseCount, { color: colors.muted }]}>
+                {cases.length} {cases.length === 1 ? "case" : "cases"}
+              </Text>
+            )}
+          </View>
           {cases.length > 0 ? (
             <Card style={styles.casesCard}>
               <FlatList
@@ -300,47 +378,99 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingBottom: 32,
   },
   title: {
     fontSize: 20,
     fontWeight: "600",
   },
-  animalCard: {
-    marginBottom: 16,
+  profileHeader: {
+    height: 120,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 16,
+  profileHeaderBg: {
+    flex: 1,
+    justifyContent: "flex-end",
   },
-  infoRow: {
-    flexDirection: "row",
+  profileHeaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  profileHeaderContent: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: "flex-end",
+    flex: 1,
+  },
+  profileHeaderFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 2,
+  },
+  profileTagId: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.85)",
+    marginBottom: 4,
+  },
+  taglineText: {
+    fontSize: 13,
+    fontStyle: "italic",
+    color: "rgba(255,255,255,0.95)",
+    lineHeight: 18,
+  },
+  sectionCard: {
     marginBottom: 12,
   },
-  label: {
-    fontSize: 14,
-    width: 80,
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
   },
-  value: {
-    fontSize: 14,
-    flex: 1,
-    fontWeight: "500",
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
   },
-  aiSummarySection: {
-    marginTop: 12,
-    paddingTop: 12,
+  caseCount: {
+    fontSize: 13,
+    marginLeft: "auto",
+  },
+  ownerName: {
+    fontSize: 17,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  ownerPhone: {
+    fontSize: 15,
+  },
+  summaryText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  aiBlock: {
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
   },
   aiSummaryText: {
     fontSize: 14,
     lineHeight: 22,
-    marginTop: 8,
+  },
+  emptyHint: {
+    fontSize: 14,
+    fontStyle: "italic",
   },
   createCaseButton: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   casesSection: {
-    marginTop: 8,
+    marginTop: 4,
   },
   casesCard: {
     paddingVertical: 0,
@@ -350,10 +480,10 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   emptyCard: {
-    paddingVertical: 24,
+    paddingVertical: 16,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 15,
     textAlign: "center",
   },
   loadingContainer: {
@@ -362,29 +492,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   animalPhotosLoading: {
-    paddingVertical: 24,
+    paddingVertical: 16,
     alignItems: "center",
   },
   animalPhotosGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-    marginTop: 8,
+    gap: 10,
+    marginTop: 4,
   },
   animalPhotoItem: {
     width: "31%",
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: "hidden",
   },
   animalPhotoImage: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   animalPhotoPlaceholder: {
     width: "100%",
     aspectRatio: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -396,7 +526,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   animalPhotosEmpty: {
-    paddingVertical: 24,
+    paddingVertical: 16,
     alignItems: "center",
   },
 });

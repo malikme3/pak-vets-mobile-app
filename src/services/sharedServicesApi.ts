@@ -112,6 +112,8 @@ export interface AnimalInfoFromImage {
   weight_kg?: number | null;
   color?: string | null;
   sex?: string | null;
+  animal_tagline?: string | null;
+  ai_short_summary?: string | null;
   ai_summary?: string | null;
 }
 
