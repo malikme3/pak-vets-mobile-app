@@ -164,8 +164,9 @@ export default function CreateAnimalScreen() {
   const [existingFarmersModal, setExistingFarmersModal] = useState<
     Farmer[] | null
   >(null);
-  const [existingFarmerByPhone, setExistingFarmerByPhone] =
-    useState<Farmer | null>(null);
+  const [farmersMatchingPhone, setFarmersMatchingPhone] = useState<Farmer[]>(
+    [],
+  );
   const [existingFarmerByNIC, setExistingFarmerByNIC] = useState<Farmer | null>(
     null,
   );
@@ -627,21 +628,29 @@ export default function CreateAnimalScreen() {
     setFarmerPhone(formatPhoneInput(text));
   }, []);
 
-  // Debounced check: when user types phone or NIC, call backend to see if farmer already exists
+  // Debounced check: when user types phone or NIC, call backend to see if farmer already exists.
+  // Phone: start lookup at 5 digits, then re-fetch at every 2 digits (5, 7, 9, 11).
   const DEBOUNCE_MS = 500;
   const MIN_NIC_LENGTH = 5;
+  const MIN_PHONE_DIGITS_TO_SEARCH = 5;
   useEffect(() => {
     if (farmerCheckTimeoutRef.current) {
       clearTimeout(farmerCheckTimeoutRef.current);
       farmerCheckTimeoutRef.current = null;
     }
+    const phoneDigits = farmerPhone.replace(/\D/g, "");
+    const phoneDigitCount = phoneDigits.length;
+    const shouldFetchByPhone =
+      phoneDigitCount >= MIN_PHONE_DIGITS_TO_SEARCH &&
+      phoneDigitCount <= 11 &&
+      phoneDigitCount % 2 === 1; // 5, 7, 9, 11
     const normalized = normalizePhone(farmerPhone);
     const hasValidPhone = normalized != null && isValidPhone(normalized);
     const nicTrimmed = farmerNicNo.trim();
     const hasNic = nicTrimmed.length >= MIN_NIC_LENGTH;
 
-    if (!hasValidPhone && !hasNic) {
-      setExistingFarmerByPhone(null);
+    if (!shouldFetchByPhone && !hasNic) {
+      setFarmersMatchingPhone([]);
       setExistingFarmerByNIC(null);
       return;
     }
@@ -651,13 +660,19 @@ export default function CreateAnimalScreen() {
       setCheckingExistence(true);
       try {
         const all = await farmerApi.getAllFarmers();
-        if (hasValidPhone) {
-          const match = all.find(
-            (f) => normalizePhone(f.phoneNumber) === normalized,
-          );
-          setExistingFarmerByPhone(match ?? null);
+        if (shouldFetchByPhone && phoneDigits.length > 0) {
+          const matches = all.filter((f) => {
+            const fDigits =
+              normalizePhone(f.phoneNumber) ??
+              f.phoneNumber.replace(/\D/g, "").slice(0, 11);
+            return (
+              fDigits.length >= phoneDigits.length &&
+              fDigits.startsWith(phoneDigits)
+            );
+          });
+          setFarmersMatchingPhone(matches);
         } else {
-          setExistingFarmerByPhone(null);
+          setFarmersMatchingPhone([]);
         }
         if (hasNic) {
           const nicLower = nicTrimmed.toLowerCase();
@@ -669,7 +684,7 @@ export default function CreateAnimalScreen() {
           setExistingFarmerByNIC(null);
         }
       } catch {
-        setExistingFarmerByPhone(null);
+        setFarmersMatchingPhone([]);
         setExistingFarmerByNIC(null);
       } finally {
         setCheckingExistence(false);
@@ -822,73 +837,77 @@ export default function CreateAnimalScreen() {
               icon="phone"
             />
             {checkingExistence &&
-            normalizePhone(farmerPhone) &&
-            isValidPhone(normalizePhone(farmerPhone)) ? (
+            farmerPhone.replace(/\D/g, "").length >=
+              MIN_PHONE_DIGITS_TO_SEARCH ? (
               <View
                 style={[
-                  styles.existingFarmerHint,
-                  { backgroundColor: colors.border + "40" },
-                ]}
-              >
-                <ActivityIndicator size="small" color={colors.muted} />
-                <Text
-                  style={[styles.existingFarmerText, { color: colors.muted }]}
-                >
-                  Checking…
-                </Text>
-              </View>
-            ) : existingFarmerByPhone ? (
-              <View
-                style={[
-                  styles.existingFarmerRow,
-                  styles.existingFarmerCard,
+                  styles.farmerCheckHint,
                   {
-                    borderLeftColor: colors.primary,
-                    backgroundColor: colors.primary + "0C",
+                    backgroundColor: colors.border + "25",
+                    borderColor: colors.border + "50",
                   },
                 ]}
               >
-                <View style={styles.existingFarmerCardRow}>
-                  <FontAwesome
-                    name="user-circle"
-                    size={20}
-                    color={colors.primary}
-                    style={styles.existingFarmerCardIcon}
-                  />
-                  <View style={styles.existingFarmerCardTextWrap}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text
+                  style={[styles.farmerCheckHintText, { color: colors.muted }]}
+                >
+                  Looking up farmers…
+                </Text>
+              </View>
+            ) : farmersMatchingPhone.length > 0 ? (
+              <View style={styles.farmersMatchListWrap}>
+                <Text
+                  style={[
+                    styles.farmersMatchListLabel,
+                    { color: colors.muted },
+                  ]}
+                >
+                  Matching farmers
+                </Text>
+                {farmersMatchingPhone.map((farmer) => (
+                  <TouchableOpacity
+                    key={farmer.farmerId}
+                    onPress={() => handlePickExistingFarmer(farmer)}
+                    activeOpacity={0.7}
+                    style={[
+                      styles.farmerMatchCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.farmerMatchCardIconWrap,
+                        { backgroundColor: colors.primary + "18" },
+                      ]}
+                    >
+                      <FontAwesome
+                        name="users"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </View>
                     <Text
                       style={[
-                        styles.existingFarmerText,
+                        styles.farmerMatchCardContactLine,
                         { color: colors.text },
                       ]}
+                      numberOfLines={1}
                     >
-                      Farmer with this phone already exists
+                      {farmer.fullName}
+                      {"  ·  "}
+                      <Text style={{ color: colors.muted }}>
+                        {formatPhoneDisplay(
+                          normalizePhone(farmer.phoneNumber) ??
+                            farmer.phoneNumber,
+                        )}
+                      </Text>
                     </Text>
-                    <Text
-                      style={[
-                        styles.existingFarmerName,
-                        { color: colors.primary },
-                      ]}
-                    >
-                      {existingFarmerByPhone.fullName}
-                    </Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  onPress={() =>
-                    handlePickExistingFarmer(existingFarmerByPhone)
-                  }
-                  style={[
-                    styles.useFarmerButton,
-                    { backgroundColor: colors.primary },
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome name="check" size={12} color="#FFF" />
-                  <Text style={styles.useFarmerButtonText}>
-                    Use this farmer
-                  </Text>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
               </View>
             ) : null}
             <InputRow
@@ -903,68 +922,61 @@ export default function CreateAnimalScreen() {
             farmerNicNo.trim().length >= MIN_NIC_LENGTH ? (
               <View
                 style={[
-                  styles.existingFarmerHint,
-                  { backgroundColor: colors.border + "40" },
-                ]}
-              >
-                <ActivityIndicator size="small" color={colors.muted} />
-                <Text
-                  style={[styles.existingFarmerText, { color: colors.muted }]}
-                >
-                  Checking…
-                </Text>
-              </View>
-            ) : existingFarmerByNIC ? (
-              <View
-                style={[
-                  styles.existingFarmerRow,
-                  styles.existingFarmerCard,
+                  styles.farmerCheckHint,
                   {
-                    borderLeftColor: colors.primary,
-                    backgroundColor: colors.primary + "0C",
+                    backgroundColor: colors.border + "25",
+                    borderColor: colors.border + "50",
                   },
                 ]}
               >
-                <View style={styles.existingFarmerCardRow}>
-                  <FontAwesome
-                    name="user-circle"
-                    size={20}
-                    color={colors.primary}
-                    style={styles.existingFarmerCardIcon}
-                  />
-                  <View style={styles.existingFarmerCardTextWrap}>
-                    <Text
-                      style={[
-                        styles.existingFarmerText,
-                        { color: colors.text },
-                      ]}
-                    >
-                      Farmer with this NIC already exists
-                    </Text>
-                    <Text
-                      style={[
-                        styles.existingFarmerName,
-                        { color: colors.primary },
-                      ]}
-                    >
-                      {existingFarmerByNIC.fullName}
-                    </Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  onPress={() => handlePickExistingFarmer(existingFarmerByNIC)}
-                  style={[
-                    styles.useFarmerButton,
-                    { backgroundColor: colors.primary },
-                  ]}
-                  activeOpacity={0.8}
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text
+                  style={[styles.farmerCheckHintText, { color: colors.muted }]}
                 >
-                  <FontAwesome name="check" size={12} color="#FFF" />
-                  <Text style={styles.useFarmerButtonText}>
-                    Use this farmer
-                  </Text>
-                </TouchableOpacity>
+                  Looking up farmers…
+                </Text>
               </View>
+            ) : existingFarmerByNIC ? (
+              <TouchableOpacity
+                onPress={() => handlePickExistingFarmer(existingFarmerByNIC)}
+                activeOpacity={0.7}
+                style={[
+                  styles.farmerMatchCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.farmerMatchCardIconWrap,
+                    { backgroundColor: colors.primary + "18" },
+                  ]}
+                >
+                  <FontAwesome
+                    name="users"
+                    size={18}
+                    color={colors.primary}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.farmerMatchCardContactLine,
+                    { color: colors.text },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {existingFarmerByNIC.fullName}
+                  {"  ·  "}
+                  <Text style={{ color: colors.muted }}>
+                    {formatPhoneDisplay(
+                      normalizePhone(existingFarmerByNIC.phoneNumber) ??
+                        existingFarmerByNIC.phoneNumber,
+                    )}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
             ) : null}
             <InputRow
               label="Name"
@@ -1792,6 +1804,70 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   farmerLoadingText: { fontSize: 14 },
+  farmerCheckHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  farmerCheckHintText: {
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  farmersMatchListWrap: {
+    marginTop: 6,
+    marginBottom: 16,
+    gap: 10,
+  },
+  farmersMatchListLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  farmerMatchCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  farmerMatchCardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  farmerMatchCardContactLine: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    minWidth: 0,
+  },
+  farmerMatchCardContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  farmerMatchCardName: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  farmerMatchCardMeta: {
+    fontSize: 13,
+  },
+  farmerMatchCardChevron: {
+    marginLeft: 8,
+  },
   existingFarmerHint: {
     flexDirection: "row",
     alignItems: "center",
