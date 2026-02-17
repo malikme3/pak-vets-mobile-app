@@ -57,6 +57,35 @@ export interface FarmerInfo {
   villageName?: string;
 }
 
+export interface Farmer {
+  farmerId: number;
+  fullName: string;
+  phoneNumber: string;
+  nicNo?: string;
+  villageName?: string;
+  tehName?: string;
+  districtName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFarmerRequest {
+  fullName: string;
+  phoneNumber: string;
+  nicNo?: string;
+  villageName?: string;
+  tehName?: string;
+  districtName?: string;
+}
+
+export type AnimalStatus =
+  | "MILKING"
+  | "DRY"
+  | "PREGNANT"
+  | "LACTATING"
+  | "IN_HEAT"
+  | "OTHER";
+
 export interface Animal {
   animalId: number;
   farmerId?: number;
@@ -67,6 +96,10 @@ export interface Animal {
   ageMonths?: number;
   color?: string;
   weightKg?: number;
+  status?: AnimalStatus;
+  otherStatusValue?: string;
+  heartGirthCm?: number;
+  bodyLengthCm?: number;
   tagId?: string;
   animalTagline?: string;
   aiShortSummary?: string;
@@ -86,6 +119,10 @@ export interface CreateAnimalRequest {
   ageMonths?: number;
   color?: string;
   weightKg?: number;
+  status?: AnimalStatus;
+  otherStatusValue?: string;
+  heartGirthCm?: number;
+  bodyLengthCm?: number;
   tagId?: string;
   animalTagline?: string;
   aiShortSummary?: string;
@@ -103,6 +140,10 @@ export interface UpdateAnimalRequest {
   ageMonths?: number;
   color?: string;
   weightKg?: number;
+  status?: AnimalStatus;
+  otherStatusValue?: string;
+  heartGirthCm?: number;
+  bodyLengthCm?: number;
   tagId?: string;
   animalTagline?: string;
   aiShortSummary?: string;
@@ -112,6 +153,8 @@ export interface UpdateAnimalRequest {
   longitude?: number;
 }
 
+export type CaseStatus = "IN_PROGRESS" | "COMPLETED";
+
 export interface Case {
   caseId: number;
   animalId: number;
@@ -119,6 +162,8 @@ export interface Case {
   caseDatetime: string;
   chiefComplaint?: string;
   notes?: string;
+  status?: CaseStatus;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -129,6 +174,7 @@ export interface CreateCaseRequest {
   caseDatetime: string;
   chiefComplaint?: string;
   notes?: string;
+  status?: CaseStatus;
 }
 
 export interface UpdateCaseRequest {
@@ -137,6 +183,7 @@ export interface UpdateCaseRequest {
   caseDatetime?: string;
   chiefComplaint?: string;
   notes?: string;
+  status?: CaseStatus;
 }
 
 export interface CaseDiagnosis {

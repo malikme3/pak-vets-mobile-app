@@ -18,7 +18,10 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
-import { useCreateCaseDiagnosis, useUpdateCaseDiagnosis } from "../features/diagnoses/hooks";
+import {
+  useCreateCaseDiagnosis,
+  useUpdateCaseDiagnosis,
+} from "../features/diagnoses/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import { getBucketName } from "../services/sharedServicesApi";
 
@@ -32,7 +35,7 @@ export default function AddDiagnosisScreen() {
     typeof params[key] === "string"
       ? params[key]
       : Array.isArray(params[key])
-        ? (params[key] as string[])[0] ?? ""
+        ? ((params[key] as string[])[0] ?? "")
         : "";
   const paramDiagnosisId = param("diagnosisId");
   const diagnosisId = paramDiagnosisId ? Number(paramDiagnosisId) : undefined;
@@ -42,7 +45,7 @@ export default function AddDiagnosisScreen() {
     typeof params.diagnosisText === "string"
       ? params.diagnosisText
       : Array.isArray(params.diagnosisText)
-        ? params.diagnosisText[0] ?? ""
+        ? (params.diagnosisText[0] ?? "")
         : "";
   const paramStatus =
     typeof params.status === "string"
@@ -355,7 +358,9 @@ export default function AddDiagnosisScreen() {
             createDiagnosisMutation.isPending ||
             createMediaMutation.isPending
           }
-          loading={createDiagnosisMutation.isPending || createMediaMutation.isPending}
+          loading={
+            createDiagnosisMutation.isPending || createMediaMutation.isPending
+          }
           style={styles.saveButton}
         />
       </ScrollView>

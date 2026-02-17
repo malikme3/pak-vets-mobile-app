@@ -110,7 +110,8 @@ export default function AnimalDetailsScreen() {
     );
   }
 
-  const faceImageUrl = animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+  const faceImageUrl =
+    animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
   const profileTitle = [
     capitalizeFirst(animal.species),
     animal.breed ? capitalizeFirst(animal.breed) : null,
@@ -146,7 +147,10 @@ export default function AnimalDetailsScreen() {
               resizeMode="cover"
             >
               <View
-                style={[styles.profileHeaderOverlay, { backgroundColor: "rgba(0,0,0,0.45)" }]}
+                style={[
+                  styles.profileHeaderOverlay,
+                  { backgroundColor: "rgba(0,0,0,0.45)" },
+                ]}
               />
               <View style={styles.profileHeaderContent}>
                 <Text style={styles.profileTitle} numberOfLines={1}>
@@ -158,24 +162,31 @@ export default function AnimalDetailsScreen() {
                   </Text>
                 )}
                 {animal.animalTagline && (
-                  <Text
-                    style={styles.taglineText}
-                    numberOfLines={2}
-                    selectable
-                  >
+                  <Text style={styles.taglineText} numberOfLines={2} selectable>
                     {animal.animalTagline}
                   </Text>
                 )}
               </View>
             </ImageBackground>
           ) : (
-            <View style={[styles.profileHeaderContent, styles.profileHeaderFallback]}>
+            <View
+              style={[
+                styles.profileHeaderContent,
+                styles.profileHeaderFallback,
+              ]}
+            >
               <FontAwesome name="paw" size={24} color={colors.muted} />
-              <Text style={[styles.profileTitle, { color: colors.text }]} numberOfLines={1}>
+              <Text
+                style={[styles.profileTitle, { color: colors.text }]}
+                numberOfLines={1}
+              >
                 {profileTitle}
               </Text>
               {animal.tagId && (
-                <Text style={[styles.profileTagId, { color: colors.muted }]} numberOfLines={1}>
+                <Text
+                  style={[styles.profileTagId, { color: colors.muted }]}
+                  numberOfLines={1}
+                >
                   {animal.tagId}
                 </Text>
               )}
@@ -270,9 +281,7 @@ export default function AnimalDetailsScreen() {
           ) : animalImages.length > 0 ? (
             <View style={styles.animalPhotosGrid}>
               {(["FACE", "EAR", "BODY"] as const).map((imageType) => {
-                const img = animalImages.find(
-                  (i) => i.imageType === imageType,
-                );
+                const img = animalImages.find((i) => i.imageType === imageType);
                 return (
                   <View
                     key={imageType}
@@ -303,10 +312,7 @@ export default function AnimalDetailsScreen() {
                       </View>
                     )}
                     <Text
-                      style={[
-                        styles.animalPhotoLabel,
-                        { color: colors.muted },
-                      ]}
+                      style={[styles.animalPhotoLabel, { color: colors.muted }]}
                     >
                       {imageType}
                     </Text>

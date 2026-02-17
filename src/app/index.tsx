@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
   ActivityIndicator,
   Image,
   TouchableOpacity,
@@ -19,7 +18,7 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useCasesByDoctor, useDeleteCase } from "../features/cases/hooks";
-import { useAnimalImages } from "../features/animals/hooks";
+import { useAnimalImages, useAnimal } from "../features/animals/hooks";
 import type { Case } from "../types/api";
 
 export default function DashboardScreen() {
@@ -59,10 +58,7 @@ export default function DashboardScreen() {
 
   const handleCasePress = useCallback(
     (caseId: number) => {
-      setTimeout(
-        () => router.push(`/case-detail?caseId=${caseId}`),
-        50,
-      );
+      setTimeout(() => router.push(`/case-detail?caseId=${caseId}`), 50);
     },
     [router],
   );
@@ -83,7 +79,9 @@ export default function DashboardScreen() {
               } catch (error) {
                 Alert.alert(
                   "Error",
-                  error instanceof Error ? error.message : "Failed to delete case",
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to delete case",
                 );
               }
             },
@@ -94,19 +92,15 @@ export default function DashboardScreen() {
     [deleteCaseMutation],
   );
 
-  const renderCaseItem = ({ item }: { item: Case }) => {
-    const subtitle = `${formatDate(item.caseDatetime)}${item.chiefComplaint ? ` • ${item.chiefComplaint}` : ""}`;
-    return (
-      <CaseRow
-        animalId={item.animalId}
-        title={`Case #${item.caseId}`}
-        subtitle={subtitle}
-        onPress={() => handleCasePress(item.caseId)}
-        onDelete={() => handleDeleteCase(item)}
-        isDeleting={deleteCaseMutation.isPending}
-      />
-    );
-  };
+  const renderCaseItem = ({ item }: { item: Case }) => (
+    <CaseRow
+      caseItem={item}
+      formatDate={formatDate}
+      onPress={() => handleCasePress(item.caseId)}
+      onDelete={() => handleDeleteCase(item)}
+      isDeleting={deleteCaseMutation.isPending}
+    />
+  );
 
   if (doctorLoading || casesLoading) {
     return (
@@ -206,22 +200,13 @@ export default function DashboardScreen() {
               Recent Cases
             </Text>
             {recentCases.length > 0 ? (
-              <Card style={styles.casesCard}>
-                <FlatList
-                  data={recentCases}
-                  renderItem={renderCaseItem}
-                  keyExtractor={(item) => String(item.caseId)}
-                  scrollEnabled={false}
-                  ItemSeparatorComponent={() => (
-                    <View
-                      style={[
-                        styles.separator,
-                        { backgroundColor: colors.border },
-                      ]}
-                    />
-                  )}
-                />
-              </Card>
+              <View style={styles.casesList}>
+                {recentCases.map((item) => (
+                  <View key={item.caseId} style={styles.caseCardSpacer}>
+                    {renderCaseItem({ item })}
+                  </View>
+                ))}
+              </View>
             ) : (
               <Card style={styles.emptyCard}>
                 <Text style={[styles.emptyText, { color: colors.muted }]}>
@@ -270,25 +255,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   quickActionsSection: {
-    marginTop: 24,
+    marginTop: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    marginBottom: 16,
+    marginBottom: 10,
   },
   recentCasesSection: {
-    marginTop: 24,
+    marginTop: 16,
   },
-  casesCard: {
-    paddingVertical: 0,
+  casesList: {
+    gap: 0,
   },
-  separator: {
-    height: 1,
-    marginLeft: 16,
+  caseCardSpacer: {
+    marginBottom: 12,
   },
   emptyCard: {
-    paddingVertical: 24,
+    paddingVertical: 16,
   },
   emptyText: {
     fontSize: 16,
@@ -317,134 +301,194 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: 8,
   },
-  caseRow: {
+  caseCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    minHeight: 44,
-  },
-  caseRowTap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  caseDeleteBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 8,
-  },
-  caseAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     overflow: "hidden",
-    marginRight: 12,
+    height: 60,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+  },
+  caseCardPhoto: {
+    width: 60,
+    height: 60,
+    backgroundColor: "#2a2a2a",
     justifyContent: "center",
     alignItems: "center",
   },
-  caseAvatarImage: {
-    width: "100%",
-    height: "100%",
+  caseCardPhotoImage: {
+    width: 60,
+    height: 60,
   },
-  caseAvatarPlaceholder: {
+  caseCardPhotoPlaceholder: {
     fontSize: 18,
     fontWeight: "600",
   },
-  caseRowContent: {
+  caseCardBody: {
     flex: 1,
-    marginRight: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    minWidth: 0,
   },
-  caseRowTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
+  caseCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
   },
-  caseRowSubtitle: {
+  caseCardTitle: {
     fontSize: 14,
+    fontWeight: "700",
+    flex: 1,
+    marginRight: 6,
   },
-  caseRowChevron: {
-    fontSize: 24,
+  caseCardStatusIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  caseCardComplaint: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 0,
+    opacity: 0.9,
+  },
+  caseCardMeta: {
+    fontSize: 12,
+    opacity: 0.75,
+  },
+  caseCardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  caseCardDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
-// Row with animal face avatar for dashboard recent cases
+// Modern case card: one side photo, other side case info + status icon
 interface CaseRowProps {
-  animalId: number;
-  title: string;
-  subtitle: string;
+  caseItem: Case;
+  formatDate: (dateString: string) => string;
   onPress: () => void;
   onDelete: () => void;
   isDeleting?: boolean;
 }
 
 function CaseRow({
-  animalId,
-  title,
-  subtitle,
+  caseItem,
+  formatDate,
   onPress,
   onDelete,
   isDeleting,
 }: CaseRowProps) {
   const { colors } = useTheme();
-  const { data: animalImages = [] } = useAnimalImages(animalId);
+  const { data: animalImages = [] } = useAnimalImages(caseItem.animalId);
+  const { data: animal } = useAnimal(caseItem.animalId);
   const faceUrl =
     animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+  const ownerName = animal?.farmer?.fullName ?? "—";
+  const status = caseItem.status ?? "IN_PROGRESS";
+  const isCompleted = status === "COMPLETED";
 
   return (
-    <View style={styles.caseRow}>
+    <View style={[styles.caseCard, { backgroundColor: colors.surface }]}>
       <TouchableOpacity
-        style={styles.caseRowTap}
+        style={styles.caseCardPhoto}
         onPress={onPress}
-        activeOpacity={0.7}
+        activeOpacity={0.85}
       >
-        <View
-          style={[styles.caseAvatar, { backgroundColor: colors.border }]}
-        >
-          {faceUrl ? (
-            <Image
-              source={{ uri: faceUrl }}
-              style={styles.caseAvatarImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <Text
-              style={[styles.caseAvatarPlaceholder, { color: colors.muted }]}
-            >
-              ?
-            </Text>
-          )}
-        </View>
-        <View style={styles.caseRowContent}>
-          <Text style={[styles.caseRowTitle, { color: colors.text }]} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={[styles.caseRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        </View>
-        <Text style={[styles.caseRowChevron, { color: colors.muted }]}>›</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={onDelete}
-        disabled={isDeleting}
-        style={[
-          styles.caseDeleteBtn,
-          { borderColor: colors.danger },
-          isDeleting && { opacity: 0.5 },
-        ]}
-        activeOpacity={0.7}
-      >
-        {isDeleting ? (
-          <ActivityIndicator size="small" color={colors.danger} />
+        {faceUrl ? (
+          <Image
+            source={{ uri: faceUrl }}
+            style={styles.caseCardPhotoImage}
+            resizeMode="cover"
+          />
         ) : (
-          <FontAwesome name="trash-o" size={16} color={colors.danger} />
+          <Text
+            style={[styles.caseCardPhotoPlaceholder, { color: colors.muted }]}
+          >
+            ?
+          </Text>
         )}
       </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.caseCardBody}
+        onPress={onPress}
+        activeOpacity={0.85}
+      >
+        <View>
+          <View style={styles.caseCardHeader}>
+            <Text
+              style={[styles.caseCardTitle, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              Case #{caseItem.caseId}
+            </Text>
+            <View
+              style={[
+                styles.caseCardStatusIcon,
+                {
+                  backgroundColor: isCompleted
+                    ? (colors.success ?? "#22c55e") + "22"
+                    : (colors.warning ?? "#eab308") + "22",
+                },
+              ]}
+            >
+              <FontAwesome
+                name={isCompleted ? "check-circle" : "clock-o"}
+                size={14}
+                color={isCompleted ? colors.success : colors.warning}
+              />
+            </View>
+          </View>
+          {caseItem.chiefComplaint ? (
+            <Text
+              style={[styles.caseCardComplaint, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {caseItem.chiefComplaint}
+            </Text>
+          ) : null}
+          <Text
+            style={[styles.caseCardMeta, { color: colors.muted }]}
+            numberOfLines={1}
+          >
+            {ownerName} · {formatDate(caseItem.caseDatetime)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+      <View style={styles.caseCardActions}>
+        <TouchableOpacity
+          onPress={onDelete}
+          disabled={isDeleting}
+          style={[
+            styles.caseCardDeleteBtn,
+            { borderColor: colors.danger },
+            isDeleting && { opacity: 0.5 },
+          ]}
+          activeOpacity={0.7}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color={colors.danger} />
+          ) : (
+            <FontAwesome name="trash-o" size={12} color={colors.danger} />
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

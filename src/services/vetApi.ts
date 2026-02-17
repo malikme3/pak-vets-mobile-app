@@ -3,6 +3,8 @@ import type {
   Doctor,
   CreateDoctorRequest,
   UpdateDoctorRequest,
+  Farmer,
+  CreateFarmerRequest,
   Animal,
   CreateAnimalRequest,
   UpdateAnimalRequest,
@@ -77,6 +79,30 @@ export const doctorApi = {
 
   deleteDoctor: async (doctorId: number): Promise<void> => {
     await apiClient.instance.delete(`/doctors/${doctorId}`);
+  },
+};
+
+// Farmers API
+export const farmerApi = {
+  getAllFarmers: async (): Promise<Farmer[]> => {
+    const response =
+      await apiClient.instance.get<ApiSuccessResponse<Farmer[]>>("/farmers");
+    return response.data.data;
+  },
+
+  getFarmer: async (farmerId: number): Promise<Farmer> => {
+    const response = await apiClient.instance.get<ApiSuccessResponse<Farmer>>(
+      `/farmers/${farmerId}`,
+    );
+    return response.data.data;
+  },
+
+  createFarmer: async (request: CreateFarmerRequest): Promise<Farmer> => {
+    const response = await apiClient.instance.post<ApiSuccessResponse<Farmer>>(
+      "/farmers",
+      request,
+    );
+    return response.data.data;
   },
 };
 
@@ -240,9 +266,7 @@ export const caseDiagnosisApi = {
     return response.data.data;
   },
 
-  getCaseDiagnosesByCase: async (
-    caseId: number,
-  ): Promise<CaseDiagnosis[]> => {
+  getCaseDiagnosesByCase: async (caseId: number): Promise<CaseDiagnosis[]> => {
     const response = await apiClient.instance.get<
       ApiSuccessResponse<CaseDiagnosis[]>
     >(`/cases/${caseId}/diagnoses`);
@@ -285,7 +309,10 @@ export const caseDiagnosisApi = {
 // Case Treatments API
 export const caseTreatmentApi = {
   suggestTreatments: async (
-    diagnoses: Array<{ diagnosis_text: string; status: "SUSPECTED" | "CONFIRMED" }>,
+    diagnoses: Array<{
+      diagnosis_text: string;
+      status: "SUSPECTED" | "CONFIRMED";
+    }>,
   ): Promise<TreatmentSuggestion[]> => {
     const response = await apiClient.instance.post<
       ApiSuccessResponse<TreatmentSuggestion[]>
@@ -300,9 +327,7 @@ export const caseTreatmentApi = {
     return response.data.data;
   },
 
-  getCaseTreatmentsByCase: async (
-    caseId: number,
-  ): Promise<CaseTreatment[]> => {
+  getCaseTreatmentsByCase: async (caseId: number): Promise<CaseTreatment[]> => {
     const response = await apiClient.instance.get<
       ApiSuccessResponse<CaseTreatment[]>
     >(`/cases/${caseId}/treatments`);
@@ -336,9 +361,9 @@ export const caseTreatmentApi = {
 // Case Notes API
 export const caseNoteApi = {
   getCaseNote: async (noteId: number): Promise<CaseNote> => {
-    const response = await apiClient.instance.get<
-      ApiSuccessResponse<CaseNote>
-    >(`/case-notes/${noteId}`);
+    const response = await apiClient.instance.get<ApiSuccessResponse<CaseNote>>(
+      `/case-notes/${noteId}`,
+    );
     return response.data.data;
   },
 
@@ -349,9 +374,7 @@ export const caseNoteApi = {
     return response.data.data;
   },
 
-  createCaseNote: async (
-    request: CreateCaseNoteRequest,
-  ): Promise<CaseNote> => {
+  createCaseNote: async (request: CreateCaseNoteRequest): Promise<CaseNote> => {
     const response = await apiClient.instance.post<
       ApiSuccessResponse<CaseNote>
     >("/case-notes", request);
@@ -362,9 +385,10 @@ export const caseNoteApi = {
     noteId: number,
     request: UpdateCaseNoteRequest,
   ): Promise<CaseNote> => {
-    const response = await apiClient.instance.put<
-      ApiSuccessResponse<CaseNote>
-    >(`/case-notes/${noteId}`, request);
+    const response = await apiClient.instance.put<ApiSuccessResponse<CaseNote>>(
+      `/case-notes/${noteId}`,
+      request,
+    );
     return response.data.data;
   },
 

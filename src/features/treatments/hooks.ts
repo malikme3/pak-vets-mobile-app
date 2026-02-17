@@ -10,8 +10,7 @@ import { caseKeys } from "../cases/hooks";
 export const treatmentKeys = {
   all: ["treatment"] as const,
   detail: (id: number) => [...treatmentKeys.all, id] as const,
-  byCase: (caseId: number) =>
-    [...treatmentKeys.all, "case", caseId] as const,
+  byCase: (caseId: number) => [...treatmentKeys.all, "case", caseId] as const,
 };
 
 export function useCaseTreatment(treatmentId: number) {

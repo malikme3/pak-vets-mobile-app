@@ -20,7 +20,10 @@ import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
-import { useCreateCaseTreatment, useUpdateCaseTreatment } from "../features/treatments/hooks";
+import {
+  useCreateCaseTreatment,
+  useUpdateCaseTreatment,
+} from "../features/treatments/hooks";
 import { useCreateMediaFile } from "../features/media/hooks";
 import {
   getBucketName,

@@ -44,7 +44,8 @@ export default function CreateCaseScreen() {
   );
   const { data: animalImages = [] } = useAnimalImages(animalId || 0);
   const [faceImageError, setFaceImageError] = useState(false);
-  const faceImageUrl = animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+  const faceImageUrl =
+    animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
 
   useEffect(() => {
     setFaceImageError(false);
@@ -238,6 +239,7 @@ export default function CreateCaseScreen() {
         doctorId: doctor.doctorId,
         caseDatetime: caseDatetime.toISOString(),
         chiefComplaint: chiefComplaint.trim() || undefined,
+        status: "COMPLETED",
       });
 
       router.replace(`/case-detail?caseId=${caseData.caseId}`);
@@ -292,7 +294,9 @@ export default function CreateCaseScreen() {
             activeOpacity={0.7}
           >
             <FontAwesome name="home" size={18} color={colors.primary} />
-            <Text style={[styles.homeButtonText, { color: colors.primary }]}>Home</Text>
+            <Text style={[styles.homeButtonText, { color: colors.primary }]}>
+              Home
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -302,11 +306,18 @@ export default function CreateCaseScreen() {
             <TouchableOpacity
               style={[styles.animalCard, { borderColor: colors.border }]}
               onPress={() =>
-                router.push(`/animal-details?animalId=${selectedAnimal.animalId}`)
+                router.push(
+                  `/animal-details?animalId=${selectedAnimal.animalId}`,
+                )
               }
               activeOpacity={0.7}
             >
-              <View style={[styles.animalAvatar, { backgroundColor: colors.border }]}>
+              <View
+                style={[
+                  styles.animalAvatar,
+                  { backgroundColor: colors.border },
+                ]}
+              >
                 {faceImageUrl && !faceImageError ? (
                   <Image
                     source={{ uri: faceImageUrl }}
@@ -321,18 +332,30 @@ export default function CreateCaseScreen() {
               <View style={styles.animalCardContent}>
                 <View style={styles.speciesOwnerRow}>
                   <Text
-                    style={[styles.speciesOwnerText, styles.speciesOwnerLeft, { color: colors.text }]}
+                    style={[
+                      styles.speciesOwnerText,
+                      styles.speciesOwnerLeft,
+                      { color: colors.text },
+                    ]}
                     numberOfLines={1}
                   >
                     {capitalizeFirst(selectedAnimal.species)}
-                    {selectedAnimal.breed ? ` - ${capitalizeFirst(selectedAnimal.breed)}` : ""}
+                    {selectedAnimal.breed
+                      ? ` - ${capitalizeFirst(selectedAnimal.breed)}`
+                      : ""}
                     {selectedAnimal.tagId ? ` (${selectedAnimal.tagId})` : ""}
                   </Text>
                   <Text
-                    style={[styles.speciesOwnerText, styles.speciesOwnerRight, { color: colors.text }]}
+                    style={[
+                      styles.speciesOwnerText,
+                      styles.speciesOwnerRight,
+                      { color: colors.text },
+                    ]}
                     numberOfLines={1}
                   >
-                    {selectedAnimal.farmer?.fullName ? `Farmer: ${capitalizeFirst(selectedAnimal.farmer.fullName)}` : "—"}
+                    {selectedAnimal.farmer?.fullName
+                      ? `Farmer: ${capitalizeFirst(selectedAnimal.farmer.fullName)}`
+                      : "—"}
                   </Text>
                 </View>
                 {selectedAnimal.animalTagline && (

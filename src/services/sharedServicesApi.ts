@@ -143,8 +143,7 @@ export interface AnalyzeAnimalImageApiResponse {
 
 // Vet API base URL (analyze-animal moved to pak-vets-api)
 const VET_API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  "https://pak-vets-dev.roundrocktennis.com";
+  process.env.EXPO_PUBLIC_API_URL || "https://pak-vets-dev.roundrocktennis.com";
 
 /**
  * Analyze animal from 3 image URLs (face, ear, body) via pak-vets Groq vision.

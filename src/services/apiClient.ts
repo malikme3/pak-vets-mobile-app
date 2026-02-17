@@ -71,7 +71,8 @@ class ApiClient {
             error.config?.method,
             error.config?.url,
             error.response?.status,
-            "\n" + JSON.stringify(error.response?.data ?? error.message, null, 2),
+            "\n" +
+              JSON.stringify(error.response?.data ?? error.message, null, 2),
           );
         }
         return Promise.reject(this.normalizeError(error));

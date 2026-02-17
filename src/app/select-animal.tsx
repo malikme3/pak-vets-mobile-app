@@ -21,9 +21,16 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
-import { useSearchAnimals, useAnimals, useAnimalImages } from "../features/animals/hooks";
+import {
+  useSearchAnimals,
+  useAnimals,
+  useAnimalImages,
+} from "../features/animals/hooks";
 import { animalApi } from "../services/vetApi";
-import { getUploadSignedUrl, getBucketName } from "../services/sharedServicesApi";
+import {
+  getUploadSignedUrl,
+  getBucketName,
+} from "../services/sharedServicesApi";
 import type { Animal, MatchAnimalImageResponse } from "../types/api";
 
 type SearchFilter = "tag" | "farmer_name" | "farmer_phone";
@@ -39,7 +46,8 @@ export default function SelectAnimalScreen() {
   const [filter, setFilter] = useState<SearchFilter>("tag");
   const [imageMatchType, setImageMatchType] = useState<ImageMatchType>("BODY");
   const [matching, setMatching] = useState(false);
-  const [matchResult, setMatchResult] = useState<MatchAnimalImageResponse | null>(null);
+  const [matchResult, setMatchResult] =
+    useState<MatchAnimalImageResponse | null>(null);
   const [matchedAnimal, setMatchedAnimal] = useState<Animal | null>(null);
 
   // Build effective search query: tag-001, 009-0333-6831-836, or raw for farmer name
@@ -57,25 +65,24 @@ export default function SelectAnimalScreen() {
   const { data: matchedAnimalImages = [] } = useAnimalImages(
     matchedAnimal?.animalId ?? 0,
   );
-  const matchedFaceUrl = matchedAnimalImages.find(
-    (i) => i.imageType === "FACE",
-  )?.s3Url ?? null;
+  const matchedFaceUrl =
+    matchedAnimalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
 
   // Filter results based on selected filter type
   const results = inputValue.trim()
     ? (searchResults || []).filter((animal) => {
-      const query = searchQuery.toLowerCase();
-      switch (filter) {
-        case "tag":
-          return animal.tagId?.toLowerCase().includes(query);
-        case "farmer_name":
-          return animal.farmer?.fullName?.toLowerCase().includes(query);
-        case "farmer_phone":
-          return animal.farmer?.phoneNumber?.includes(searchQuery);
-        default:
-          return false;
-      }
-    })
+        const query = searchQuery.toLowerCase();
+        switch (filter) {
+          case "tag":
+            return animal.tagId?.toLowerCase().includes(query);
+          case "farmer_name":
+            return animal.farmer?.fullName?.toLowerCase().includes(query);
+          case "farmer_phone":
+            return animal.farmer?.phoneNumber?.includes(searchQuery);
+          default:
+            return false;
+        }
+      })
     : [];
 
   // Format phone as user types: XXXX-XXXX-XXX
@@ -203,7 +210,10 @@ export default function SelectAnimalScreen() {
         topK: 5,
       });
       setMatchResult(response);
-      if (response.matchStatus === "MATCH" && response.matchedAnimalId != null) {
+      if (
+        response.matchStatus === "MATCH" &&
+        response.matchedAnimalId != null
+      ) {
         const animal = await animalApi.getAnimal(response.matchedAnimalId);
         setMatchedAnimal(animal);
       }
@@ -297,11 +307,16 @@ export default function SelectAnimalScreen() {
             </View>
           )}
           {matchResult && !matching && (
-            <View style={[styles.matchResult, { borderTopColor: colors.border }]}>
+            <View
+              style={[styles.matchResult, { borderTopColor: colors.border }]}
+            >
               {matchResult.matchStatus === "MATCH" && matchedAnimal ? (
                 <>
-                  <Text style={[styles.matchStatusText, { color: colors.primary }]}>
-                    Match found ({(matchResult.bestScore * 100).toFixed(0)}% match)
+                  <Text
+                    style={[styles.matchStatusText, { color: colors.primary }]}
+                  >
+                    Match found ({(matchResult.bestScore * 100).toFixed(0)}%
+                    match)
                   </Text>
                   <TouchableOpacity
                     style={styles.matchRow}
@@ -309,9 +324,14 @@ export default function SelectAnimalScreen() {
                     activeOpacity={0.7}
                   >
                     <TouchableOpacity
-                      style={[styles.matchAvatar, { backgroundColor: colors.border }]}
+                      style={[
+                        styles.matchAvatar,
+                        { backgroundColor: colors.border },
+                      ]}
                       onPress={() =>
-                        router.push(`/animal-details?animalId=${matchedAnimal.animalId}`)
+                        router.push(
+                          `/animal-details?animalId=${matchedAnimal.animalId}`,
+                        )
                       }
                       activeOpacity={0.7}
                     >
@@ -322,20 +342,38 @@ export default function SelectAnimalScreen() {
                           resizeMode="cover"
                         />
                       ) : (
-                        <Text style={[styles.matchAvatarPlaceholder, { color: colors.muted }]}>
+                        <Text
+                          style={[
+                            styles.matchAvatarPlaceholder,
+                            { color: colors.muted },
+                          ]}
+                        >
                           ?
                         </Text>
                       )}
                     </TouchableOpacity>
                     <View style={styles.matchRowContent}>
-                      <Text style={[styles.matchRowTitle, { color: colors.text }]} numberOfLines={1}>
+                      <Text
+                        style={[styles.matchRowTitle, { color: colors.text }]}
+                        numberOfLines={1}
+                      >
                         {formatAnimalTitle(matchedAnimal)}
                       </Text>
-                      <Text style={[styles.matchRowSubtitle, { color: colors.muted }]} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.matchRowSubtitle,
+                          { color: colors.muted },
+                        ]}
+                        numberOfLines={1}
+                      >
                         {formatAnimalSubtitle(matchedAnimal)}
                       </Text>
                     </View>
-                    <Text style={[styles.matchRowChevron, { color: colors.muted }]}>›</Text>
+                    <Text
+                      style={[styles.matchRowChevron, { color: colors.muted }]}
+                    >
+                      ›
+                    </Text>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -361,7 +399,12 @@ export default function SelectAnimalScreen() {
             selectedValue={filter}
             onValueChange={(value) => handleFilterChange(value as SearchFilter)}
           />
-          <View style={[styles.searchInputRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <View
+            style={[
+              styles.searchInputRow,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
             {(filter === "tag" || filter === "farmer_phone") && (
               <Text style={[styles.searchPrefix, { color: colors.text }]}>
                 {filter === "tag" ? "tag-" : "0092-"}
@@ -373,7 +416,8 @@ export default function SelectAnimalScreen() {
                 {
                   color: colors.text,
                 },
-                (filter === "tag" || filter === "farmer_phone") && styles.searchInputWithPrefix,
+                (filter === "tag" || filter === "farmer_phone") &&
+                  styles.searchInputWithPrefix,
               ]}
               value={inputValue}
               onChangeText={handleInputChange}
