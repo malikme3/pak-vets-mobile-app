@@ -206,7 +206,37 @@ export default function SelectAnimalScreen() {
     return true;
   };
 
-  const handleFindByImage = async () => {
+  const requestCameraPermission = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "We need camera access to take a photo.",
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const processImageUriAndMatch = async (uri: string) => {
+    const s3Key = `match-query/${Date.now()}-${imageMatchType.toLowerCase()}.jpg`;
+    const imageUrl = await uploadImageToS3(uri, s3Key);
+    const response = await animalApi.matchAnimalImage({
+      queryImageUrl: imageUrl,
+      expectedType: imageMatchType,
+      topK: 5,
+    });
+    setMatchResult(response);
+    if (
+      response.matchStatus === "MATCH" &&
+      response.matchedAnimalId != null
+    ) {
+      const animal = await animalApi.getAnimal(response.matchedAnimalId);
+      setMatchedAnimal(animal);
+    }
+  };
+
+  const handleChoosePhoto = async () => {
     const hasPermission = await requestMediaPermission();
     if (!hasPermission) return;
     setMatching(true);
@@ -223,22 +253,37 @@ export default function SelectAnimalScreen() {
         setMatching(false);
         return;
       }
-      const uri = result.assets[0].uri;
-      const s3Key = `match-query/${Date.now()}-${imageMatchType.toLowerCase()}.jpg`;
-      const imageUrl = await uploadImageToS3(uri, s3Key);
-      const response = await animalApi.matchAnimalImage({
-        queryImageUrl: imageUrl,
-        expectedType: imageMatchType,
-        topK: 5,
+      await processImageUriAndMatch(result.assets[0].uri);
+    } catch (err) {
+      Alert.alert(
+        "Match failed",
+        err instanceof Error
+          ? err.message
+          : "Could not find animal by image. Try again.",
+      );
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) return;
+    setMatching(true);
+    setMatchResult(null);
+    setMatchedAnimal(null);
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
       });
-      setMatchResult(response);
-      if (
-        response.matchStatus === "MATCH" &&
-        response.matchedAnimalId != null
-      ) {
-        const animal = await animalApi.getAnimal(response.matchedAnimalId);
-        setMatchedAnimal(animal);
+      if (result.canceled || !result.assets[0]) {
+        setMatching(false);
+        return;
       }
+      await processImageUriAndMatch(result.assets[0].uri);
     } catch (err) {
       Alert.alert(
         "Match failed",
@@ -307,19 +352,37 @@ export default function SelectAnimalScreen() {
               clearMatchResult();
             }}
           />
-          <Button
-            title={
-              matching
-                ? "Matching…"
-                : matchResult
-                  ? "Try another photo"
-                  : "Choose photo"
-            }
-            onPress={matchResult ? clearMatchResult : handleFindByImage}
-            disabled={matching}
-            variant="secondary"
-            style={styles.findByImageButton}
-          />
+          {matching ? (
+            <Button
+              title="Matching…"
+              onPress={() => {}}
+              disabled
+              variant="secondary"
+              style={styles.findByImageButton}
+            />
+          ) : matchResult ? (
+            <Button
+              title="Try another photo"
+              onPress={clearMatchResult}
+              variant="secondary"
+              style={styles.findByImageButton}
+            />
+          ) : (
+            <View style={styles.findByImageButtonRow}>
+              <Button
+                title="Choose photo"
+                onPress={handleChoosePhoto}
+                variant="secondary"
+                style={styles.findByImageButtonHalf}
+              />
+              <Button
+                title="Take photo"
+                onPress={handleTakePhoto}
+                variant="secondary"
+                style={styles.findByImageButtonHalf}
+              />
+            </View>
+          )}
           {matching && (
             <View style={styles.matchLoading}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -585,6 +648,14 @@ const styles = StyleSheet.create({
   },
   findByImageButton: {
     marginTop: 12,
+  },
+  findByImageButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  findByImageButtonHalf: {
+    flex: 1,
   },
   matchLoading: {
     flexDirection: "row",

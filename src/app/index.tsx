@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -21,12 +21,16 @@ import { useCasesByDoctor, useDeleteCase } from "../features/cases/hooks";
 import { useAnimalImages, useAnimal } from "../features/animals/hooks";
 import type { Case } from "../types/api";
 
-const CASE_STATUS_COMPLETED = "COMPLETED";
-const ACTIVE_CASES_LIMIT = 5;
+const ACTIVE_CASES_LIMIT_MIN = 1;
+const ACTIVE_CASES_LIMIT_MAX = 100;
+const ACTIVE_CASES_LIMIT_DEFAULT = 15;
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const [activeCasesLimit, setActiveCasesLimit] = useState(
+    ACTIVE_CASES_LIMIT_DEFAULT,
+  );
   const {
     data: doctor,
     isLoading: doctorLoading,
@@ -40,13 +44,13 @@ export default function DashboardScreen() {
 
   const activeCases = allCases
     ? [...allCases]
-        .filter((c) => (c.status ?? "IN_PROGRESS") !== CASE_STATUS_COMPLETED)
+        .filter((c) => c.isActive)
         .sort(
           (a, b) =>
             new Date(b.caseDatetime).getTime() -
             new Date(a.caseDatetime).getTime(),
         )
-        .slice(0, ACTIVE_CASES_LIMIT)
+        .slice(0, activeCasesLimit)
     : [];
 
   const formatDate = useCallback((dateString: string): string => {
@@ -208,9 +212,52 @@ export default function DashboardScreen() {
 
           {/* Active Cases */}
           <View style={styles.recentCasesSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Active Cases
-            </Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.text, marginBottom: 0 },
+                ]}
+              >
+                Active Cases
+              </Text>
+              <View style={styles.limitCounter}>
+                <TouchableOpacity
+                  onPress={() =>
+                    setActiveCasesLimit((n) =>
+                      Math.max(ACTIVE_CASES_LIMIT_MIN, n - 1),
+                    )
+                  }
+                  style={[
+                    styles.limitButton,
+                    { borderColor: colors.primary, backgroundColor: colors.surface },
+                  ]}
+                  accessibilityLabel="Decrease limit"
+                >
+                  <FontAwesome name="minus" size={12} color={colors.primary} />
+                </TouchableOpacity>
+                <Text
+                  style={[styles.limitValue, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {activeCasesLimit}
+                </Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setActiveCasesLimit((n) =>
+                      Math.min(ACTIVE_CASES_LIMIT_MAX, n + 1),
+                    )
+                  }
+                  style={[
+                    styles.limitButton,
+                    { borderColor: colors.primary, backgroundColor: colors.surface },
+                  ]}
+                  accessibilityLabel="Increase limit"
+                >
+                  <FontAwesome name="plus" size={12} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
             {activeCases.length > 0 ? (
               <View style={styles.casesList}>
                 {activeCases.map((item) => (
@@ -273,6 +320,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  limitCounter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  limitButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  limitValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    minWidth: 24,
+    textAlign: "center",
   },
   recentCasesSection: {
     marginTop: 16,

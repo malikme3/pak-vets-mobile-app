@@ -83,26 +83,26 @@ class ApiClient {
   private normalizeError(error: AxiosError): ApiError {
     if (error.response) {
       // Server responded with error
-      const response = error.response.data as {
+      const data = error.response.data as {
         success?: boolean;
         error?: {
           code: string;
           message: string;
-          details: Record<string, unknown>;
+          details?: Record<string, unknown>;
         };
-      };
+      } | null | undefined;
 
       const apiError: ApiError = {
         message:
-          response.error?.message || error.message || "An error occurred",
+          data?.error?.message || error.message || "An error occurred",
         status: error.response.status,
-        code: response.error?.code,
+        code: data?.error?.code,
       };
 
       // Extract field errors from details if available
-      if (response.error?.details) {
+      if (data?.error?.details) {
         const fieldErrors: Record<string, string> = {};
-        Object.entries(response.error.details).forEach(([key, value]) => {
+        Object.entries(data.error.details).forEach(([key, value]) => {
           if (typeof value === "string") {
             fieldErrors[key] = value;
           }

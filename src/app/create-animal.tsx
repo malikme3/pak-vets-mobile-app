@@ -20,9 +20,10 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
-import { AppInput } from "../components/ui/AppInput";
 import { Button } from "../components/ui/Button";
 import { useCreateAnimal } from "../features/animals/hooks";
+import { useCurrentDoctor } from "../features/doctors/hooks";
+import { useCreateCase } from "../features/cases/hooks";
 import { animalApi, farmerApi } from "../services/vetApi";
 import {
   getUploadSignedUrl,
@@ -94,7 +95,9 @@ function InputRow({
       <View style={inputRowStyles.labelWrap}>
         {icon ? (
           <FontAwesome
-            name={icon as "phone" | "user" | "id-card" | "map-marker" | "comment"}
+            name={
+              icon as "phone" | "user" | "id-card" | "map-marker" | "comment"
+            }
             size={14}
             color={colors.primary}
             style={inputRowStyles.labelIcon}
@@ -189,7 +192,6 @@ export default function CreateAnimalScreen() {
   // Step 2: Upload
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploadedUrls, setUploadedUrls] = useState<{
     faceImageUrl: string;
@@ -240,8 +242,11 @@ export default function CreateAnimalScreen() {
 
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [creatingCase, setCreatingCase] = useState(false);
 
   const createAnimalMutation = useCreateAnimal();
+  const { data: doctor } = useCurrentDoctor();
+  const createCaseMutation = useCreateCase();
 
   // When species, heart girth, and body length are set, show estimated weight in the field (updates as user types).
   useEffect(() => {
@@ -357,20 +362,15 @@ export default function CreateAnimalScreen() {
     ) => {
       setUploading(true);
       setAnalyzing(false);
-      setUploadProgress(0);
       try {
         const timestamp = Date.now();
         const faceKey = `create-animal-temp/${timestamp}-face.jpg`;
         const earKey = `create-animal-temp/${timestamp}-ear.jpg`;
         const bodyKey = `create-animal-temp/${timestamp}-body.jpg`;
 
-        setUploadProgress(15);
         const faceImageUrl = await uploadImageToS3(faceImage.uri, faceKey);
-        setUploadProgress(40);
         const earImageUrl = await uploadImageToS3(earImage.uri, earKey);
-        setUploadProgress(65);
         const bodyImageUrl = await uploadImageToS3(bodyImage.uri, bodyKey);
-        setUploadProgress(80);
         setUploadedUrls({ faceImageUrl, earImageUrl, bodyImageUrl });
 
         setAnalyzing(true);
@@ -380,8 +380,6 @@ export default function CreateAnimalScreen() {
           bodyImageUrl,
         });
         setAnalyzedAnimal(animal);
-        setUploadProgress(100);
-        // Pre-fill attributes form when analysis completes (user may be on complaint or attributes step)
         setSpecies(animal.species ?? "");
         setBreed(animal.breed ?? "");
         setAgeMonths(
@@ -403,7 +401,6 @@ export default function CreateAnimalScreen() {
       } finally {
         setUploading(false);
         setAnalyzing(false);
-        setUploadProgress(0);
       }
     },
     [],
@@ -442,9 +439,12 @@ export default function CreateAnimalScreen() {
     },
     [],
   );
-  const handleChiefComplaintTranscriptReady = useCallback((transcript: string) => {
-    setChiefComplaint(transcript);
-  }, []);
+  const handleChiefComplaintTranscriptReady = useCallback(
+    (transcript: string) => {
+      setChiefComplaint(transcript);
+    },
+    [],
+  );
   const handleChiefComplaintPlayPause = useCallback(async () => {
     if (
       !chiefComplaintVoiceRecording ||
@@ -564,23 +564,62 @@ export default function CreateAnimalScreen() {
           });
         } catch (err) {
           Alert.alert(
-            "Error",
-            err instanceof Error ? err.message : "Failed to enroll images",
+            "Images not enrolled",
+            err instanceof Error
+              ? err.message
+              : "Failed to enroll images. Animal was saved; you can add images later.",
           );
+        } finally {
           setEnrolling(false);
-          return;
         }
-        setEnrolling(false);
       }
       if (didNavigateFromAttributesRef.current) return;
+
+      const toPath = (p: string) => (p.startsWith("/") ? p : `/${p}`);
+      const isReturnToCreateCase =
+        typeof returnTo === "string" &&
+        returnTo.replace(/^\/+/, "").startsWith("create-case");
+
+      if (isReturnToCreateCase && doctor) {
+        didNavigateFromAttributesRef.current = true;
+        setCreatingCase(true);
+        try {
+          const caseData = await createCaseMutation.mutateAsync({
+            animalId: animalIdToUse,
+            doctorId: doctor.doctorId,
+            caseDatetime: new Date().toISOString(),
+            chiefComplaint: chiefComplaint.trim() || undefined,
+            status: "IN_PROGRESS",
+          });
+          router.replace(`/case-detail?caseId=${caseData.caseId}`);
+        } catch (caseErr) {
+          didNavigateFromAttributesRef.current = false;
+          Alert.alert(
+            "Case not created",
+            caseErr instanceof Error
+              ? caseErr.message
+              : "Failed to create case. Animal was saved.",
+          );
+        } finally {
+          setCreatingCase(false);
+        }
+        return;
+      }
+
       didNavigateFromAttributesRef.current = true;
-      if (returnTo && typeof returnTo === "string") {
-        router.replace({
-          pathname: returnTo as `/${string}`,
-          params: { animalId: String(animalIdToUse) },
-        });
-      } else {
-        router.back();
+      try {
+        if (returnTo && typeof returnTo === "string") {
+          router.replace(`${toPath(returnTo)}?animalId=${animalIdToUse}`);
+        } else {
+          router.back();
+        }
+      } catch (navErr) {
+        didNavigateFromAttributesRef.current = false;
+        if (__DEV__) console.error("[CreateAnimal] Navigation failed:", navErr);
+        Alert.alert(
+          "Saved",
+          "Animal was saved. You can go back and open it from the case.",
+        );
       }
     } catch (error) {
       Alert.alert(
@@ -596,6 +635,8 @@ export default function CreateAnimalScreen() {
     uploadedUrls,
     returnTo,
     router,
+    doctor,
+    createCaseMutation,
   ]);
 
   const goBack = () => {
@@ -605,6 +646,12 @@ export default function CreateAnimalScreen() {
     else if (step === "attributes") setStep("complaint");
     else setStep("upload");
   };
+
+  /** Per development-guidelines: avoid ScrollView canceling button press. */
+  const deferPress = useCallback(
+    (fn: () => void) => () => setTimeout(fn, 50),
+    [],
+  );
 
   const hasAllThreeImages =
     selectedImages.some((i) => i.type === "face") &&
@@ -734,6 +781,7 @@ export default function CreateAnimalScreen() {
     icon: "user" | "camera" | "list" | "check" | "comment",
     heading: string,
     subtext?: string,
+    subtextStyle?: { fontSize?: number; lineHeight?: number },
   ) => (
     <View style={styles.stepHeading}>
       <View
@@ -749,7 +797,13 @@ export default function CreateAnimalScreen() {
           {heading}
         </Text>
         {subtext ? (
-          <Text style={[styles.stepHeadingSub, { color: colors.muted }]}>
+          <Text
+            style={[
+              styles.stepHeadingSub,
+              { color: colors.muted },
+              subtextStyle,
+            ]}
+          >
             {subtext}
           </Text>
         ) : null}
@@ -1087,11 +1141,7 @@ export default function CreateAnimalScreen() {
                     { backgroundColor: colors.primary + "18" },
                   ]}
                 >
-                  <FontAwesome
-                    name="users"
-                    size={18}
-                    color={colors.primary}
-                  />
+                  <FontAwesome name="users" size={18} color={colors.primary} />
                 </View>
                 <Text
                   style={[
@@ -1167,9 +1217,10 @@ export default function CreateAnimalScreen() {
           ) : (
             <Button
               title="Next"
-              onPress={handleFarmerNext}
+              onPress={deferPress(handleFarmerNext)}
               variant="primary"
               style={styles.primaryButton}
+              disabled={!farmerPhone.trim() || !farmerName.trim()}
             />
           )}
         </ScrollView>
@@ -1283,8 +1334,9 @@ export default function CreateAnimalScreen() {
           {renderStepper()}
           {renderStepHeading(
             "camera",
-            "Upload reference images",
-            "Face, Ear and Body. We'll analyze to suggest details.",
+            "Upload Animal Images",
+            "AI identifies species, breed, and health insights",
+            { fontSize: 14, lineHeight: 18 },
           )}
 
           {(["face", "ear", "body"] as const).map((type) => (
@@ -1324,7 +1376,7 @@ export default function CreateAnimalScreen() {
               ) : (
                 <View style={styles.buttonRow}>
                   <Button
-                    title="Choose from Gallery"
+                    title="Choose Images"
                     onPress={() => pickImage(type)}
                     variant="secondary"
                     style={styles.selectButton}
@@ -1342,7 +1394,7 @@ export default function CreateAnimalScreen() {
 
           <Button
             title="Next"
-            onPress={handleNextFromUpload}
+            onPress={deferPress(handleNextFromUpload)}
             variant="primary"
             style={styles.primaryButton}
             disabled={!hasAllThreeImages}
@@ -1384,9 +1436,7 @@ export default function CreateAnimalScreen() {
               <Text
                 style={[styles.farmerCheckHintText, { color: colors.primary }]}
               >
-                {uploading
-                  ? "Uploading images…"
-                  : "Analyzing images…"}
+                {uploading ? "Uploading images…" : "Analyzing images…"}
               </Text>
             </View>
           )}
@@ -1776,14 +1826,15 @@ export default function CreateAnimalScreen() {
                 numberOfLines={2}
               />
             </View>
-            <View style={[inputRowStyles.row, { alignItems: "flex-start" }]}>
-              <Text style={[inputRowStyles.label, { color: colors.text }]}>
-                Short summary
+            <View style={styles.fullWidthField}>
+              <Text
+                style={[styles.fullWidthFieldLabel, { color: colors.text }]}
+              >
+                Short Description (AI generated):
               </Text>
               <TextInput
                 style={[
-                  inputRowStyles.input,
-                  inputRowStyles.inputMultiline,
+                  styles.fullWidthInput,
                   {
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
@@ -1795,17 +1846,20 @@ export default function CreateAnimalScreen() {
                 placeholder="1–2 sentence summary"
                 placeholderTextColor={colors.muted}
                 multiline
-                numberOfLines={2}
+                numberOfLines={5}
+                textAlignVertical="top"
               />
             </View>
-            <View style={[inputRowStyles.row, { alignItems: "flex-start" }]}>
-              <Text style={[inputRowStyles.label, { color: colors.text }]}>
-                AI Summary
+            <View style={styles.fullWidthField}>
+              <Text
+                style={[styles.fullWidthFieldLabel, { color: colors.text }]}
+              >
+                Detailed Description (AI generated):
               </Text>
               <TextInput
                 style={[
-                  inputRowStyles.input,
-                  { minHeight: 80, textAlignVertical: "top" },
+                  styles.fullWidthInput,
+                  styles.fullWidthInputLarge,
                   {
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
@@ -1817,7 +1871,8 @@ export default function CreateAnimalScreen() {
                 placeholder="Auto-generated summary"
                 placeholderTextColor={colors.muted}
                 multiline
-                numberOfLines={4}
+                numberOfLines={10}
+                textAlignVertical="top"
               />
             </View>
           </View>
@@ -1827,15 +1882,22 @@ export default function CreateAnimalScreen() {
                 ? "Creating..."
                 : enrolling
                   ? "Enrolling..."
-                  : "Save & continue"
+                  : creatingCase
+                    ? "Creating case..."
+                    : "Save & continue"
             }
-            onPress={handleNextFromAttributes}
+            onPress={deferPress(handleNextFromAttributes)}
             variant="primary"
             style={styles.primaryButton}
             disabled={
-              !species.trim() || createAnimalMutation.isPending || enrolling
+              !species.trim() ||
+              createAnimalMutation.isPending ||
+              enrolling ||
+              creatingCase
             }
-            loading={createAnimalMutation.isPending || enrolling}
+            loading={
+              createAnimalMutation.isPending || enrolling || creatingCase
+            }
           />
         </ScrollView>
       </SafeAreaView>
@@ -1990,6 +2052,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 12,
     lineHeight: 18,
+  },
+  fullWidthField: {
+    width: "100%",
+    marginBottom: 18,
+  },
+  fullWidthFieldLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  fullWidthInput: {
+    width: "100%",
+    minHeight: 88,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    lineHeight: 24,
+    textAlignVertical: "top",
+  },
+  fullWidthInputLarge: {
+    minHeight: 120,
   },
   attributesSectionHeader: {
     flexDirection: "row",

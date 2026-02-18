@@ -21,9 +21,10 @@ export default function CreateCaseScreen() {
   const didNavigateRef = useRef(false);
   const createStartedRef = useRef(false);
 
+  const rawAnimalId = params.animalId ?? params.AnimalId;
   const animalId =
-    params.animalId != null && params.animalId !== ""
-      ? Number(params.animalId)
+    rawAnimalId != null && String(rawAnimalId).trim() !== ""
+      ? Number(rawAnimalId)
       : undefined;
 
   useEffect(() => {
@@ -32,19 +33,13 @@ export default function CreateCaseScreen() {
 
     if (!doctor) {
       didNavigateRef.current = true;
-      router.replace({
-        pathname: "/select-animal",
-        params: { createCaseAfterSelect: "1" },
-      });
+      router.replace("/select-animal?createCaseAfterSelect=1");
       return;
     }
 
-    if (!animalId || animalId <= 0) {
+    if (!animalId || animalId <= 0 || !Number.isFinite(animalId)) {
       didNavigateRef.current = true;
-      router.replace({
-        pathname: "/select-animal",
-        params: { createCaseAfterSelect: "1" },
-      });
+      router.replace("/select-animal?createCaseAfterSelect=1");
       return;
     }
 
@@ -68,10 +63,7 @@ export default function CreateCaseScreen() {
         if (cancelled) return;
         createStartedRef.current = false;
         didNavigateRef.current = true;
-        router.replace({
-          pathname: "/select-animal",
-          params: { createCaseAfterSelect: "1" },
-        });
+        router.replace("/select-animal?createCaseAfterSelect=1");
       }
     };
     run();

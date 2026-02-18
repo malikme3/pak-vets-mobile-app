@@ -12,7 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -256,7 +256,7 @@ export default function AddMediaScreen() {
           </Text>
           <View style={styles.buttonRow}>
             <Button
-              title="Choose from Gallery"
+              title="Choose Images"
               onPress={pickImage}
               variant="secondary"
               style={styles.selectButton}
