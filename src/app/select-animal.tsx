@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,8 @@ import {
   useAnimals,
   useAnimalImages,
 } from "../features/animals/hooks";
+import { useCurrentDoctor } from "../features/doctors/hooks";
+import { useCreateCase } from "../features/cases/hooks";
 import { animalApi } from "../services/vetApi";
 import {
   getUploadSignedUrl,
@@ -41,10 +43,14 @@ export default function SelectAnimalScreen() {
   const params = useLocalSearchParams();
   const { colors } = useTheme();
   const returnTo = (params.returnTo as string) || "/create-case";
+  const createCaseAfterSelect = params.createCaseAfterSelect === "1";
+  const { data: doctor } = useCurrentDoctor();
+  const createCaseMutation = useCreateCase();
+  const creatingCaseRef = useRef(false);
 
   const [inputValue, setInputValue] = useState("");
   const [filter, setFilter] = useState<SearchFilter>("tag");
-  const [imageMatchType, setImageMatchType] = useState<ImageMatchType>("BODY");
+  const [imageMatchType, setImageMatchType] = useState<ImageMatchType>("FACE");
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] =
     useState<MatchAnimalImageResponse | null>(null);
@@ -112,27 +118,43 @@ export default function SelectAnimalScreen() {
   const isLoading = searchLoading || animalsLoading;
 
   const handleAnimalSelect = useCallback(
-    (animal: Animal) => {
-      if (!returnTo || typeof returnTo !== "string") {
-        console.error("Invalid returnTo path:", returnTo);
+    async (animal: Animal) => {
+      if (createCaseAfterSelect && doctor) {
+        if (creatingCaseRef.current) return;
+        creatingCaseRef.current = true;
+        try {
+          const caseData = await createCaseMutation.mutateAsync({
+            animalId: animal.animalId,
+            doctorId: doctor.doctorId,
+            caseDatetime: new Date().toISOString(),
+            chiefComplaint: undefined,
+            status: "COMPLETED",
+          });
+          router.replace(`/case-detail?caseId=${caseData.caseId}`);
+        } catch (err) {
+          creatingCaseRef.current = false;
+          Alert.alert(
+            "Error",
+            err instanceof Error ? err.message : "Failed to create case",
+          );
+        }
         return;
       }
-      setTimeout(
-        () =>
-          router.push({
-            pathname: returnTo as `/${string}`,
-            params: { animalId: String(animal.animalId) },
-          }),
-        50,
-      );
+      if (!returnTo || typeof returnTo !== "string") {
+        return;
+      }
+      router.push({
+        pathname: returnTo as `/${string}`,
+        params: { animalId: String(animal.animalId) },
+      });
     },
-    [router, returnTo],
+    [createCaseAfterSelect, doctor, createCaseMutation, returnTo, router],
   );
 
   // ScrollView button pattern: delay press to avoid cancel (see development-guidelines.md)
   const handlePressAnimal = useCallback(
     (animal: Animal) => {
-      setTimeout(() => handleAnimalSelect(animal), 50);
+      handleAnimalSelect(animal);
     },
     [handleAnimalSelect],
   );
@@ -271,13 +293,13 @@ export default function SelectAnimalScreen() {
             Find by image
           </Text>
           <Text style={[styles.findByImageHint, { color: colors.muted }]}>
-            Choose body, ear, or face photo to match an enrolled animal
+            Choose face, ear, or body photo to match an enrolled animal
           </Text>
           <SegmentedControl
             options={[
-              { label: "Body", value: "BODY" },
-              { label: "Ear", value: "EAR" },
               { label: "Face", value: "FACE" },
+              { label: "Ear", value: "EAR" },
+              { label: "Body", value: "BODY" },
             ]}
             selectedValue={imageMatchType}
             onValueChange={(value) => {

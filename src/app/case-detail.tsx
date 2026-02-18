@@ -1,7 +1,8 @@
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -16,6 +17,7 @@ import { Audio } from "expo-av";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Button } from "../components/ui/Button";
+import { ChiefComplaintField } from "../components/ChiefComplaintField";
 import { useCase, useUpdateCase } from "../features/cases/hooks";
 import { useAnimal } from "../features/animals/hooks";
 import {
@@ -46,6 +48,29 @@ const ICON_SECTION = 18;
 const ICON_CHEVRON = 14;
 const ICON_ACTION = 14;
 const ICON_EMPTY = 24;
+
+// Species avatar assets (in assets/species-icons)
+const SPECIES_IMAGES: Record<string, ReturnType<typeof require>> = {
+  cow: require("../../assets/species-icons/species-cow.png"),
+  cattle: require("../../assets/species-icons/species-cow.png"),
+  buffalo: require("../../assets/species-icons/species-cow.png"),
+  horse: require("../../assets/species-icons/species-horse.png"),
+  goat: require("../../assets/species-icons/species-goat.png"),
+  dog: require("../../assets/species-icons/species-dog.png"),
+  camel: require("../../assets/species-icons/species-camel.png"),
+  sheep: require("../../assets/species-icons/species-sheep.png"),
+  donkey: require("../../assets/species-icons/species-donkey.png"),
+};
+
+function getSpeciesImageSource(species: string): ReturnType<typeof require> {
+  const key = (species || "").trim().toLowerCase();
+  const exact = SPECIES_IMAGES[key];
+  if (exact) return exact;
+  for (const [name, src] of Object.entries(SPECIES_IMAGES)) {
+    if (key.includes(name)) return src;
+  }
+  return SPECIES_IMAGES.dog;
+}
 
 // --- Accordion Section (reusable) ---
 interface AccordionSectionProps {
@@ -232,16 +257,25 @@ export default function CaseDetailScreen() {
   } = useMediaFilesByCase(caseId || 0);
   const updateCaseMutation = useUpdateCase();
 
+  // Editable chief complaint (manual edit only); sync from case when loaded
+  const [chiefComplaint, setChiefComplaint] = useState("");
+  const chiefComplaintInputRef = useRef<TextInput>(null);
+  useEffect(() => {
+    if (caseData?.chiefComplaint !== undefined) {
+      setChiefComplaint(caseData.chiefComplaint ?? "");
+    }
+  }, [caseData?.caseId, caseData?.chiefComplaint]);
+
   // Fetch AI-suggested diagnoses only after user taps "Suggested diagnoses"
   useEffect(() => {
-    if (!suggestionsRequestedByUser || !caseData?.chiefComplaint?.trim()) {
+    if (!suggestionsRequestedByUser || !chiefComplaint.trim()) {
       if (!suggestionsRequestedByUser) setSuggestedDiagnoses([]);
       return;
     }
     let cancelled = false;
     setSuggestionsLoading(true);
     caseDiagnosisApi
-      .suggestDiagnoses(caseData.chiefComplaint.trim())
+      .suggestDiagnoses(chiefComplaint.trim())
       .then((data) => {
         if (!cancelled) setSuggestedDiagnoses(data || []);
       })
@@ -254,7 +288,7 @@ export default function CaseDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [suggestionsRequestedByUser, caseData?.caseId, caseData?.chiefComplaint]);
+  }, [suggestionsRequestedByUser, caseData?.caseId, chiefComplaint]);
 
   // Refetch diagnoses, treatments, notes, and media when screen comes into focus (e.g., after adding)
   useFocusEffect(
@@ -417,10 +451,7 @@ export default function CaseDetailScreen() {
   };
 
   const toggleSection = useCallback((key: AccordionKey) => {
-    setTimeout(
-      () => setExpanded((prev) => ({ ...prev, [key]: !prev[key] })),
-      50,
-    );
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
   // Add Treatment: suggest from diagnoses (saved or AI), then navigate with first suggestion to pre-fill
@@ -461,7 +492,7 @@ export default function CaseDetailScreen() {
         setTreatmentSuggestionsLoading(false);
       }
     }
-    setTimeout(() => router.push({ pathname: "/add-treatment", params }), 50);
+    router.push({ pathname: "/add-treatment", params });
   }, [caseData?.caseId, diagnoses, suggestedDiagnoses]);
 
   // Open diagnosis form pre-filled for editing
@@ -473,7 +504,7 @@ export default function CaseDetailScreen() {
         diagnosisText: diagnosis.diagnosisText ?? "",
         status: diagnosis.status,
       };
-      setTimeout(() => router.push({ pathname: "/add-diagnosis", params }), 50);
+      router.push({ pathname: "/add-diagnosis", params });
     },
     [caseData?.caseId],
   );
@@ -496,7 +527,7 @@ export default function CaseDetailScreen() {
         params.durationDays = String(treatment.durationDays);
       if (treatment.instructions != null)
         params.instructions = treatment.instructions;
-      setTimeout(() => router.push({ pathname: "/add-treatment", params }), 50);
+      router.push({ pathname: "/add-treatment", params });
     },
     [caseData?.caseId],
   );
@@ -563,7 +594,7 @@ export default function CaseDetailScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Compact header */}
+        {/* Header: row 1 = date | species+icon, row 2 = tagline, row 3 = chief complaint (editable on tap) */}
         <View
           style={[
             styles.header,
@@ -574,195 +605,83 @@ export default function CaseDetailScreen() {
             },
           ]}
         >
-          <Text style={[styles.headerDate, { color: colors.muted }]}>
-            {caseData ? formatDate(caseData.caseDatetime) : ""}
-          </Text>
-          {caseData?.chiefComplaint && (
+          {/* Row 1: Species + icon (tappable to animal profile) */}
+          <View style={styles.headerRow1}>
+            {animal ? (
+              <TouchableOpacity
+                style={styles.headerSpeciesRow}
+                onPress={() =>
+                  router.push(`/animal-details?animalId=${animal.animalId}`)
+                }
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={getSpeciesImageSource(animal.species)}
+                  style={styles.headerSpeciesAvatar}
+                  resizeMode="contain"
+                />
+                <View style={styles.headerSpeciesTextBlock}>
+                  <Text
+                    style={[styles.headerSpeciesText, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {animal.species}
+                  </Text>
+                  {animal.breed != null &&
+                    animal.breed !== "null" &&
+                    String(animal.breed).trim() !== "" ? (
+                    <Text
+                      style={[
+                        styles.headerSpeciesText,
+                        styles.headerBreedText,
+                        { color: colors.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {animal.breed}
+                    </Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <Text style={[styles.headerSpeciesText, { color: colors.muted }]}>
+                —
+              </Text>
+            )}
+          </View>
+          {/* Row 2: Animal tagline */}
+          {animal?.animalTagline ? (
             <Text
-              style={[styles.headerComplaint, { color: colors.text }]}
+              style={[styles.headerTagline, { color: colors.muted }]}
               numberOfLines={2}
             >
-              {caseData.chiefComplaint}
+              {animal.animalTagline}
             </Text>
-          )}
-          {animal && (
-            <Text style={[styles.headerAnimal, { color: colors.primary }]}>
-              {animal.species}
-              {animal.breed ? ` · ${animal.breed}` : ""}
+          ) : null}
+          {/* Row 3: Date (own row so always fully visible) */}
+          <View style={styles.headerDateRow}>
+            <Text style={[styles.headerDate, { color: colors.muted }]}>
+              {caseData ? formatDate(caseData.caseDatetime) : ""}
             </Text>
-          )}
+          </View>
+          {/* Row 4: Chief complaint — editable on tap */}
+          <ChiefComplaintField
+            ref={chiefComplaintInputRef}
+            value={chiefComplaint}
+            onChangeText={setChiefComplaint}
+            disabled={isLoading}
+            showVoiceInput
+            onRecordingComplete={(_, rawText, improvedText) => {
+              const text = (improvedText ?? rawText).trim();
+              if (text !== "") setChiefComplaint(text);
+            }}
+            onTranscriptReady={(transcript) => setChiefComplaint(transcript)}
+            onVoiceError={(error) => Alert.alert("Error", error.message)}
+            caseId={caseData?.caseId}
+          />
         </View>
 
-        {/* 1. Animal Information */}
-        {animal && (
-          <AccordionSection
-            title="Animal"
-            icon="paw"
-            expanded={expanded.animal}
-            onToggle={() => toggleSection("animal")}
-            colors={colors}
-          >
-            <View style={styles.infoRow}>
-              <Text style={[styles.label, { color: colors.muted }]}>
-                Species
-              </Text>
-              <Text style={[styles.value, { color: colors.text }]}>
-                {animal.species}
-              </Text>
-            </View>
-            {animal.breed && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Breed
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.breed}
-                </Text>
-              </View>
-            )}
-            {animal.status && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Status
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.status.replace("_", " ")}
-                  {animal.status === "OTHER" && animal.otherStatusValue
-                    ? ` (${animal.otherStatusValue})`
-                    : ""}
-                </Text>
-              </View>
-            )}
-            {(animal.heartGirthCm != null || animal.bodyLengthCm != null) && (
-              <>
-                {animal.heartGirthCm != null && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
-                      Heart girth (cm)
-                    </Text>
-                    <Text style={[styles.value, { color: colors.text }]}>
-                      {animal.heartGirthCm}
-                    </Text>
-                  </View>
-                )}
-                {animal.bodyLengthCm != null && (
-                  <View style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.muted }]}>
-                      Body length (cm)
-                    </Text>
-                    <Text style={[styles.value, { color: colors.text }]}>
-                      {animal.bodyLengthCm}
-                    </Text>
-                  </View>
-                )}
-              </>
-            )}
-            {animal.weightKg != null && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Weight (kg)
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.weightKg}
-                </Text>
-              </View>
-            )}
-            {animal.tagId && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Tag ID
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.tagId}
-                </Text>
-              </View>
-            )}
-            {animal.animalTagline && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Tagline
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.animalTagline}
-                </Text>
-              </View>
-            )}
-            {animal.aiShortSummary && (
-              <View
-                style={[
-                  styles.aiSummaryBlock,
-                  { borderTopColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Information
-                </Text>
-                <Text
-                  style={[styles.aiSummaryText, { color: colors.text }]}
-                  selectable
-                >
-                  {animal.aiShortSummary}
-                </Text>
-              </View>
-            )}
-            {animal.farmer?.fullName && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Farmer
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.farmer.fullName}
-                </Text>
-              </View>
-            )}
-            {animal.farmer?.phoneNumber && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Phone
-                </Text>
-                <Text style={[styles.value, { color: colors.text }]}>
-                  {animal.farmer.phoneNumber}
-                </Text>
-              </View>
-            )}
-            {animal.aiSummary && (
-              <View
-                style={[
-                  styles.aiSummaryBlock,
-                  { borderTopColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.label, { color: colors.muted }]}>
-                  Details
-                </Text>
-                <Text
-                  style={[styles.aiSummaryText, { color: colors.text }]}
-                  selectable
-                >
-                  {animal.aiSummary}
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/animal-details?animalId=${animal.animalId}`)
-              }
-              style={[styles.linkButton, { borderColor: colors.primary }]}
-              activeOpacity={0.7}
-            >
-              <FontAwesome
-                name="external-link"
-                size={12}
-                color={colors.primary}
-              />
-              <Text style={[styles.linkButtonText, { color: colors.primary }]}>
-                View profile
-              </Text>
-            </TouchableOpacity>
-          </AccordionSection>
-        )}
-
-        {/* 2. Diagnoses (with AI suggestions inline) */}
+        {/* 1. Diagnoses (with AI suggestions inline) */}
         <AccordionSection
           title="Diagnoses"
           icon="stethoscope"
@@ -786,7 +705,7 @@ export default function CaseDetailScreen() {
           }
         >
           {/* AI Suggestions (inline) */}
-          {caseData.chiefComplaint?.trim() && (
+          {chiefComplaint.trim() && (
             <View
               style={[
                 styles.aiBlock,
@@ -895,7 +814,7 @@ export default function CaseDetailScreen() {
                                 backgroundColor: colors.success,
                                 opacity:
                                   confirmingSuggestionIndex !== null &&
-                                  confirmingSuggestionIndex !== index
+                                    confirmingSuggestionIndex !== index
                                     ? 0.5
                                     : 1,
                               },
@@ -1142,7 +1061,7 @@ export default function CaseDetailScreen() {
                                     borderColor: colors.success,
                                     opacity:
                                       confirmingTreatmentKey !== null &&
-                                      confirmingTreatmentKey !== confirmKey
+                                        confirmingTreatmentKey !== confirmKey
                                         ? 0.5
                                         : 1,
                                   },
@@ -1383,23 +1302,41 @@ export default function CaseDetailScreen() {
           )}
         </AccordionSection>
 
-        {/* Save / Done - set case COMPLETED and go home */}
+        {/* Save / Done - set case COMPLETED; warn if no diagnosis or treatment yet */}
         <Button
           title={updateCaseMutation.isPending ? "Saving..." : "Save"}
           onPress={async () => {
             if (!caseId) return;
-            try {
-              await updateCaseMutation.mutateAsync({
-                caseId,
-                request: { status: "COMPLETED" },
-              });
-              router.replace("/");
-            } catch (e) {
+            const isComplete =
+              diagnoses.length >= 1 && treatments.length >= 1;
+            const doSave = async () => {
+              try {
+                await updateCaseMutation.mutateAsync({
+                  caseId,
+                  request: {
+                    status: isComplete ? "COMPLETED" : "IN_PROGRESS",
+                    chiefComplaint: chiefComplaint.trim() || undefined,
+                  },
+                });
+                router.replace("/");
+              } catch (e) {
+                Alert.alert(
+                  "Error",
+                  e instanceof Error
+                    ? e.message
+                    : "Failed to update case status",
+                );
+              }
+            };
+            if (!isComplete) {
               Alert.alert(
-                "Error",
-                e instanceof Error ? e.message : "Failed to update case status",
+                "Case unfinished",
+                "You haven't added at least one diagnosis and one treatment. The case will still be saved. You can add them later.",
+                [{ text: "OK", onPress: doSave }],
               );
+              return;
             }
+            await doSave();
           }}
           variant="primary"
           style={styles.saveButton}
@@ -1444,13 +1381,52 @@ const styles = StyleSheet.create({
   },
   headerDate: {
     fontSize: 13,
-    marginBottom: 4,
+    marginBottom: 0,
   },
-  headerComplaint: {
-    fontSize: 18,
-    fontWeight: "600",
-    lineHeight: 24,
+  headerRow1: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 4,
+    minWidth: 0,
+  },
+  headerSpeciesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minWidth: 0,
+  },
+  headerDateRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: 6,
+  },
+  headerSpeciesAvatar: {
+    width: 36,
+    height: 36,
+    marginRight: 8,
+    backgroundColor: "transparent",
+  },
+  headerSpeciesIcon: {
+    marginRight: 6,
+  },
+  headerSpeciesTextBlock: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  headerSpeciesText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  headerBreedText: {
+    marginTop: 2,
+  },
+  headerTagline: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+    fontStyle: "italic",
+    textAlign: "right",
   },
   headerAnimal: {
     fontSize: 14,

@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { useTheme } from "../theme/useTheme";
@@ -38,13 +39,22 @@ import type { CreateAnimalRequest, Farmer, AnimalStatus } from "../types/api";
 import { estimateWeightKg } from "../utils/animalWeight";
 import type { AnimalInfoFromImage } from "../services/sharedServicesApi";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 
-type Step = "farmer" | "upload" | "attributes";
+type VoiceRecording = {
+  s3Key: string;
+  rawText: string;
+  improvedText?: string;
+  localUri: string;
+};
+
+type Step = "farmer" | "upload" | "complaint" | "attributes";
 type ImageType = "face" | "ear" | "body";
 
 const STEPS: { key: Step; label: string; icon: string }[] = [
   { key: "farmer", label: "Farmer", icon: "user" },
   { key: "upload", label: "Upload", icon: "camera" },
+  { key: "complaint", label: "Complaint", icon: "comment" },
   { key: "attributes", label: "Details", icon: "list" },
 ];
 
@@ -84,7 +94,7 @@ function InputRow({
       <View style={inputRowStyles.labelWrap}>
         {icon ? (
           <FontAwesome
-            name={icon as "phone" | "user" | "id-card" | "map-marker"}
+            name={icon as "phone" | "user" | "id-card" | "map-marker" | "comment"}
             size={14}
             color={colors.primary}
             style={inputRowStyles.labelIcon}
@@ -174,6 +184,7 @@ export default function CreateAnimalScreen() {
   const farmerCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const didNavigateFromAttributesRef = useRef(false);
 
   // Step 2: Upload
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
@@ -188,7 +199,30 @@ export default function CreateAnimalScreen() {
   const [analyzedAnimal, setAnalyzedAnimal] =
     useState<AnimalInfoFromImage | null>(null);
 
-  // Step 3: Animal attributes (editable, pre-filled from API)
+  // Step: Chief complaint (after upload, before attributes) – same UI as create-case
+  const [chiefComplaint, setChiefComplaint] = useState("");
+  const [chiefComplaintVoiceRecording, setChiefComplaintVoiceRecording] =
+    useState<VoiceRecording | null>(null);
+  const [chiefComplaintSound, setChiefComplaintSound] =
+    useState<Audio.Sound | null>(null);
+  const [isPlayingChiefComplaint, setIsPlayingChiefComplaint] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      const cleanup = async (sound: Audio.Sound | null) => {
+        if (sound) {
+          try {
+            await sound.unloadAsync();
+          } catch (e) {
+            if (__DEV__) console.error("[CreateAnimal] Audio cleanup:", e);
+          }
+        }
+      };
+      cleanup(chiefComplaintSound);
+    };
+  }, [chiefComplaintSound]);
+
+  // Step: Animal attributes (editable, pre-filled from API when analysis completes)
   const [species, setSpecies] = useState("");
   const [breed, setBreed] = useState("");
   const [ageMonths, setAgeMonths] = useState("");
@@ -314,7 +348,68 @@ export default function CreateAnimalScreen() {
     return fileUrl;
   };
 
-  const handleNextFromUpload = async () => {
+  // Run upload + analysis in background; pre-fill attributes when done.
+  const runUploadAndAnalyzeInBackground = useCallback(
+    async (
+      faceImage: SelectedImage,
+      earImage: SelectedImage,
+      bodyImage: SelectedImage,
+    ) => {
+      setUploading(true);
+      setAnalyzing(false);
+      setUploadProgress(0);
+      try {
+        const timestamp = Date.now();
+        const faceKey = `create-animal-temp/${timestamp}-face.jpg`;
+        const earKey = `create-animal-temp/${timestamp}-ear.jpg`;
+        const bodyKey = `create-animal-temp/${timestamp}-body.jpg`;
+
+        setUploadProgress(15);
+        const faceImageUrl = await uploadImageToS3(faceImage.uri, faceKey);
+        setUploadProgress(40);
+        const earImageUrl = await uploadImageToS3(earImage.uri, earKey);
+        setUploadProgress(65);
+        const bodyImageUrl = await uploadImageToS3(bodyImage.uri, bodyKey);
+        setUploadProgress(80);
+        setUploadedUrls({ faceImageUrl, earImageUrl, bodyImageUrl });
+
+        setAnalyzing(true);
+        const animal = await analyzeAnimalImage({
+          faceImageUrl,
+          earImageUrl,
+          bodyImageUrl,
+        });
+        setAnalyzedAnimal(animal);
+        setUploadProgress(100);
+        // Pre-fill attributes form when analysis completes (user may be on complaint or attributes step)
+        setSpecies(animal.species ?? "");
+        setBreed(animal.breed ?? "");
+        setAgeMonths(
+          animal.age_months != null ? String(animal.age_months) : "",
+        );
+        setWeightKg(animal.weight_kg != null ? String(animal.weight_kg) : "");
+        setColor(animal.color ?? "");
+        setSex(animal.sex ?? "");
+        setAnimalTagline(animal.animal_tagline ?? "");
+        setAiShortSummary(animal.ai_short_summary ?? "");
+        setAiSummary(animal.ai_summary ?? "");
+      } catch (error) {
+        Alert.alert(
+          "Error",
+          error instanceof Error
+            ? error.message
+            : "Failed to upload or analyze images. You can still fill animal details.",
+        );
+      } finally {
+        setUploading(false);
+        setAnalyzing(false);
+        setUploadProgress(0);
+      }
+    },
+    [],
+  );
+
+  const handleNextFromUpload = useCallback(() => {
     const faceImage = selectedImages.find((img) => img.type === "face");
     const earImage = selectedImages.find((img) => img.type === "ear");
     const bodyImage = selectedImages.find((img) => img.type === "body");
@@ -325,57 +420,85 @@ export default function CreateAnimalScreen() {
       );
       return;
     }
+    // Start upload + analyze in background; don't block.
+    runUploadAndAnalyzeInBackground(faceImage, earImage, bodyImage);
+    setStep("complaint");
+  }, [selectedImages, runUploadAndAnalyzeInBackground]);
 
-    setUploading(true);
-    setAnalyzing(false);
-    setUploadProgress(0);
-    try {
-      const timestamp = Date.now();
-      const faceKey = `create-animal-temp/${timestamp}-face.jpg`;
-      const earKey = `create-animal-temp/${timestamp}-ear.jpg`;
-      const bodyKey = `create-animal-temp/${timestamp}-body.jpg`;
-
-      setUploadProgress(15);
-      const faceImageUrl = await uploadImageToS3(faceImage.uri, faceKey);
-      setUploadProgress(40);
-      const earImageUrl = await uploadImageToS3(earImage.uri, earKey);
-      setUploadProgress(65);
-      const bodyImageUrl = await uploadImageToS3(bodyImage.uri, bodyKey);
-      setUploadProgress(80);
-      setUploadedUrls({ faceImageUrl, earImageUrl, bodyImageUrl });
-
-      setAnalyzing(true);
-      const animal = await analyzeAnimalImage({
-        faceImageUrl,
-        earImageUrl,
-        bodyImageUrl,
+  const handleChiefComplaintVoiceRecordingComplete = useCallback(
+    (
+      s3Key: string,
+      rawText: string,
+      improvedText?: string,
+      localUri?: string,
+    ) => {
+      setChiefComplaintVoiceRecording({
+        s3Key,
+        rawText,
+        improvedText,
+        localUri: localUri || "",
       });
-      setAnalyzedAnimal(animal);
-      setUploadProgress(100);
-      // Pre-fill step 3 form from API (null/empty stays editable)
-      setSpecies(animal.species ?? "");
-      setBreed(animal.breed ?? "");
-      setAgeMonths(animal.age_months != null ? String(animal.age_months) : "");
-      setWeightKg(animal.weight_kg != null ? String(animal.weight_kg) : "");
-      setColor(animal.color ?? "");
-      setSex(animal.sex ?? "");
-      setAnimalTagline(animal.animal_tagline ?? "");
-      setAiShortSummary(animal.ai_short_summary ?? "");
-      setAiSummary(animal.ai_summary ?? "");
-      setStep("attributes");
-    } catch (error) {
-      Alert.alert(
-        "Error",
-        error instanceof Error
-          ? error.message
-          : "Failed to upload or analyze images. Please try again.",
-      );
-    } finally {
-      setUploading(false);
-      setAnalyzing(false);
-      setUploadProgress(0);
+      setChiefComplaint(improvedText || rawText);
+    },
+    [],
+  );
+  const handleChiefComplaintTranscriptReady = useCallback((transcript: string) => {
+    setChiefComplaint(transcript);
+  }, []);
+  const handleChiefComplaintPlayPause = useCallback(async () => {
+    if (
+      !chiefComplaintVoiceRecording ||
+      !chiefComplaintVoiceRecording.localUri
+    ) {
+      Alert.alert("Error", "Audio file not available for playback");
+      return;
     }
-  };
+    try {
+      if (isPlayingChiefComplaint && chiefComplaintSound) {
+        await chiefComplaintSound.pauseAsync();
+        setIsPlayingChiefComplaint(false);
+      } else {
+        if (chiefComplaintSound) {
+          await chiefComplaintSound.playAsync();
+          setIsPlayingChiefComplaint(true);
+        } else {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: chiefComplaintVoiceRecording.localUri },
+            { shouldPlay: true },
+          );
+          setChiefComplaintSound(newSound);
+          setIsPlayingChiefComplaint(true);
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setIsPlayingChiefComplaint(false);
+            }
+          });
+        }
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to play audio");
+      if (__DEV__) console.error("[CreateAnimal] Playback error:", error);
+    }
+  }, [
+    chiefComplaintVoiceRecording,
+    chiefComplaintSound,
+    isPlayingChiefComplaint,
+  ]);
+  const handleChiefComplaintStop = useCallback(async () => {
+    if (chiefComplaintSound) {
+      await chiefComplaintSound.stopAsync();
+      setIsPlayingChiefComplaint(false);
+    }
+  }, [chiefComplaintSound]);
+  const handleChiefComplaintRecordAgain = useCallback(() => {
+    setChiefComplaintVoiceRecording(null);
+    setChiefComplaint("");
+    if (chiefComplaintSound) {
+      chiefComplaintSound.unloadAsync();
+      setChiefComplaintSound(null);
+    }
+    setIsPlayingChiefComplaint(false);
+  }, [chiefComplaintSound]);
 
   const buildAnimalRequest = useCallback(
     (): CreateAnimalRequest => ({
@@ -397,6 +520,7 @@ export default function CreateAnimalScreen() {
       animalTagline: animalTagline.trim() || undefined,
       aiShortSummary: aiShortSummary.trim() || undefined,
       aiSummary: aiSummary.trim() || undefined,
+      chiefComplaint: chiefComplaint.trim() || undefined,
     }),
     [
       selectedFarmerId,
@@ -414,10 +538,12 @@ export default function CreateAnimalScreen() {
       animalTagline,
       aiShortSummary,
       aiSummary,
+      chiefComplaint,
     ],
   );
 
   const handleNextFromAttributes = useCallback(async () => {
+    if (didNavigateFromAttributesRef.current) return;
     if (!species.trim()) {
       Alert.alert("Error", "Species is required");
       return;
@@ -425,6 +551,7 @@ export default function CreateAnimalScreen() {
     try {
       const request = buildAnimalRequest();
       const created = await createAnimalMutation.mutateAsync(request);
+      if (didNavigateFromAttributesRef.current) return;
       const animalIdToUse = created.animalId;
       if (uploadedUrls) {
         setEnrolling(true);
@@ -445,6 +572,8 @@ export default function CreateAnimalScreen() {
         }
         setEnrolling(false);
       }
+      if (didNavigateFromAttributesRef.current) return;
+      didNavigateFromAttributesRef.current = true;
       if (returnTo && typeof returnTo === "string") {
         router.replace({
           pathname: returnTo as `/${string}`,
@@ -461,6 +590,7 @@ export default function CreateAnimalScreen() {
     }
   }, [
     species,
+    chiefComplaint,
     buildAnimalRequest,
     createAnimalMutation,
     uploadedUrls,
@@ -471,6 +601,8 @@ export default function CreateAnimalScreen() {
   const goBack = () => {
     if (step === "farmer") router.back();
     else if (step === "upload") setStep("farmer");
+    else if (step === "complaint") setStep("upload");
+    else if (step === "attributes") setStep("complaint");
     else setStep("upload");
   };
 
@@ -585,6 +717,7 @@ export default function CreateAnimalScreen() {
               | "camera"
               | "list"
               | "check"
+              | "comment"
               | "circle"
           }
           size={12}
@@ -598,7 +731,7 @@ export default function CreateAnimalScreen() {
   );
 
   const renderStepHeading = (
-    icon: "user" | "camera" | "list" | "check",
+    icon: "user" | "camera" | "list" | "check" | "comment",
     heading: string,
     subtext?: string,
   ) => (
@@ -800,7 +933,7 @@ export default function CreateAnimalScreen() {
     setFarmerTehName(farmer.tehName ?? "");
     setFarmerDistrict(farmer.districtName ?? "");
     setExistingFarmersModal(null);
-    setTimeout(() => setStep("upload"), 50);
+    setStep("upload");
   }, []);
 
   // Step 1: Farmer – phone, nic_no, name, address; duplicate = pick existing
@@ -885,7 +1018,7 @@ export default function CreateAnimalScreen() {
                       ]}
                     >
                       <FontAwesome
-                        name="users"
+                        name="user"
                         size={18}
                         color={colors.primary}
                       />
@@ -1034,7 +1167,7 @@ export default function CreateAnimalScreen() {
           ) : (
             <Button
               title="Next"
-              onPress={() => setTimeout(handleFarmerNext, 50)}
+              onPress={handleFarmerNext}
               variant="primary"
               style={styles.primaryButton}
             />
@@ -1186,7 +1319,6 @@ export default function CreateAnimalScreen() {
                     onPress={() => pickImage(type)}
                     variant="secondary"
                     style={styles.changeButton}
-                    disabled={uploading || analyzing}
                   />
                 </View>
               ) : (
@@ -1196,67 +1328,178 @@ export default function CreateAnimalScreen() {
                     onPress={() => pickImage(type)}
                     variant="secondary"
                     style={styles.selectButton}
-                    disabled={uploading || analyzing}
                   />
                   <Button
                     title="Take Photo"
                     onPress={() => takePhoto(type)}
                     variant="secondary"
                     style={styles.selectButton}
-                    disabled={uploading || analyzing}
                   />
                 </View>
               )}
             </Card>
           ))}
 
-          {(uploading || analyzing) && (
-            <Card style={styles.cardElevated}>
-              <View style={styles.progressContainer}>
-                <Text style={[styles.progressLabel, { color: colors.text }]}>
-                  {uploading
-                    ? "Uploading images..."
-                    : analyzing
-                      ? "Analyzing animal..."
-                      : "Processing..."}
-                </Text>
-                <View
-                  style={[
-                    styles.progressBarContainer,
-                    { backgroundColor: colors.border },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.progressBar,
-                      {
-                        width: `${uploadProgress}%`,
-                        backgroundColor: colors.primary,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.progressText, { color: colors.muted }]}>
-                  {Math.round(uploadProgress)}%
-                </Text>
-              </View>
-            </Card>
-          )}
-
           <Button
-            title={uploading || analyzing ? "Processing..." : "Next"}
+            title="Next"
             onPress={handleNextFromUpload}
             variant="primary"
             style={styles.primaryButton}
-            disabled={!hasAllThreeImages || uploading || analyzing}
-            loading={uploading || analyzing}
+            disabled={!hasAllThreeImages}
           />
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // Step 3: Animal Attributes (auto-populated, editable)
+  // Step: Chief complaint (images processing in background)
+  if (step === "complaint") {
+    return (
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <StatusBar style="auto" />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+        >
+          {renderHeader("Create New Animal")}
+          {renderStepper()}
+          {renderStepHeading(
+            "comment",
+            "Chief complaint",
+            "What is the main reason for this visit? You can continue while we process your images.",
+          )}
+          {(uploading || analyzing) && (
+            <View
+              style={[
+                styles.farmerCheckHint,
+                {
+                  backgroundColor: colors.primary + "18",
+                  borderColor: colors.primary + "40",
+                },
+              ]}
+            >
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text
+                style={[styles.farmerCheckHintText, { color: colors.primary }]}
+              >
+                {uploading
+                  ? "Uploading images…"
+                  : "Analyzing images…"}
+              </Text>
+            </View>
+          )}
+          <Card style={styles.complaintInputCard}>
+            <Text style={[styles.complaintLabel, { color: colors.text }]}>
+              Chief Complaint
+            </Text>
+            <View style={styles.complaintInputContainer}>
+              {chiefComplaintVoiceRecording && (
+                <View
+                  style={[
+                    styles.voicePlaybackCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View style={styles.voicePlaybackHeader}>
+                    <FontAwesome
+                      name="microphone"
+                      size={14}
+                      color={colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.voicePlaybackTitle,
+                        { color: colors.text },
+                      ]}
+                    >
+                      Voice recorded
+                    </Text>
+                    <TouchableOpacity
+                      onPress={handleChiefComplaintPlayPause}
+                      style={styles.playbackIconButton}
+                    >
+                      <FontAwesome
+                        name={isPlayingChiefComplaint ? "pause" : "play"}
+                        size={12}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    {isPlayingChiefComplaint && (
+                      <TouchableOpacity
+                        onPress={handleChiefComplaintStop}
+                        style={styles.playbackIconButton}
+                      >
+                        <FontAwesome
+                          name="stop"
+                          size={12}
+                          color={colors.muted}
+                        />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={handleChiefComplaintRecordAgain}
+                      style={styles.playbackIconButton}
+                    >
+                      <FontAwesome
+                        name="times"
+                        size={12}
+                        color={colors.muted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              <View style={styles.complaintTextInputWrapper}>
+                <TextInput
+                  style={[
+                    styles.complaintTextInput,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={chiefComplaint}
+                  onChangeText={setChiefComplaint}
+                  placeholder="Type chief complaint or tap the microphone to record..."
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <View style={styles.complaintMicButtonWrapper}>
+                  <VoiceMessageRecorder
+                    onTranscriptReady={handleChiefComplaintTranscriptReady}
+                    onRecordingComplete={
+                      handleChiefComplaintVoiceRecordingComplete
+                    }
+                    onError={(error: Error) => {
+                      Alert.alert("Error", error.message);
+                    }}
+                    buttonSize={32}
+                    buttonColor={colors.primary}
+                    caseId={undefined}
+                  />
+                </View>
+              </View>
+            </View>
+          </Card>
+          <Button
+            title="Next"
+            onPress={() => setStep("attributes")}
+            variant="primary"
+            style={styles.primaryButton}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Step: Animal Attributes (auto-populated when analysis completes, editable)
   if (step === "attributes") {
     return (
       <SafeAreaView
@@ -1274,7 +1517,24 @@ export default function CreateAnimalScreen() {
             "Animal details",
             "Fill in what you know. Species is required.",
           )}
-
+          {(uploading || analyzing) && (
+            <View
+              style={[
+                styles.farmerCheckHint,
+                {
+                  backgroundColor: colors.primary + "18",
+                  borderColor: colors.primary + "40",
+                },
+              ]}
+            >
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text
+                style={[styles.farmerCheckHintText, { color: colors.primary }]}
+              >
+                {uploading ? "Uploading images…" : "Analyzing images…"}
+              </Text>
+            </View>
+          )}
           <View
             style={[
               styles.attributesBlock,
@@ -1569,7 +1829,7 @@ export default function CreateAnimalScreen() {
                   ? "Enrolling..."
                   : "Save & continue"
             }
-            onPress={() => setTimeout(handleNextFromAttributes, 50)}
+            onPress={handleNextFromAttributes}
             variant="primary"
             style={styles.primaryButton}
             disabled={
@@ -1962,4 +2222,59 @@ const styles = StyleSheet.create({
   farmerList: { maxHeight: 300 },
   farmerListContent: { paddingVertical: 16, paddingHorizontal: 4 },
   modalCancelButton: { marginHorizontal: 20, marginTop: 8, marginBottom: 22 },
+  complaintInputCard: {
+    marginBottom: 16,
+    padding: 0,
+    overflow: "hidden",
+  },
+  complaintLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  complaintInputContainer: {
+    padding: 16,
+    paddingTop: 0,
+  },
+  voicePlaybackCard: {
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  voicePlaybackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  voicePlaybackTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+  },
+  playbackIconButton: {
+    padding: 4,
+  },
+  complaintTextInputWrapper: {
+    position: "relative",
+    minHeight: 100,
+  },
+  complaintTextInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 44,
+    fontSize: 16,
+    minHeight: 100,
+    maxHeight: 200,
+  },
+  complaintMicButtonWrapper: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    zIndex: 10,
+  },
 });

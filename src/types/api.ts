@@ -127,6 +127,7 @@ export interface CreateAnimalRequest {
   animalTagline?: string;
   aiShortSummary?: string;
   aiSummary?: string;
+  chiefComplaint?: string;
   locationName?: string;
   latitude?: number;
   longitude?: number;

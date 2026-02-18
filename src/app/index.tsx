@@ -21,6 +21,9 @@ import { useCasesByDoctor, useDeleteCase } from "../features/cases/hooks";
 import { useAnimalImages, useAnimal } from "../features/animals/hooks";
 import type { Case } from "../types/api";
 
+const CASE_STATUS_COMPLETED = "COMPLETED";
+const ACTIVE_CASES_LIMIT = 5;
+
 export default function DashboardScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -31,21 +34,22 @@ export default function DashboardScreen() {
     refetch: refetchDoctor,
   } = useCurrentDoctor();
   const { data: allCases, isLoading: casesLoading } = useCasesByDoctor(
-    doctor?.doctorId || 0,
+    doctor?.doctorId ?? 0,
   );
   const deleteCaseMutation = useDeleteCase();
 
-  const recentCases = allCases
+  const activeCases = allCases
     ? [...allCases]
+        .filter((c) => (c.status ?? "IN_PROGRESS") !== CASE_STATUS_COMPLETED)
         .sort(
           (a, b) =>
             new Date(b.caseDatetime).getTime() -
             new Date(a.caseDatetime).getTime(),
         )
-        .slice(0, 5)
+        .slice(0, ACTIVE_CASES_LIMIT)
     : [];
 
-  const formatDate = (dateString: string): string => {
+  const formatDate = useCallback((dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
       month: "short",
@@ -54,11 +58,11 @@ export default function DashboardScreen() {
       hour: "2-digit",
       minute: "2-digit",
     });
-  };
+  }, []);
 
   const handleCasePress = useCallback(
     (caseId: number) => {
-      setTimeout(() => router.push(`/case-detail?caseId=${caseId}`), 50);
+      router.push(`/case-detail?caseId=${caseId}`);
     },
     [router],
   );
@@ -92,14 +96,22 @@ export default function DashboardScreen() {
     [deleteCaseMutation],
   );
 
-  const renderCaseItem = ({ item }: { item: Case }) => (
-    <CaseRow
-      caseItem={item}
-      formatDate={formatDate}
-      onPress={() => handleCasePress(item.caseId)}
-      onDelete={() => handleDeleteCase(item)}
-      isDeleting={deleteCaseMutation.isPending}
-    />
+  const renderCaseItem = useCallback(
+    ({ item }: { item: Case }) => (
+      <CaseRow
+        caseItem={item}
+        formatDate={formatDate}
+        onPress={() => handleCasePress(item.caseId)}
+        onDelete={() => handleDeleteCase(item)}
+        isDeleting={deleteCaseMutation.isPending}
+      />
+    ),
+    [
+      formatDate,
+      handleCasePress,
+      handleDeleteCase,
+      deleteCaseMutation.isPending,
+    ],
   );
 
   if (doctorLoading || casesLoading) {
@@ -194,14 +206,14 @@ export default function DashboardScreen() {
             />
           </View>
 
-          {/* Recent Cases */}
+          {/* Active Cases */}
           <View style={styles.recentCasesSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Recent Cases
+              Active Cases
             </Text>
-            {recentCases.length > 0 ? (
+            {activeCases.length > 0 ? (
               <View style={styles.casesList}>
-                {recentCases.map((item) => (
+                {activeCases.map((item) => (
                   <View key={item.caseId} style={styles.caseCardSpacer}>
                     {renderCaseItem({ item })}
                   </View>
@@ -210,7 +222,7 @@ export default function DashboardScreen() {
             ) : (
               <Card style={styles.emptyCard}>
                 <Text style={[styles.emptyText, { color: colors.muted }]}>
-                  No recent cases
+                  No active cases
                 </Text>
               </Card>
             )}
