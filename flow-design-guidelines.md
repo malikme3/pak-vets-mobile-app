@@ -1,12 +1,14 @@
 # Flow Design Guidelines - Voice Input & Media Management
 
-**Purpose:** Standardized patterns for implementing voice input, transcription, and media file management across Diagnoses, Treatments, and Notes sections.
+**Purpose:** Standardized patterns for voice input, transcription, and media file management in the Pak Vets app. Applies to **Case**-scoped entities: Diagnoses, Treatments, and Notes (and media attached to a case).
 
 **Last Updated:** February 2026
 
 ---
 
 ## 🎯 Core Concept
+
+The app is **Case-centric**: each case has diagnoses, treatments, notes, and media. Add screens receive `caseId` via route params (e.g. `/add-diagnosis?caseId=123`). After save, navigation goes to `/case-detail?caseId=...`.
 
 Each section (Diagnoses, Treatments, Notes) supports a unified input flow:
 1. **Type** text directly OR **Record** voice using microphone
@@ -34,29 +36,29 @@ User Action → Record Audio → Upload to S3 → Transcribe → Display Transcr
 ### 2. Media File Creation Flow
 
 ```
-Record Audio → Upload to S3 → Get S3 Key → Create MediaFile → Get mediaId → Link to Entity
+Record Audio → Upload to S3 → Get S3 Key → Create MediaFile (caseId) → Get mediaId → Link to Entity
 ```
 
 **Critical Sequence:**
 1. Audio recording completes → S3 upload → Get `s3Key`
-2. Create `MediaFile` record with `s3Key` and `url`
+2. Create `MediaFile` record with `caseId`, `fileType: "AUDIO"`, `s3Key`, and `url`
 3. Receive `mediaId` from MediaFile creation
-4. Link `mediaId` to entity (Diagnosis/Treatment/Note)
+4. Link `mediaId` to entity (CaseDiagnosis, CaseTreatment, or CaseNote)
 
 ### 3. Entity Creation Pattern
 
 ```typescript
-// Standard pattern for creating entities with voice input
+// Standard pattern for creating entities with voice input (Diagnosis, Treatment, Note)
 const handleSave = async () => {
   let mediaId: number | undefined = undefined;
 
   // Step 1: Create MediaFile if voice recording exists
-  if (voiceRecording?.s3Key) {
+  if (voiceRecording?.s3Key && caseId) {
     const bucketName = getBucketName();
     const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
 
     const mediaFile = await createMediaMutation.mutateAsync({
-      visitId,
+      caseId,
       fileType: "AUDIO",
       s3Key: voiceRecording.s3Key,
       url: s3Url,
@@ -67,8 +69,8 @@ const handleSave = async () => {
 
   // Step 2: Create entity with mediaId link
   await createEntityMutation.mutateAsync({
-    visitId,
-    // ... other fields
+    caseId,
+    // ... other required fields
     ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
   });
 };
@@ -78,6 +80,7 @@ const handleSave = async () => {
 - Always convert `mediaId` to `Number()` before sending to API
 - Use conditional spread `...(mediaId !== undefined && { mediaId })` to only include when defined
 - Create MediaFile BEFORE creating the entity
+- Add screens receive `caseId` from route params (`/add-diagnosis?caseId=`, etc.)
 
 ---
 
@@ -85,7 +88,11 @@ const handleSave = async () => {
 
 ### Add Screen Pattern (add-diagnosis.tsx, add-treatment.tsx, add-note.tsx)
 
+Add screens get `caseId` from `useLocalSearchParams()` and require it to be valid.
+
 ```typescript
+const caseId = params.caseId ? Number(params.caseId) : undefined;
+
 // Required State
 const [text, setText] = useState("");
 const [voiceRecording, setVoiceRecording] = useState<{
@@ -97,8 +104,8 @@ const [voiceRecording, setVoiceRecording] = useState<{
 const [sound, setSound] = useState<Audio.Sound | null>(null);
 const [isPlaying, setIsPlaying] = useState(false);
 
-// Required Mutations
-const createEntityMutation = useCreateEntity();
+// Required Mutations (from features/diagnoses, features/treatments, features/notes, features/media)
+const createEntityMutation = useCreateCaseDiagnosis(); // or useCreateCaseTreatment() or useCreateCaseNote()
 const createMediaMutation = useCreateMediaFile();
 
 // Required Handlers
@@ -169,7 +176,7 @@ const handleRecordAgain = useCallback(() => {
           onError={(error: Error) => Alert.alert("Error", error.message)}
           buttonSize={32}
           buttonColor={colors.primary}
-          visitId={visitId}
+          caseId={caseId}
         />
       </View>
     </View>
@@ -231,13 +238,13 @@ const styles = StyleSheet.create({
 
 ---
 
-## 🔄 Audio Playback Pattern (Visit Detail Screen)
+## 🔄 Audio Playback Pattern (Case Detail Screen)
 
-### Component Structure
+### Component Structure (case-detail screen)
 
 ```typescript
 interface EntityItemProps {
-  entity: EntityType;
+  entity: CaseDiagnosis | CaseTreatment | CaseNote;
   audioMedia: MediaFile | null | undefined;
   colors: ReturnType<typeof useTheme>["colors"];
   getAudioUrl: (media: MediaFile) => Promise<string | null>;
@@ -249,14 +256,14 @@ function EntityItem({ entity, audioMedia, colors, getAudioUrl }: EntityItemProps
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
-  // Load audio URL when component mounts
+  // Load audio URL when component mounts (signed URL from getAudioUrl)
   useEffect(() => {
     if (audioMedia) {
       getAudioUrl(audioMedia).then(setAudioUrl);
     } else {
       setAudioUrl(null);
     }
-  }, [entity.id, audioMedia, getAudioUrl]);
+  }, [entity, audioMedia, getAudioUrl]);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -273,6 +280,8 @@ function EntityItem({ entity, audioMedia, colors, getAudioUrl }: EntityItemProps
 
 ### Audio Player UI Pattern
 
+Use theme colors (e.g. `colors.onPrimary` or `colors.text`) instead of hardcoded `#fff` to comply with development-guidelines.
+
 ```tsx
 {audioMedia && (
   <View style={styles.audioPlayerCard}>
@@ -283,17 +292,17 @@ function EntityItem({ entity, audioMedia, colors, getAudioUrl }: EntityItemProps
         disabled={!audioUrl || isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <ActivityIndicator size="small" color={colors.onPrimary ?? "#FFF"} />
         ) : (
-          <FontAwesome name={isPlaying ? "pause" : "play"} size={16} color="#fff" />
+          <FontAwesome name={isPlaying ? "pause" : "play"} size={16} color={colors.onPrimary ?? "#FFF"} />
         )}
       </TouchableOpacity>
       <View style={styles.audioInfo}>
-        <Text>Voice Recording</Text>
+        <Text style={{ color: colors.text }}>Voice Recording</Text>
       </View>
       {isPlaying && (
         <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
-          <FontAwesome name="stop" size={12} color="#fff" />
+          <FontAwesome name="stop" size={12} color={colors.onPrimary ?? "#FFF"} />
         </TouchableOpacity>
       )}
     </View>
@@ -305,34 +314,35 @@ function EntityItem({ entity, audioMedia, colors, getAudioUrl }: EntityItemProps
 
 ## 🔍 Media File Lookup Pattern
 
-### Finding Associated Audio Files
+### Finding Associated Audio Files (case-detail)
+
+Media files for a case are loaded via `useMediaFilesByCase(caseId)`. To find the audio for a diagnosis, treatment, or note:
 
 ```typescript
-// Pattern 1: Direct lookup by mediaId (preferred for new records)
+// Direct lookup by mediaId (used in case-detail for diagnoses, treatments, notes)
 let audioMedia: MediaFile | null | undefined = null;
 if (entity.mediaId) {
   audioMedia = mediaFiles.find((m) => m.mediaId === entity.mediaId);
 }
 
-// Pattern 2: Fallback lookup by visitId and S3 key pattern (for legacy records)
-if (!audioMedia && visitId) {
+// Fallback: match by caseId and S3 key pattern (e.g. cases/${caseId}/audio/)
+if (!audioMedia && caseId) {
   const audioFiles = mediaFiles.filter(
     (m) =>
       m.fileType === "AUDIO" &&
-      m.visitId === visitId &&
-      m.s3Key?.includes(`visits/${visitId}/audio/`),
+      m.s3Key?.includes(`cases/${caseId}/audio/`),
   );
-  
-  // Match by closest creation time
   if (audioFiles.length > 0) {
     const entityCreatedAt = new Date(entity.createdAt).getTime();
     audioMedia = audioFiles.reduce((closest, current) => {
-      const currentTime = new Date(current.createdAt).getTime();
-      const closestTime = new Date(closest.createdAt).getTime();
-      const currentDiff = Math.abs(currentTime - entityCreatedAt);
-      const closestDiff = Math.abs(closestTime - entityCreatedAt);
+      const currentDiff = Math.abs(
+        new Date(current.createdAt).getTime() - entityCreatedAt,
+      );
+      const closestDiff = Math.abs(
+        new Date(closest.createdAt).getTime() - entityCreatedAt,
+      );
       return currentDiff < closestDiff ? current : closest;
-    }) || audioFiles[0];
+    });
   }
 }
 ```
@@ -402,7 +412,7 @@ const handleSave = async () => {
     if (sound) {
       await sound.unloadAsync();
     }
-    router.replace(`/visit-detail?visitId=${visitId}`);
+    router.replace(`/case-detail?caseId=${caseId}`);
   }
 };
 ```
@@ -456,7 +466,7 @@ const bucketName = getBucketName();
 const s3Url = `https://${bucketName}.s3.amazonaws.com/${voiceRecording.s3Key}`;
 
 const mediaFile = await createMediaMutation.mutateAsync({
-  visitId,
+  caseId,
   fileType: "AUDIO",
   s3Key: voiceRecording.s3Key,
   url: s3Url,
@@ -467,33 +477,45 @@ const mediaFile = await createMediaMutation.mutateAsync({
 
 ```typescript
 await createEntityMutation.mutateAsync({
-  visitId,
+  caseId,
   // ... other required fields
   ...(mediaId !== undefined && { mediaId: Number(mediaId) }),
 });
 ```
 
-**Critical:** Always convert `mediaId` to `Number()` before sending to API.
+**Critical:** Always convert `mediaId` to `Number()` before sending to API. Add screens get `caseId` from `useLocalSearchParams()` (e.g. `/add-diagnosis?caseId=123`).
 
 ---
 
 ## 🎯 Section-Specific Patterns
 
-### Diagnoses
+### Diagnoses (add-diagnosis)
+- Route: `/add-diagnosis?caseId={caseId}`; optional `diagnosisId` for edit
 - Voice input populates `diagnosisText` field
 - Status selection (SUSPECTED/CONFIRMED) is separate
-- Audio playback shows for all diagnoses with `mediaId`
+- Audio playback on case-detail for diagnoses with `mediaId`
 
-### Treatments
+### Treatments (add-treatment)
+- Route: `/add-treatment?caseId={caseId}`
 - Voice input populates `instructions` field only
 - Other fields (medicine, dose, route, etc.) remain text-only
-- Audio playback shows only when `instructions` has associated audio
+- Audio playback on case-detail when treatment has `mediaId`
 
-### Notes
+### Notes (add-note)
+- Route: `/add-note?caseId={caseId}`
 - Voice input populates `noteText` field
-- `noteType` automatically set to `"VOICE_TRANSCRIPT"` when recording
-- Falls back to `"TEXT"` when user types manually
-- Audio playback shows for `VOICE_TRANSCRIPT` type notes
+- `noteType` set to `"VOICE_TRANSCRIPT"` when recording; `"TEXT"` when typing only
+- Audio playback on case-detail for notes with `mediaId`
+
+### Media / Images (add-media)
+- Route: `/add-media?caseId={caseId}`
+- Uploads images to S3 (presigned URL or fallback), then creates `MediaFile` with `caseId`, `fileType: "IMAGE"`, `s3Key`, `url`
+- S3 key pattern: `cases/${caseId}/images/...`
+- After success: `router.replace(\`/case-detail?caseId=${caseId}\`)`
+
+### VoiceMessageRecorder
+- Props: `onTranscriptReady`, `onRecordingComplete`, `onError`, `buttonSize`, `buttonColor`, `caseId` (optional)
+- Pass `caseId` when used on add-diagnosis, add-treatment, add-note so S3 paths can be case-scoped; use `caseId={undefined}` on screens without a case (e.g. create-animal chief complaint).
 
 ---
 
@@ -510,11 +532,11 @@ When implementing voice input for a new section:
 - [ ] Update `handleSave` to create MediaFile before entity
 - [ ] Convert `mediaId` to `Number()` before API call
 - [ ] Add audio cleanup in `useEffect` unmount
-- [ ] Update visit detail screen to show audio playback
-- [ ] Implement media file lookup logic
+- [ ] Update case-detail screen to show audio playback
+- [ ] Implement media file lookup (useMediaFilesByCase, entity.mediaId)
 - [ ] Add error handling for all operations
 - [ ] Test recording → transcription → edit → save flow
-- [ ] Test audio playback on visit detail screen
+- [ ] Test audio playback on case-detail screen
 - [ ] Verify cleanup on navigation
 
 ---
@@ -537,7 +559,7 @@ When implementing voice input for a new section:
    - Check both `createEntityMutation.isPending` AND `createMediaMutation.isPending`
 
 6. **❌ Not providing fallback media lookup**
-   - Implement both direct lookup (by `mediaId`) and fallback (by visitId + timestamp)
+   - Implement both direct lookup (by `mediaId`) and fallback (by caseId + S3 key pattern / timestamp)
 
 ---
 
@@ -553,7 +575,7 @@ See reference implementations:
 ### Complete Detail Screen Pattern
 
 See reference implementation:
-- `src/app/visit-detail.tsx` - Audio playback for all entity types
+- `src/app/case-detail.tsx` - Case detail with audio playback for diagnoses, treatments, and notes
 
 ---
 

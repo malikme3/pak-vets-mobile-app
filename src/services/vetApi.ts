@@ -83,10 +83,26 @@ export const doctorApi = {
 };
 
 // Farmers API
+const FARMERS_PATH = "/farmers";
+
 export const farmerApi = {
   getAllFarmers: async (): Promise<Farmer[]> => {
     const response =
-      await apiClient.instance.get<ApiSuccessResponse<Farmer[]>>("/farmers");
+      await apiClient.instance.get<ApiSuccessResponse<Farmer[]>>(FARMERS_PATH);
+    return response.data.data;
+  },
+
+  /** Farmers within radius (km) of lat/long. All three params required. */
+  getFarmersNearby: async (
+    latitude: number,
+    longitude: number,
+    radiusKm: number,
+  ): Promise<Farmer[]> => {
+    const response = await apiClient.instance.get<
+      ApiSuccessResponse<Farmer[]>
+    >(FARMERS_PATH, {
+      params: { latitude, longitude, radiusKm },
+    });
     return response.data.data;
   },
 
@@ -115,11 +131,26 @@ export const animalApi = {
     return response.data.data;
   },
 
-  getAllAnimals: async (species?: string): Promise<Animal[]> => {
-    const params = species ? { species } : {};
+  getAllAnimals: async (
+    speciesOrOptions?: string | {
+      species?: string;
+      latitude?: number;
+      longitude?: number;
+      radiusKm?: number;
+    },
+  ): Promise<Animal[]> => {
+    const options =
+      typeof speciesOrOptions === "string"
+        ? { species: speciesOrOptions }
+        : speciesOrOptions ?? {};
+    const params: Record<string, string | number> = {};
+    if (options.species) params.species = options.species;
+    if (options.latitude != null) params.latitude = options.latitude;
+    if (options.longitude != null) params.longitude = options.longitude;
+    if (options.radiusKm != null) params.radiusKm = options.radiusKm;
     const response = await apiClient.instance.get<ApiSuccessResponse<Animal[]>>(
       "/animals",
-      { params },
+      { params: Object.keys(params).length ? params : undefined },
     );
     return response.data.data;
   },
@@ -159,32 +190,6 @@ export const animalApi = {
         animal.farmer?.fullName?.toLowerCase().includes(lowerQuery) ||
         animal.farmer?.phoneNumber?.includes(query),
     );
-  },
-
-  // Enroll animal reference images (face, ear, body)
-  enrollAnimalImages: async (
-    animalId: number,
-    request: {
-      faceImageUrl: string;
-      earImageUrl: string;
-      bodyImageUrl: string;
-      captureDate?: string;
-      notes?: string;
-      source?: string;
-    },
-  ): Promise<{
-    enrolled: boolean;
-    embeddingIds: { face: number; ear: number; body: number };
-    animalImageIds: { face: number; ear: number; body: number };
-  }> => {
-    const response = await apiClient.instance.post<
-      ApiSuccessResponse<{
-        enrolled: boolean;
-        embeddingIds: { face: number; ear: number; body: number };
-        animalImageIds: { face: number; ear: number; body: number };
-      }>
-    >(`/animals/${animalId}/enroll`, request);
-    return response.data.data;
   },
 
   matchAnimalImage: async (

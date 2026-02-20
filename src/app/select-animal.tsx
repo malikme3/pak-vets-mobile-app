@@ -10,12 +10,14 @@ import {
   Image,
   TouchableOpacity,
   TextInput,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Location from "expo-location";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -38,6 +40,22 @@ import type { Animal, MatchAnimalImageResponse } from "../types/api";
 type SearchFilter = "tag" | "farmer_name" | "farmer_phone";
 type ImageMatchType = "FACE" | "EAR" | "BODY";
 
+const MATCH_BY_IMAGE_ERROR_TITLE = "Match failed";
+const MATCH_BY_IMAGE_ERROR_FALLBACK =
+  "Could not find animal by image. Try again.";
+
+const CREATE_ANIMAL_SPECIES_OPTIONS = [
+  "Cow",
+  "Buffalo",
+  "Horse",
+  "Camel",
+  "Goat",
+  "Sheep",
+  "Other",
+] as const;
+type CreateAnimalSpeciesOption =
+  (typeof CREATE_ANIMAL_SPECIES_OPTIONS)[number];
+
 export default function SelectAnimalScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -55,6 +73,14 @@ export default function SelectAnimalScreen() {
   const [matchResult, setMatchResult] =
     useState<MatchAnimalImageResponse | null>(null);
   const [matchedAnimal, setMatchedAnimal] = useState<Animal | null>(null);
+
+  // Create New Animal flow: species selection modal
+  const [createAnimalModalVisible, setCreateAnimalModalVisible] =
+    useState(false);
+  const [selectedSpeciesOption, setSelectedSpeciesOption] =
+    useState<CreateAnimalSpeciesOption | null>(null);
+  const [otherSpeciesText, setOtherSpeciesText] = useState("");
+  const [startUploadingLoading, setStartUploadingLoading] = useState(false);
 
   // Build effective search query: tag-001, 009-0333-6831-836, or raw for farmer name
   const searchQuery =
@@ -160,10 +186,71 @@ export default function SelectAnimalScreen() {
   );
 
   const handleCreateAnimal = () => {
-    router.push({
-      pathname: "/create-animal",
-      params: { returnTo },
-    });
+    setSelectedSpeciesOption(null);
+    setOtherSpeciesText("");
+    setCreateAnimalModalVisible(true);
+  };
+
+  const resolvedSpecies =
+    selectedSpeciesOption === "Other"
+      ? otherSpeciesText.trim()
+      : selectedSpeciesOption ?? "";
+
+  const canStartUploading =
+    selectedSpeciesOption != null &&
+    (selectedSpeciesOption !== "Other" || otherSpeciesText.trim().length > 0);
+
+  const handleStartUploadingPhotos = async () => {
+    if (!canStartUploading) return;
+    setStartUploadingLoading(true);
+    try {
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location required",
+          "Please allow location access to record where the animal is being registered.",
+          [{ text: "OK" }],
+        );
+        setStartUploadingLoading(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const lat = loc.coords.latitude;
+      const lng = loc.coords.longitude;
+
+      const created = await animalApi.createAnimal({
+        species: resolvedSpecies,
+        latitude: lat,
+        longitude: lng,
+      });
+
+      setCreateAnimalModalVisible(false);
+      setSelectedSpeciesOption(null);
+      setOtherSpeciesText("");
+      router.push({
+        pathname: "/create-animal",
+        params: {
+          returnTo,
+          animalId: String(created.animalId),
+          species: resolvedSpecies,
+          latitude: String(lat),
+          longitude: String(lng),
+          startAtUpload: "1",
+        },
+      });
+    } catch (e) {
+      if (__DEV__) console.error("[SelectAnimal] Create animal / location:", e);
+      Alert.alert(
+        "Error",
+        e instanceof Error ? e.message : "Failed to create animal. Please try again.",
+        [{ text: "OK" }],
+      );
+    } finally {
+      setStartUploadingLoading(false);
+    }
   };
 
   const uploadImageToS3 = async (
@@ -219,7 +306,7 @@ export default function SelectAnimalScreen() {
   };
 
   const processImageUriAndMatch = async (uri: string) => {
-    const s3Key = `match-query/${Date.now()}-${imageMatchType.toLowerCase()}.jpg`;
+    const s3Key = `match-query/original-image/${Date.now()}-${imageMatchType.toLowerCase()}.jpg`;
     const imageUrl = await uploadImageToS3(uri, s3Key);
     const response = await animalApi.matchAnimalImage({
       queryImageUrl: imageUrl,
@@ -256,10 +343,8 @@ export default function SelectAnimalScreen() {
       await processImageUriAndMatch(result.assets[0].uri);
     } catch (err) {
       Alert.alert(
-        "Match failed",
-        err instanceof Error
-          ? err.message
-          : "Could not find animal by image. Try again.",
+        MATCH_BY_IMAGE_ERROR_TITLE,
+        err instanceof Error ? err.message : MATCH_BY_IMAGE_ERROR_FALLBACK,
       );
     } finally {
       setMatching(false);
@@ -286,10 +371,8 @@ export default function SelectAnimalScreen() {
       await processImageUriAndMatch(result.assets[0].uri);
     } catch (err) {
       Alert.alert(
-        "Match failed",
-        err instanceof Error
-          ? err.message
-          : "Could not find animal by image. Try again.",
+        MATCH_BY_IMAGE_ERROR_TITLE,
+        err instanceof Error ? err.message : MATCH_BY_IMAGE_ERROR_FALLBACK,
       );
     } finally {
       setMatching(false);
@@ -564,6 +647,132 @@ export default function SelectAnimalScreen() {
           />
         </View>
       </ScrollView>
+
+      {/* Create New Animal – species selection modal */}
+      <Modal
+        visible={createAnimalModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setCreateAnimalModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.createAnimalModalOverlay}
+          activeOpacity={1}
+          onPress={() => setCreateAnimalModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            style={[
+              styles.createAnimalModalContent,
+              { backgroundColor: colors.surface },
+            ]}
+          >
+            <Text style={[styles.createAnimalModalTitle, { color: colors.text }]}>
+              Create New Animal
+            </Text>
+            <Text
+              style={[
+                styles.createAnimalModalSubtitle,
+                { color: colors.muted },
+              ]}
+            >
+              Select species
+            </Text>
+
+            <View style={styles.createAnimalRadioGroup}>
+              {CREATE_ANIMAL_SPECIES_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.createAnimalRadioRow,
+                    { borderColor: colors.border },
+                  ]}
+                  onPress={() => setSelectedSpeciesOption(option)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.createAnimalRadioOuter,
+                      {
+                        borderColor:
+                          selectedSpeciesOption === option
+                            ? colors.primary
+                            : colors.border,
+                      },
+                    ]}
+                  >
+                    {selectedSpeciesOption === option ? (
+                      <View
+                        style={[
+                          styles.createAnimalRadioInner,
+                          { backgroundColor: colors.primary },
+                        ]}
+                      />
+                    ) : null}
+                  </View>
+                  <Text
+                    style={[
+                      styles.createAnimalRadioLabel,
+                      { color: colors.text },
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {selectedSpeciesOption === "Other" ? (
+              <View style={styles.createAnimalOtherWrap}>
+                <Text
+                  style={[
+                    styles.createAnimalOtherLabel,
+                    { color: colors.text },
+                  ]}
+                >
+                  Species name *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.createAnimalOtherInput,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={otherSpeciesText}
+                  onChangeText={setOtherSpeciesText}
+                  placeholder="Enter species"
+                  placeholderTextColor={colors.muted}
+                  autoCapitalize="words"
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.createAnimalModalActions}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                onPress={() => setCreateAnimalModalVisible(false)}
+                style={styles.createAnimalModalCancel}
+              />
+              <Button
+                title={
+                  startUploadingLoading
+                    ? "Getting location…"
+                    : "Next"
+                }
+                variant="primary"
+                onPress={handleStartUploadingPhotos}
+                style={styles.createAnimalModalStart}
+                disabled={!canStartUploading || startUploadingLoading}
+              />
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -715,5 +924,79 @@ const styles = StyleSheet.create({
   },
   matchRowChevron: {
     fontSize: 24,
+  },
+  createAnimalModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  createAnimalModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 32,
+  },
+  createAnimalModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  createAnimalModalSubtitle: {
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  createAnimalRadioGroup: {
+    marginBottom: 16,
+  },
+  createAnimalRadioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+    borderBottomWidth: 1,
+  },
+  createAnimalRadioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  createAnimalRadioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  createAnimalRadioLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  createAnimalOtherWrap: {
+    marginBottom: 20,
+  },
+  createAnimalOtherLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  createAnimalOtherInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  createAnimalModalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  createAnimalModalCancel: {
+    flex: 1,
+  },
+  createAnimalModalStart: {
+    flex: 1,
   },
 });

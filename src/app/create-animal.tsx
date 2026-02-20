@@ -18,6 +18,7 @@ import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Location from "expo-location";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -25,11 +26,7 @@ import { useCreateAnimal } from "../features/animals/hooks";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useCreateCase } from "../features/cases/hooks";
 import { animalApi, farmerApi } from "../services/vetApi";
-import {
-  getUploadSignedUrl,
-  getBucketName,
-  analyzeAnimalImage,
-} from "../services/sharedServicesApi";
+import { getUploadSignedUrl, getBucketName } from "../services/sharedServicesApi";
 import {
   formatPhoneInput,
   normalizePhone,
@@ -38,7 +35,7 @@ import {
 } from "../utils/phone";
 import type { CreateAnimalRequest, Farmer, AnimalStatus } from "../types/api";
 import { estimateWeightKg } from "../utils/animalWeight";
-import type { AnimalInfoFromImage } from "../services/sharedServicesApi";
+import { formatDistance } from "../utils/formatDistance";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
 
@@ -53,8 +50,8 @@ type Step = "farmer" | "upload" | "complaint" | "attributes";
 type ImageType = "face" | "ear" | "body";
 
 const STEPS: { key: Step; label: string; icon: string }[] = [
-  { key: "farmer", label: "Farmer", icon: "user" },
   { key: "upload", label: "Upload", icon: "camera" },
+  { key: "farmer", label: "Farmer", icon: "user" },
   { key: "complaint", label: "Complaint", icon: "comment" },
   { key: "attributes", label: "Details", icon: "list" },
 ];
@@ -162,10 +159,22 @@ export default function CreateAnimalScreen() {
   const params = useLocalSearchParams();
   const { colors } = useTheme();
   const returnTo = (params.returnTo as string) || "/create-case";
+  const startAtUpload = params.startAtUpload === "1";
+  const paramSpecies = typeof params.species === "string" ? params.species : "";
+  const paramLatitude =
+    typeof params.latitude === "string" ? params.latitude : "";
+  const paramLongitude =
+    typeof params.longitude === "string" ? params.longitude : "";
+  const paramAnimalId =
+    typeof params.animalId === "string" && params.animalId.trim()
+      ? parseInt(params.animalId, 10)
+      : NaN;
+  const hasExistingAnimalId =
+    !Number.isNaN(paramAnimalId) && paramAnimalId > 0;
 
-  const [step, setStep] = useState<Step>("farmer");
+  const [step, setStep] = useState<Step>("upload");
 
-  // Step 1: Farmer – phone, nic_no, name, address (village, teh, district); pick existing or create
+  // Farmer step – phone, nic_no, name, address (village, teh, district); pick existing or create (step 2 after upload)
   const [farmerPhone, setFarmerPhone] = useState("");
   const [farmerNicNo, setFarmerNicNo] = useState("");
   const [farmerName, setFarmerName] = useState("");
@@ -188,18 +197,25 @@ export default function CreateAnimalScreen() {
     null,
   );
   const didNavigateFromAttributesRef = useRef(false);
+  const existingAnimalIdRef = useRef<number | null>(null);
 
-  // Step 2: Upload
+  // Nearby farmers (farmer step): radius in km, default 0.25; options 0.25, 0.5, 1, 2
+  const NEARBY_RADIUS_OPTIONS = [0.25, 0.5, 1, 2] as const;
+  const [nearbyRadiusKm, setNearbyRadiusKm] = useState(0.25);
+  const [nearbyFarmers, setNearbyFarmers] = useState<Farmer[]>([]);
+  const [nearbyFarmersLoading, setNearbyFarmersLoading] = useState(false);
+
+  // Upload step (step 1)
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [locationLoading, setLocationLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
   const [uploadedUrls, setUploadedUrls] = useState<{
     faceImageUrl: string;
     earImageUrl: string;
     bodyImageUrl: string;
   } | null>(null);
-  const [analyzedAnimal, setAnalyzedAnimal] =
-    useState<AnimalInfoFromImage | null>(null);
 
   // Step: Chief complaint (after upload, before attributes) – same UI as create-case
   const [chiefComplaint, setChiefComplaint] = useState("");
@@ -224,6 +240,109 @@ export default function CreateAnimalScreen() {
     };
   }, [chiefComplaintSound]);
 
+  // When navigated with startAtUpload + species/lat/long (and optional animalId) from select-animal, open on upload step with pre-filled values
+  const hasAppliedStartAtUploadRef = useRef(false);
+  useEffect(() => {
+    if (!startAtUpload || hasAppliedStartAtUploadRef.current) return;
+    hasAppliedStartAtUploadRef.current = true;
+    setStep("upload");
+    if (paramSpecies) setSpecies(paramSpecies);
+    if (paramLatitude) setLatitude(paramLatitude);
+    if (paramLongitude) setLongitude(paramLongitude);
+    if (hasExistingAnimalId) existingAnimalIdRef.current = paramAnimalId;
+  }, [
+    startAtUpload,
+    paramSpecies,
+    paramLatitude,
+    paramLongitude,
+    hasExistingAnimalId,
+    paramAnimalId,
+  ]);
+
+  // On "Animal details" step: if we have an existing animal ID (from previous step / select-animal), fetch latest from backend (includes AI-updated fields) and pre-fill form
+  useEffect(() => {
+    if (step !== "attributes") return;
+    const animalId = existingAnimalIdRef.current;
+    if (animalId == null) return;
+    let cancelled = false;
+    setAttributesDetailsLoading(true);
+    animalApi
+      .getAnimal(animalId)
+      .then((animal) => {
+        if (cancelled) return;
+        setSpecies(animal.species ?? "");
+        setBreed(animal.breed ?? "");
+        setAgeMonths(
+          animal.ageMonths != null ? String(animal.ageMonths) : "",
+        );
+        setWeightKg(
+          animal.weightKg != null ? String(animal.weightKg) : "",
+        );
+        setColor(animal.color ?? "");
+        setSex(animal.sex ?? "");
+        setStatus(
+          animal.status && animal.status !== "OTHER"
+            ? animal.status
+            : animal.status === "OTHER"
+              ? "OTHER"
+              : "",
+        );
+        setOtherStatusValue(animal.otherStatusValue ?? "");
+        setHeartGirthCm(
+          animal.heartGirthCm != null ? String(animal.heartGirthCm) : "",
+        );
+        setBodyLengthCm(
+          animal.bodyLengthCm != null ? String(animal.bodyLengthCm) : "",
+        );
+        setAnimalTagline(animal.animalTagline ?? "");
+        setAiShortSummary(animal.aiShortSummary ?? "");
+        setAiSummary(animal.aiSummary ?? "");
+      })
+      .catch((err) => {
+        if (!cancelled && __DEV__) {
+          console.warn("[CreateAnimal] Failed to load animal details:", err);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAttributesDetailsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
+  // Auto-detect location when on upload step only if not already provided (e.g. from select-animal flow)
+  useEffect(() => {
+    if (step !== "upload") return;
+    if (latitude !== "" && longitude !== "") return; // already have location
+    let cancelled = false;
+    (async () => {
+      setLocationLoading(true);
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
+        if (cancelled || status !== "granted") {
+          setLocationLoading(false);
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (!cancelled) {
+          setLatitude(String(loc.coords.latitude));
+          setLongitude(String(loc.coords.longitude));
+        }
+      } catch (e) {
+        if (__DEV__) console.error("[CreateAnimal] Location error:", e);
+      } finally {
+        if (!cancelled) setLocationLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
   // Step: Animal attributes (editable, pre-filled from API when analysis completes)
   const [species, setSpecies] = useState("");
   const [breed, setBreed] = useState("");
@@ -241,8 +360,8 @@ export default function CreateAnimalScreen() {
   const [aiSummary, setAiSummary] = useState("");
 
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
-  const [enrolling, setEnrolling] = useState(false);
   const [creatingCase, setCreatingCase] = useState(false);
+  const [attributesDetailsLoading, setAttributesDetailsLoading] = useState(false);
 
   const createAnimalMutation = useCreateAnimal();
   const { data: doctor } = useCurrentDoctor();
@@ -353,7 +472,36 @@ export default function CreateAnimalScreen() {
     return fileUrl;
   };
 
-  // Run upload + analysis in background; pre-fill attributes when done.
+  // Build S3 key path: prefix / [animalId] / doctorId / lat / long / species / timestamp / type.jpg
+  // When we have an existing animal (from select-animal flow), include animalId so backend can update that animal.
+  const buildImageS3Key = useCallback(
+    (imageType: "face" | "ear" | "body"): string => {
+      const animalId = existingAnimalIdRef.current;
+      const doctorId = doctor?.doctorId ?? 0;
+      const lat = latitude.trim() ? latitude.replace(/\s/g, "") : "0";
+      const lng = longitude.trim() ? longitude.replace(/\s/g, "") : "0";
+      const speciesSlug = (species || "unknown")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "");
+      const timestamp = Date.now();
+      const pathParts = [
+        "create-animal-images",
+        ...(animalId != null ? [String(animalId)] : []),
+        String(doctorId),
+        lat,
+        lng,
+        speciesSlug,
+        String(timestamp),
+        `${imageType}.jpg`,
+      ];
+      return pathParts.join("/");
+    },
+    [doctor?.doctorId, latitude, longitude, species],
+  );
+
+  // Run upload in background; backend (Step Functions) will process and analyze images.
   const runUploadAndAnalyzeInBackground = useCallback(
     async (
       faceImage: SelectedImage,
@@ -361,49 +509,27 @@ export default function CreateAnimalScreen() {
       bodyImage: SelectedImage,
     ) => {
       setUploading(true);
-      setAnalyzing(false);
       try {
-        const timestamp = Date.now();
-        const faceKey = `create-animal-temp/${timestamp}-face.jpg`;
-        const earKey = `create-animal-temp/${timestamp}-ear.jpg`;
-        const bodyKey = `create-animal-temp/${timestamp}-body.jpg`;
+        const faceKey = buildImageS3Key("face");
+        const earKey = buildImageS3Key("ear");
+        const bodyKey = buildImageS3Key("body");
 
         const faceImageUrl = await uploadImageToS3(faceImage.uri, faceKey);
         const earImageUrl = await uploadImageToS3(earImage.uri, earKey);
         const bodyImageUrl = await uploadImageToS3(bodyImage.uri, bodyKey);
         setUploadedUrls({ faceImageUrl, earImageUrl, bodyImageUrl });
-
-        setAnalyzing(true);
-        const animal = await analyzeAnimalImage({
-          faceImageUrl,
-          earImageUrl,
-          bodyImageUrl,
-        });
-        setAnalyzedAnimal(animal);
-        setSpecies(animal.species ?? "");
-        setBreed(animal.breed ?? "");
-        setAgeMonths(
-          animal.age_months != null ? String(animal.age_months) : "",
-        );
-        setWeightKg(animal.weight_kg != null ? String(animal.weight_kg) : "");
-        setColor(animal.color ?? "");
-        setSex(animal.sex ?? "");
-        setAnimalTagline(animal.animal_tagline ?? "");
-        setAiShortSummary(animal.ai_short_summary ?? "");
-        setAiSummary(animal.ai_summary ?? "");
       } catch (error) {
         Alert.alert(
           "Error",
           error instanceof Error
             ? error.message
-            : "Failed to upload or analyze images. You can still fill animal details.",
+            : "Failed to upload images. Please try again.",
         );
       } finally {
         setUploading(false);
-        setAnalyzing(false);
       }
     },
-    [],
+    [buildImageS3Key],
   );
 
   const handleNextFromUpload = useCallback(() => {
@@ -419,7 +545,7 @@ export default function CreateAnimalScreen() {
     }
     // Start upload + analyze in background; don't block.
     runUploadAndAnalyzeInBackground(faceImage, earImage, bodyImage);
-    setStep("complaint");
+    setStep("farmer");
   }, [selectedImages, runUploadAndAnalyzeInBackground]);
 
   const handleChiefComplaintVoiceRecordingComplete = useCallback(
@@ -521,6 +647,8 @@ export default function CreateAnimalScreen() {
       aiShortSummary: aiShortSummary.trim() || undefined,
       aiSummary: aiSummary.trim() || undefined,
       chiefComplaint: chiefComplaint.trim() || undefined,
+      latitude: latitude.trim() ? parseFloat(latitude) : undefined,
+      longitude: longitude.trim() ? parseFloat(longitude) : undefined,
     }),
     [
       selectedFarmerId,
@@ -539,6 +667,8 @@ export default function CreateAnimalScreen() {
       aiShortSummary,
       aiSummary,
       chiefComplaint,
+      latitude,
+      longitude,
     ],
   );
 
@@ -550,28 +680,15 @@ export default function CreateAnimalScreen() {
     }
     try {
       const request = buildAnimalRequest();
-      const created = await createAnimalMutation.mutateAsync(request);
-      if (didNavigateFromAttributesRef.current) return;
-      const animalIdToUse = created.animalId;
-      if (uploadedUrls) {
-        setEnrolling(true);
-        try {
-          await animalApi.enrollAnimalImages(animalIdToUse, {
-            faceImageUrl: uploadedUrls.faceImageUrl,
-            earImageUrl: uploadedUrls.earImageUrl,
-            bodyImageUrl: uploadedUrls.bodyImageUrl,
-            source: "Mobile App",
-          });
-        } catch (err) {
-          Alert.alert(
-            "Images not enrolled",
-            err instanceof Error
-              ? err.message
-              : "Failed to enroll images. Animal was saved; you can add images later.",
-          );
-        } finally {
-          setEnrolling(false);
-        }
+      const existingId = existingAnimalIdRef.current;
+      let animalIdToUse: number;
+      if (existingId != null) {
+        const { chiefComplaint: _omit, ...updatePayload } = request;
+        await animalApi.updateAnimal(existingId, updatePayload);
+        animalIdToUse = existingId;
+      } else {
+        const created = await createAnimalMutation.mutateAsync(request);
+        animalIdToUse = created.animalId;
       }
       if (didNavigateFromAttributesRef.current) return;
 
@@ -640,11 +757,10 @@ export default function CreateAnimalScreen() {
   ]);
 
   const goBack = () => {
-    if (step === "farmer") router.back();
-    else if (step === "upload") setStep("farmer");
-    else if (step === "complaint") setStep("upload");
+    if (step === "upload") router.back();
+    else if (step === "farmer") setStep("upload");
+    else if (step === "complaint") setStep("farmer");
     else if (step === "attributes") setStep("complaint");
-    else setStep("upload");
   };
 
   /** Per development-guidelines: avoid ScrollView canceling button press. */
@@ -760,12 +876,12 @@ export default function CreateAnimalScreen() {
         <FontAwesome
           name={
             (STEPS[currentStepIndex - 1]?.icon ?? "circle") as
-              | "user"
-              | "camera"
-              | "list"
-              | "check"
-              | "comment"
-              | "circle"
+            | "user"
+            | "camera"
+            | "list"
+            | "check"
+            | "comment"
+            | "circle"
           }
           size={12}
           color={colors.primary}
@@ -890,10 +1006,10 @@ export default function CreateAnimalScreen() {
     const hasNic = farmerNicNo.trim().length > 0;
     const hasName = farmerName.trim().length > 0;
 
-    // Skip farmer step: go to upload without linking a farmer
+    // Skip farmer step: go to complaint without linking a farmer
     if (!hasPhone && !hasNic && !hasName) {
       setSelectedFarmerId(null);
-      setStep("upload");
+      setStep("complaint");
       return;
     }
 
@@ -929,10 +1045,10 @@ export default function CreateAnimalScreen() {
           : [];
       const byNic = hasNic
         ? all.filter(
-            (f) =>
-              f.nicNo?.trim().toLowerCase() ===
-              farmerNicNo.trim().toLowerCase(),
-          )
+          (f) =>
+            f.nicNo?.trim().toLowerCase() ===
+            farmerNicNo.trim().toLowerCase(),
+        )
         : [];
       const combined = [...byPhone, ...byNic];
       const unique = combined.filter(
@@ -956,7 +1072,7 @@ export default function CreateAnimalScreen() {
         });
         setSelectedFarmerId(created.farmerId);
       }
-      setStep("upload");
+      setStep("complaint");
     } catch (err) {
       Alert.alert(
         "Error",
@@ -987,10 +1103,62 @@ export default function CreateAnimalScreen() {
     setFarmerTehName(farmer.tehName ?? "");
     setFarmerDistrict(farmer.districtName ?? "");
     setExistingFarmersModal(null);
-    setStep("upload");
+    setStep("complaint");
   }, []);
 
-  // Step 1: Farmer – phone, nic_no, name, address; duplicate = pick existing
+  const fetchNearbyFarmers = useCallback(async () => {
+    let lat = latitude.trim() ? parseFloat(latitude) : NaN;
+    let lng = longitude.trim() ? parseFloat(longitude) : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "Location needed",
+            "Allow location to find farmers near you.",
+          );
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        lat = loc.coords.latitude;
+        lng = loc.coords.longitude;
+        setLatitude(String(lat));
+        setLongitude(String(lng));
+      } catch (e) {
+        Alert.alert(
+          "Location error",
+          e instanceof Error ? e.message : "Could not get location.",
+        );
+        return;
+      }
+    }
+    setNearbyFarmersLoading(true);
+    setNearbyFarmers([]);
+    try {
+      const list = await farmerApi.getFarmersNearby(lat, lng, nearbyRadiusKm);
+      setNearbyFarmers(list);
+    } catch (err) {
+      if (__DEV__) console.warn("[CreateAnimal] getFarmersNearby failed:", err);
+      Alert.alert(
+        "Error",
+        err instanceof Error ? err.message : "Failed to load nearby farmers",
+      );
+    } finally {
+      setNearbyFarmersLoading(false);
+    }
+  }, [latitude, longitude, nearbyRadiusKm]);
+
+  const handlePickNearbyFarmer = useCallback(
+    (farmer: Farmer) => {
+      handlePickExistingFarmer(farmer);
+    },
+    [handlePickExistingFarmer],
+  );
+
+  // Step 2: Farmer (after upload) – phone, nic_no, name, address; duplicate = pick existing
   if (step === "farmer") {
     return (
       <SafeAreaView
@@ -1024,7 +1192,7 @@ export default function CreateAnimalScreen() {
               icon="phone"
             />
             {checkingExistence &&
-            farmerPhone.replace(/\D/g, "").length >=
+              farmerPhone.replace(/\D/g, "").length >=
               MIN_PHONE_DIGITS_TO_SEARCH ? (
               <View
                 style={[
@@ -1089,7 +1257,7 @@ export default function CreateAnimalScreen() {
                       <Text style={{ color: colors.muted }}>
                         {formatPhoneDisplay(
                           normalizePhone(farmer.phoneNumber) ??
-                            farmer.phoneNumber,
+                          farmer.phoneNumber,
                         )}
                       </Text>
                     </Text>
@@ -1106,7 +1274,7 @@ export default function CreateAnimalScreen() {
               icon="id-card"
             />
             {checkingExistence &&
-            farmerNicNo.trim().length >= MIN_NIC_LENGTH ? (
+              farmerNicNo.trim().length >= MIN_NIC_LENGTH ? (
               <View
                 style={[
                   styles.farmerCheckHint,
@@ -1155,7 +1323,7 @@ export default function CreateAnimalScreen() {
                   <Text style={{ color: colors.muted }}>
                     {formatPhoneDisplay(
                       normalizePhone(existingFarmerByNIC.phoneNumber) ??
-                        existingFarmerByNIC.phoneNumber,
+                      existingFarmerByNIC.phoneNumber,
                     )}
                   </Text>
                 </Text>
@@ -1169,6 +1337,166 @@ export default function CreateAnimalScreen() {
               colors={colors}
               icon="user"
             />
+            <View
+              style={[
+                styles.addressLabelWrap,
+                { borderTopColor: colors.border },
+              ]}
+            >
+              <FontAwesome
+                name="map-marker"
+                size={14}
+                color={colors.primary}
+                style={styles.addressLabelIcon}
+              />
+              <Text style={[styles.addressLabel, { color: colors.muted }]}>
+                Display Near by Farmers
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.nearbyRadiusLabel,
+                { color: colors.muted },
+              ]}
+            >
+              Radius (km)
+            </Text>
+            <View style={styles.nearbyRadiusRow}>
+              {NEARBY_RADIUS_OPTIONS.map((km) => (
+                <TouchableOpacity
+                  key={km}
+                  onPress={() => setNearbyRadiusKm(km)}
+                  style={[
+                    styles.nearbyRadiusOption,
+                    {
+                      backgroundColor:
+                        nearbyRadiusKm === km
+                          ? colors.primary
+                          : colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.nearbyRadiusOptionText,
+                      {
+                        color: nearbyRadiusKm === km ? "#fff" : colors.text,
+                      },
+                    ]}
+                  >
+                    {km}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Button
+              title={nearbyFarmersLoading ? "Loading…" : "Show nearby farmers"}
+              variant="secondary"
+              onPress={fetchNearbyFarmers}
+              style={styles.nearbySearchButton}
+              disabled={nearbyFarmersLoading}
+            />
+            {nearbyFarmers.length > 0 ? (
+              <View style={styles.farmersMatchListWrap}>
+                <Text
+                  style={[
+                    styles.farmersMatchListLabel,
+                    { color: colors.muted },
+                  ]}
+                >
+                  Tap a farmer to select and continue
+                </Text>
+                {nearbyFarmers.map((farmer) => (
+                  <TouchableOpacity
+                    key={farmer.farmerId}
+                    onPress={() => handlePickNearbyFarmer(farmer)}
+                    activeOpacity={0.7}
+                    style={[
+                      styles.farmerMatchCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.farmerMatchCardIconWrap,
+                        { backgroundColor: colors.primary + "18" },
+                      ]}
+                    >
+                      <FontAwesome
+                        name="user"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <View style={styles.farmerMatchCardContent}>
+                      <View style={styles.farmerMatchCardNameRow}>
+                        <Text
+                          style={[
+                            styles.farmerMatchCardName,
+                            { color: colors.text },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {farmer.fullName}
+                        </Text>
+                        {farmer.distanceKm != null ? (
+                          <View
+                            style={[
+                              styles.distanceBadge,
+                              {
+                                backgroundColor: colors.primary + "18",
+                                borderColor: colors.primary + "40",
+                              },
+                            ]}
+                          >
+                            <FontAwesome
+                              name="map-marker"
+                              size={10}
+                              color={colors.primary}
+                              style={styles.distanceBadgeIcon}
+                            />
+                            <Text
+                              style={[
+                                styles.distanceBadgeText,
+                                { color: colors.primary },
+                              ]}
+                            >
+                              {formatDistance(farmer.distanceKm)}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text
+                        style={[
+                          styles.farmerMatchCardMeta,
+                          { color: colors.muted },
+                        ]}
+                      >
+                        {formatPhoneDisplay(
+                          normalizePhone(farmer.phoneNumber) ??
+                            farmer.phoneNumber,
+                        )}
+                      </Text>
+                      {farmer.villageName ? (
+                        <Text
+                          style={[
+                            styles.farmerMatchCardMeta,
+                            { color: colors.muted },
+                          ]}
+                        >
+                          {farmer.villageName}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
             <View
               style={[
                 styles.addressLabelWrap,
@@ -1319,7 +1647,7 @@ export default function CreateAnimalScreen() {
     );
   }
 
-  // Step 2: Visual Documentation (Upload 3 images)
+  // Step 1: Upload 3 animal images (face, ear, body)
   if (step === "upload") {
     return (
       <SafeAreaView
@@ -1422,7 +1750,7 @@ export default function CreateAnimalScreen() {
             "Chief complaint",
             "What is the main reason for this visit? You can continue while we process your images.",
           )}
-          {(uploading || analyzing) && (
+          {uploading && (
             <View
               style={[
                 styles.farmerCheckHint,
@@ -1567,7 +1895,7 @@ export default function CreateAnimalScreen() {
             "Animal details",
             "Fill in what you know. Species is required.",
           )}
-          {(uploading || analyzing) && (
+          {(uploading || attributesDetailsLoading) && (
             <View
               style={[
                 styles.farmerCheckHint,
@@ -1581,7 +1909,11 @@ export default function CreateAnimalScreen() {
               <Text
                 style={[styles.farmerCheckHintText, { color: colors.primary }]}
               >
-                {uploading ? "Uploading images…" : "Analyzing images…"}
+                {uploading
+                  ? "Uploading images…"
+                  : attributesDetailsLoading
+                    ? "Loading animal details…"
+                    : "Analyzing images…"}
               </Text>
             </View>
           )}
@@ -1880,11 +2212,9 @@ export default function CreateAnimalScreen() {
             title={
               createAnimalMutation.isPending
                 ? "Creating..."
-                : enrolling
-                  ? "Enrolling..."
-                  : creatingCase
-                    ? "Creating case..."
-                    : "Save & continue"
+                : creatingCase
+                  ? "Creating case..."
+                  : "Save & continue"
             }
             onPress={deferPress(handleNextFromAttributes)}
             variant="primary"
@@ -1892,11 +2222,10 @@ export default function CreateAnimalScreen() {
             disabled={
               !species.trim() ||
               createAnimalMutation.isPending ||
-              enrolling ||
               creatingCase
             }
             loading={
-              createAnimalMutation.isPending || enrolling || creatingCase
+              createAnimalMutation.isPending || creatingCase
             }
           />
         </ScrollView>
@@ -2202,10 +2531,33 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  farmerMatchCardNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 2,
+    minWidth: 0,
+  },
   farmerMatchCardName: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 2,
+    flex: 1,
+    minWidth: 0,
+  },
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  distanceBadgeIcon: {
+    marginRight: 4,
+  },
+  distanceBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   farmerMatchCardMeta: {
     fontSize: 13,
@@ -2253,6 +2605,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   useFarmerButtonText: { fontSize: 14, color: "#fff", fontWeight: "700" },
+  nearbyRadiusLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  nearbyRadiusRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  nearbyRadiusOption: {
+    minWidth: 48,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nearbyRadiusOptionText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  nearbySearchButton: {
+    marginBottom: 16,
+  },
   addressLabelWrap: {
     flexDirection: "row",
     alignItems: "center",

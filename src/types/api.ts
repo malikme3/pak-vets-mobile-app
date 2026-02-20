@@ -65,6 +65,10 @@ export interface Farmer {
   villageName?: string;
   tehName?: string;
   districtName?: string;
+  latitude?: number;
+  longitude?: number;
+  /** Set when list was filtered by lat/long/radius (distance in km). */
+  distanceKm?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +111,8 @@ export interface Animal {
   locationName?: string;
   latitude?: number;
   longitude?: number;
+  /** Set when list was filtered by lat/long/radius (distance in km). */
+  distanceKm?: number;
   createdAt: string;
   updatedAt: string;
 }

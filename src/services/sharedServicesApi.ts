@@ -105,67 +105,6 @@ export interface ProcessStructuredTranscriptionApiResponse {
   };
 }
 
-export interface AnimalInfoFromImage {
-  species?: string | null;
-  breed?: string | null;
-  age_months?: number | null;
-  weight_kg?: number | null;
-  color?: string | null;
-  sex?: string | null;
-  animal_tagline?: string | null;
-  ai_short_summary?: string | null;
-  ai_summary?: string | null;
-}
-
-export interface AnalyzeAnimalImageRequest {
-  faceImageUrl: string;
-  earImageUrl: string;
-  bodyImageUrl: string;
-}
-
-export interface AnalyzeAnimalImageApiResponse {
-  success: boolean;
-  data?: {
-    status: "SUCCESS" | "ERROR";
-    animal: AnimalInfoFromImage;
-    message?: string;
-  };
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-  meta: {
-    requestId: string;
-    timestamp: string;
-  };
-}
-
-// Vet API base URL (analyze-animal moved to pak-vets-api)
-const VET_API_URL =
-  process.env.EXPO_PUBLIC_API_URL || "https://pak-vets-dev.roundrocktennis.com";
-
-/**
- * Analyze animal from 3 image URLs (face, ear, body) via pak-vets Groq vision.
- */
-export async function analyzeAnimalImage(
-  request: AnalyzeAnimalImageRequest,
-): Promise<AnimalInfoFromImage> {
-  const response = await axios.post<AnalyzeAnimalImageApiResponse>(
-    `${VET_API_URL}/image/analyze-animal`,
-    request,
-    { headers: { "Content-Type": "application/json" } },
-  );
-  if (!response.data.success || !response.data.data?.animal) {
-    throw new Error(
-      response.data.error?.message ||
-        response.data.data?.message ||
-        "Animal analysis failed",
-    );
-  }
-  return response.data.data.animal;
-}
-
 /**
  * Get presigned URL for S3 upload
  */
