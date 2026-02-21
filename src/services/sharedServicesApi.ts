@@ -5,11 +5,6 @@
 
 import axios from "axios";
 
-// Shared Services API base URL
-const SHARED_SERVICES_API_URL =
-  process.env.EXPO_PUBLIC_SHARED_SERVICES_API_URL ||
-  "https://shared-dev.roundrocktennis.com";
-
 /**
  * Effective pak-vets API base URL (must match apiClient.ts so bucket matches API).
  * Preprod API → preprod bucket → preprod step function. Dev API → dev bucket → dev step function.
@@ -35,6 +30,18 @@ function getStage(): string {
   const match = apiUrl.match(/pak-vets-(\w+)\.roundrocktennis\.com/);
   if (match?.[1]) return match[1];
   return process.env.EXPO_PUBLIC_STAGE || "dev";
+}
+
+/**
+ * Shared Services API base URL. Must match stage so preprod app uses shared-preprod (same IAM/bucket).
+ * Override with EXPO_PUBLIC_SHARED_SERVICES_API_URL if needed.
+ */
+function getSharedServicesApiUrl(): string {
+  if (process.env.EXPO_PUBLIC_SHARED_SERVICES_API_URL) {
+    return process.env.EXPO_PUBLIC_SHARED_SERVICES_API_URL;
+  }
+  const stage = getStage();
+  return `https://shared-${stage}.roundrocktennis.com`;
 }
 
 /**
@@ -121,11 +128,11 @@ export async function getUploadSignedUrl(
       bucketName,
       filePath,
       tags,
-      url: `${SHARED_SERVICES_API_URL}/s3/upload-signed-url`,
+      url: `${getSharedServicesApiUrl()}/s3/upload-signed-url`,
     });
 
     const response = await axios.post<UploadSignedUrlResponse>(
-      `${SHARED_SERVICES_API_URL}/s3/upload-signed-url`,
+      `${getSharedServicesApiUrl()}/s3/upload-signed-url`,
       {
         bucketName,
         filePath,
@@ -160,11 +167,11 @@ export async function getDownloadSignedUrl(
     console.log("[SharedServicesAPI] Requesting download signed URL:", {
       bucketName,
       filePath,
-      url: `${SHARED_SERVICES_API_URL}/s3/download-signed-url`,
+      url: `${getSharedServicesApiUrl()}/s3/download-signed-url`,
     });
 
     const response = await axios.get<string>(
-      `${SHARED_SERVICES_API_URL}/s3/download-signed-url`,
+      `${getSharedServicesApiUrl()}/s3/download-signed-url`,
       {
         params: {
           bucketName,
@@ -201,11 +208,11 @@ export async function transcribeAudio(
     console.log("[SharedServicesAPI] Requesting audio transcription:", {
       s3Key,
       bucketName,
-      url: `${SHARED_SERVICES_API_URL}/audio/transcribe`,
+      url: `${getSharedServicesApiUrl()}/audio/transcribe`,
     });
 
     const response = await axios.post<TranscribeAudioResponse>(
-      `${SHARED_SERVICES_API_URL}/audio/transcribe`,
+      `${getSharedServicesApiUrl()}/audio/transcribe`,
       {
         s3Key,
         bucketName,
@@ -262,7 +269,7 @@ export async function processStructuredTranscription(
 
     console.log(
       "[SharedServicesAPI] Requesting structured transcription - API URL:",
-      `${SHARED_SERVICES_API_URL}/audio/process-structured`,
+      `${getSharedServicesApiUrl()}/audio/process-structured`,
     );
     console.log(
       "[SharedServicesAPI] Request body (actual HTTP payload):",
@@ -275,7 +282,7 @@ export async function processStructuredTranscription(
 
     const response =
       await axios.post<ProcessStructuredTranscriptionApiResponse>(
-        `${SHARED_SERVICES_API_URL}/audio/process-structured`,
+        `${getSharedServicesApiUrl()}/audio/process-structured`,
         requestBody,
         {
           headers: {
