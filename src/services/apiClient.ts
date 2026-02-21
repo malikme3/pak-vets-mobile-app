@@ -4,10 +4,15 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-// API base URL - set EXPO_PUBLIC_API_URL to hit local server (e.g. http://localhost:3001)
-// Defaults to deployed dev API; use EXPO_PUBLIC_API_URL for local backend
+// API base URL:
+// - EXPO_PUBLIC_API_URL overrides (e.g. http://localhost:3001 for local backend)
+// - Local/dev (__DEV__): dev API → pak_vets_nonprod
+// - Deployed release: preprod API → pak_vets_preprod
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "https://pak-vets-dev.roundrocktennis.com";
+  process.env.EXPO_PUBLIC_API_URL ||
+  (__DEV__
+    ? "https://pak-vets-dev.roundrocktennis.com"
+    : "https://pak-vets-preprod.roundrocktennis.com");
 
 export interface ApiError {
   message: string;
@@ -83,18 +88,20 @@ class ApiClient {
   private normalizeError(error: AxiosError): ApiError {
     if (error.response) {
       // Server responded with error
-      const data = error.response.data as {
-        success?: boolean;
-        error?: {
-          code: string;
-          message: string;
-          details?: Record<string, unknown>;
-        };
-      } | null | undefined;
+      const data = error.response.data as
+        | {
+            success?: boolean;
+            error?: {
+              code: string;
+              message: string;
+              details?: Record<string, unknown>;
+            };
+          }
+        | null
+        | undefined;
 
       const apiError: ApiError = {
-        message:
-          data?.error?.message || error.message || "An error occurred",
+        message: data?.error?.message || error.message || "An error occurred",
         status: error.response.status,
         code: data?.error?.code,
       };

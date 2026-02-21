@@ -98,11 +98,12 @@ export const farmerApi = {
     longitude: number,
     radiusKm: number,
   ): Promise<Farmer[]> => {
-    const response = await apiClient.instance.get<
-      ApiSuccessResponse<Farmer[]>
-    >(FARMERS_PATH, {
-      params: { latitude, longitude, radiusKm },
-    });
+    const response = await apiClient.instance.get<ApiSuccessResponse<Farmer[]>>(
+      FARMERS_PATH,
+      {
+        params: { latitude, longitude, radiusKm },
+      },
+    );
     return response.data.data;
   },
 
@@ -132,17 +133,19 @@ export const animalApi = {
   },
 
   getAllAnimals: async (
-    speciesOrOptions?: string | {
-      species?: string;
-      latitude?: number;
-      longitude?: number;
-      radiusKm?: number;
-    },
+    speciesOrOptions?:
+      | string
+      | {
+          species?: string;
+          latitude?: number;
+          longitude?: number;
+          radiusKm?: number;
+        },
   ): Promise<Animal[]> => {
     const options =
       typeof speciesOrOptions === "string"
         ? { species: speciesOrOptions }
-        : speciesOrOptions ?? {};
+        : (speciesOrOptions ?? {});
     const params: Record<string, string | number> = {};
     if (options.species) params.species = options.species;
     if (options.latitude != null) params.latitude = options.latitude;
@@ -178,7 +181,7 @@ export const animalApi = {
     await apiClient.instance.delete(`/animals/${animalId}`);
   },
 
-  // Search animals by tag ID, farmer name, or farmer phone
+  // Search animals by tag ID, farmer name, phone, or NIC
   searchAnimals: async (query: string): Promise<Animal[]> => {
     // Since backend doesn't have a search endpoint, we'll fetch all and filter client-side
     // TODO: Implement proper search endpoint on backend
@@ -188,7 +191,8 @@ export const animalApi = {
       (animal) =>
         animal.tagId?.toLowerCase().includes(lowerQuery) ||
         animal.farmer?.fullName?.toLowerCase().includes(lowerQuery) ||
-        animal.farmer?.phoneNumber?.includes(query),
+        animal.farmer?.phoneNumber?.includes(query) ||
+        animal.farmer?.nicNo?.toLowerCase().includes(lowerQuery),
     );
   },
 
@@ -231,9 +235,22 @@ export const caseApi = {
     return response.data.data;
   },
 
-  getCasesByDoctor: async (doctorId: number): Promise<Case[]> => {
+  getCasesByDoctor: async (
+    doctorId: number,
+    options?: {
+      latitude?: number;
+      longitude?: number;
+      radiusKm?: number;
+    },
+  ): Promise<Case[]> => {
+    const params: Record<string, string> = {};
+    if (options?.latitude != null) params.latitude = String(options.latitude);
+    if (options?.longitude != null)
+      params.longitude = String(options.longitude);
+    if (options?.radiusKm != null) params.radiusKm = String(options.radiusKm);
     const response = await apiClient.instance.get<ApiSuccessResponse<Case[]>>(
       `/doctors/${doctorId}/cases`,
+      { params: Object.keys(params).length ? params : undefined },
     );
     return response.data.data;
   },

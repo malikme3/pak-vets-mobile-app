@@ -11,6 +11,8 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -26,7 +28,10 @@ import { useCreateAnimal } from "../features/animals/hooks";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useCreateCase } from "../features/cases/hooks";
 import { animalApi, farmerApi } from "../services/vetApi";
-import { getUploadSignedUrl, getBucketName } from "../services/sharedServicesApi";
+import {
+  getUploadSignedUrl,
+  getBucketName,
+} from "../services/sharedServicesApi";
 import {
   formatPhoneInput,
   normalizePhone,
@@ -50,7 +55,7 @@ type Step = "farmer" | "upload" | "complaint" | "attributes";
 type ImageType = "face" | "ear" | "body";
 
 const STEPS: { key: Step; label: string; icon: string }[] = [
-  { key: "upload", label: "Upload", icon: "camera" },
+  { key: "upload", label: "Upload Images", icon: "camera" },
   { key: "farmer", label: "Farmer", icon: "user" },
   { key: "complaint", label: "Complaint", icon: "comment" },
   { key: "attributes", label: "Details", icon: "list" },
@@ -169,8 +174,7 @@ export default function CreateAnimalScreen() {
     typeof params.animalId === "string" && params.animalId.trim()
       ? parseInt(params.animalId, 10)
       : NaN;
-  const hasExistingAnimalId =
-    !Number.isNaN(paramAnimalId) && paramAnimalId > 0;
+  const hasExistingAnimalId = !Number.isNaN(paramAnimalId) && paramAnimalId > 0;
 
   const [step, setStep] = useState<Step>("upload");
 
@@ -272,12 +276,8 @@ export default function CreateAnimalScreen() {
         if (cancelled) return;
         setSpecies(animal.species ?? "");
         setBreed(animal.breed ?? "");
-        setAgeMonths(
-          animal.ageMonths != null ? String(animal.ageMonths) : "",
-        );
-        setWeightKg(
-          animal.weightKg != null ? String(animal.weightKg) : "",
-        );
+        setAgeMonths(animal.ageMonths != null ? String(animal.ageMonths) : "");
+        setWeightKg(animal.weightKg != null ? String(animal.weightKg) : "");
         setColor(animal.color ?? "");
         setSex(animal.sex ?? "");
         setStatus(
@@ -319,8 +319,7 @@ export default function CreateAnimalScreen() {
     (async () => {
       setLocationLoading(true);
       try {
-        const { status } =
-          await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (cancelled || status !== "granted") {
           setLocationLoading(false);
           return;
@@ -361,7 +360,8 @@ export default function CreateAnimalScreen() {
 
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
   const [creatingCase, setCreatingCase] = useState(false);
-  const [attributesDetailsLoading, setAttributesDetailsLoading] = useState(false);
+  const [attributesDetailsLoading, setAttributesDetailsLoading] =
+    useState(false);
 
   const createAnimalMutation = useCreateAnimal();
   const { data: doctor } = useCurrentDoctor();
@@ -428,8 +428,7 @@ export default function CreateAnimalScreen() {
     const hasPermission = await requestCameraPermissions();
     if (!hasPermission) return;
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
@@ -472,11 +471,9 @@ export default function CreateAnimalScreen() {
     return fileUrl;
   };
 
-  // Build S3 key path: prefix / [animalId] / doctorId / lat / long / species / timestamp / type.jpg
-  // When we have an existing animal (from select-animal flow), include animalId so backend can update that animal.
+  // Build S3 key path: create-animal-images/doctorId-1_lat-0_lng-0_speciesSlug-dog_timestamp-123_face.jpg
   const buildImageS3Key = useCallback(
     (imageType: "face" | "ear" | "body"): string => {
-      const animalId = existingAnimalIdRef.current;
       const doctorId = doctor?.doctorId ?? 0;
       const lat = latitude.trim() ? latitude.replace(/\s/g, "") : "0";
       const lng = longitude.trim() ? longitude.replace(/\s/g, "") : "0";
@@ -486,17 +483,15 @@ export default function CreateAnimalScreen() {
         .replace(/\s+/g, "-")
         .replace(/[^a-z0-9-]/g, "");
       const timestamp = Date.now();
-      const pathParts = [
-        "create-animal-images",
-        ...(animalId != null ? [String(animalId)] : []),
-        String(doctorId),
-        lat,
-        lng,
-        speciesSlug,
-        String(timestamp),
+      const pairs = [
+        `doctorId-${doctorId}`,
+        `lat-${lat}`,
+        `lng-${lng}`,
+        `speciesSlug-${speciesSlug}`,
+        `timestamp-${timestamp}`,
         `${imageType}.jpg`,
       ];
-      return pathParts.join("/");
+      return ["create-animal-images", pairs.join("_")].join("/");
     },
     [doctor?.doctorId, latitude, longitude, species],
   );
@@ -876,12 +871,12 @@ export default function CreateAnimalScreen() {
         <FontAwesome
           name={
             (STEPS[currentStepIndex - 1]?.icon ?? "circle") as
-            | "user"
-            | "camera"
-            | "list"
-            | "check"
-            | "comment"
-            | "circle"
+              | "user"
+              | "camera"
+              | "list"
+              | "check"
+              | "comment"
+              | "circle"
           }
           size={12}
           color={colors.primary}
@@ -1045,10 +1040,10 @@ export default function CreateAnimalScreen() {
           : [];
       const byNic = hasNic
         ? all.filter(
-          (f) =>
-            f.nicNo?.trim().toLowerCase() ===
-            farmerNicNo.trim().toLowerCase(),
-        )
+            (f) =>
+              f.nicNo?.trim().toLowerCase() ===
+              farmerNicNo.trim().toLowerCase(),
+          )
         : [];
       const combined = [...byPhone, ...byNic];
       const unique = combined.filter(
@@ -1111,8 +1106,7 @@ export default function CreateAnimalScreen() {
     let lng = longitude.trim() ? parseFloat(longitude) : NaN;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       try {
-        const { status } =
-          await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
           Alert.alert(
             "Location needed",
@@ -1161,1075 +1155,1136 @@ export default function CreateAnimalScreen() {
   // Step 2: Farmer (after upload) – phone, nic_no, name, address; duplicate = pick existing
   if (step === "farmer") {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <StatusBar style="auto" />
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
+        <SafeAreaView
+          style={[styles.container, { backgroundColor: colors.background }]}
         >
-          {renderHeader("Create New Animal")}
-          {renderStepper()}
-          {renderStepHeading(
-            "user",
-            "Owner/Farmer: New or Existing",
-            "Optional. Link to existing or add new.",
-          )}
-          <Card
-            style={StyleSheet.flatten([
-              styles.cardElevated,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ])}
+          <StatusBar style="auto" />
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
           >
-            <InputRow
-              label="Phone"
-              value={farmerPhone}
-              onChangeText={handlePhoneChange}
-              placeholder="0300 7087927"
-              keyboardType="phone-pad"
-              colors={colors}
-              icon="phone"
-            />
-            {checkingExistence &&
+            {renderHeader("Create New Animal")}
+            {renderStepper()}
+            {renderStepHeading(
+              "user",
+              "Owner/Farmer: New or Existing",
+              "Optional. Link to existing or add new.",
+            )}
+            <Card
+              style={StyleSheet.flatten([
+                styles.cardElevated,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ])}
+            >
+              <InputRow
+                label="Phone"
+                value={farmerPhone}
+                onChangeText={handlePhoneChange}
+                placeholder="0300 7087927"
+                keyboardType="phone-pad"
+                colors={colors}
+                icon="phone"
+              />
+              {checkingExistence &&
               farmerPhone.replace(/\D/g, "").length >=
-              MIN_PHONE_DIGITS_TO_SEARCH ? (
-              <View
-                style={[
-                  styles.farmerCheckHint,
-                  {
-                    backgroundColor: colors.border + "25",
-                    borderColor: colors.border + "50",
-                  },
-                ]}
-              >
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text
-                  style={[styles.farmerCheckHintText, { color: colors.muted }]}
-                >
-                  Looking up farmers…
-                </Text>
-              </View>
-            ) : farmersMatchingPhone.length > 0 ? (
-              <View style={styles.farmersMatchListWrap}>
-                <Text
+                MIN_PHONE_DIGITS_TO_SEARCH ? (
+                <View
                   style={[
-                    styles.farmersMatchListLabel,
-                    { color: colors.muted },
+                    styles.farmerCheckHint,
+                    {
+                      backgroundColor: colors.border + "25",
+                      borderColor: colors.border + "50",
+                    },
                   ]}
                 >
-                  Matching farmers
-                </Text>
-                {farmersMatchingPhone.map((farmer) => (
-                  <TouchableOpacity
-                    key={farmer.farmerId}
-                    onPress={() => handlePickExistingFarmer(farmer)}
-                    activeOpacity={0.7}
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text
                     style={[
-                      styles.farmerMatchCard,
+                      styles.farmerCheckHintText,
+                      { color: colors.muted },
+                    ]}
+                  >
+                    Looking up farmers…
+                  </Text>
+                </View>
+              ) : farmersMatchingPhone.length > 0 ? (
+                <View style={styles.farmersMatchListWrap}>
+                  <Text
+                    style={[
+                      styles.farmersMatchListLabel,
+                      { color: colors.muted },
+                    ]}
+                  >
+                    Matching farmers
+                  </Text>
+                  {farmersMatchingPhone.map((farmer) => (
+                    <TouchableOpacity
+                      key={farmer.farmerId}
+                      onPress={() => handlePickExistingFarmer(farmer)}
+                      activeOpacity={0.7}
+                      style={[
+                        styles.farmerMatchCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.farmerMatchCardIconWrap,
+                          { backgroundColor: colors.primary + "18" },
+                        ]}
+                      >
+                        <FontAwesome
+                          name="user"
+                          size={18}
+                          color={colors.primary}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.farmerMatchCardContactLine,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {farmer.fullName}
+                        {"  ·  "}
+                        <Text style={{ color: colors.muted }}>
+                          {formatPhoneDisplay(
+                            normalizePhone(farmer.phoneNumber) ??
+                              farmer.phoneNumber,
+                          )}
+                        </Text>
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+              <InputRow
+                label="NIC No"
+                value={farmerNicNo}
+                onChangeText={setFarmerNicNo}
+                placeholder="42101-1234567-1"
+                colors={colors}
+                icon="id-card"
+              />
+              {checkingExistence &&
+              farmerNicNo.trim().length >= MIN_NIC_LENGTH ? (
+                <View
+                  style={[
+                    styles.farmerCheckHint,
+                    {
+                      backgroundColor: colors.border + "25",
+                      borderColor: colors.border + "50",
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text
+                    style={[
+                      styles.farmerCheckHintText,
+                      { color: colors.muted },
+                    ]}
+                  >
+                    Looking up farmers…
+                  </Text>
+                </View>
+              ) : existingFarmerByNIC ? (
+                <TouchableOpacity
+                  onPress={() => handlePickExistingFarmer(existingFarmerByNIC)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.farmerMatchCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.farmerMatchCardIconWrap,
+                      { backgroundColor: colors.primary + "18" },
+                    ]}
+                  >
+                    <FontAwesome
+                      name="users"
+                      size={18}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.farmerMatchCardContactLine,
+                      { color: colors.text },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {existingFarmerByNIC.fullName}
+                    {"  ·  "}
+                    <Text style={{ color: colors.muted }}>
+                      {formatPhoneDisplay(
+                        normalizePhone(existingFarmerByNIC.phoneNumber) ??
+                          existingFarmerByNIC.phoneNumber,
+                      )}
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              <InputRow
+                label="Name"
+                value={farmerName}
+                onChangeText={setFarmerName}
+                placeholder="Full name"
+                colors={colors}
+                icon="user"
+              />
+              <View
+                style={[
+                  styles.addressLabelWrap,
+                  { borderTopColor: colors.border },
+                ]}
+              >
+                <FontAwesome
+                  name="map-marker"
+                  size={14}
+                  color={colors.primary}
+                  style={styles.addressLabelIcon}
+                />
+                <Text style={[styles.addressLabel, { color: colors.muted }]}>
+                  Display Near by Farmers
+                </Text>
+              </View>
+              <Text style={[styles.nearbyRadiusLabel, { color: colors.muted }]}>
+                Radius (km)
+              </Text>
+              <View style={styles.nearbyRadiusRow}>
+                {NEARBY_RADIUS_OPTIONS.map((km) => (
+                  <TouchableOpacity
+                    key={km}
+                    onPress={() => setNearbyRadiusKm(km)}
+                    style={[
+                      styles.nearbyRadiusOption,
                       {
-                        backgroundColor: colors.surface,
+                        backgroundColor:
+                          nearbyRadiusKm === km
+                            ? colors.primary
+                            : colors.surface,
                         borderColor: colors.border,
                       },
                     ]}
+                    activeOpacity={0.7}
                   >
-                    <View
-                      style={[
-                        styles.farmerMatchCardIconWrap,
-                        { backgroundColor: colors.primary + "18" },
-                      ]}
-                    >
-                      <FontAwesome
-                        name="user"
-                        size={18}
-                        color={colors.primary}
-                      />
-                    </View>
                     <Text
                       style={[
-                        styles.farmerMatchCardContactLine,
-                        { color: colors.text },
+                        styles.nearbyRadiusOptionText,
+                        {
+                          color: nearbyRadiusKm === km ? "#fff" : colors.text,
+                        },
                       ]}
-                      numberOfLines={1}
                     >
-                      {farmer.fullName}
-                      {"  ·  "}
-                      <Text style={{ color: colors.muted }}>
-                        {formatPhoneDisplay(
-                          normalizePhone(farmer.phoneNumber) ??
-                          farmer.phoneNumber,
-                        )}
-                      </Text>
+                      {km}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-            ) : null}
-            <InputRow
-              label="NIC No"
-              value={farmerNicNo}
-              onChangeText={setFarmerNicNo}
-              placeholder="42101-1234567-1"
-              colors={colors}
-              icon="id-card"
-            />
-            {checkingExistence &&
-              farmerNicNo.trim().length >= MIN_NIC_LENGTH ? (
-              <View
-                style={[
-                  styles.farmerCheckHint,
-                  {
-                    backgroundColor: colors.border + "25",
-                    borderColor: colors.border + "50",
-                  },
-                ]}
-              >
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text
-                  style={[styles.farmerCheckHintText, { color: colors.muted }]}
-                >
-                  Looking up farmers…
-                </Text>
-              </View>
-            ) : existingFarmerByNIC ? (
-              <TouchableOpacity
-                onPress={() => handlePickExistingFarmer(existingFarmerByNIC)}
-                activeOpacity={0.7}
-                style={[
-                  styles.farmerMatchCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.farmerMatchCardIconWrap,
-                    { backgroundColor: colors.primary + "18" },
-                  ]}
-                >
-                  <FontAwesome name="users" size={18} color={colors.primary} />
-                </View>
-                <Text
-                  style={[
-                    styles.farmerMatchCardContactLine,
-                    { color: colors.text },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {existingFarmerByNIC.fullName}
-                  {"  ·  "}
-                  <Text style={{ color: colors.muted }}>
-                    {formatPhoneDisplay(
-                      normalizePhone(existingFarmerByNIC.phoneNumber) ??
-                      existingFarmerByNIC.phoneNumber,
-                    )}
-                  </Text>
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-            <InputRow
-              label="Name"
-              value={farmerName}
-              onChangeText={setFarmerName}
-              placeholder="Full name"
-              colors={colors}
-              icon="user"
-            />
-            <View
-              style={[
-                styles.addressLabelWrap,
-                { borderTopColor: colors.border },
-              ]}
-            >
-              <FontAwesome
-                name="map-marker"
-                size={14}
-                color={colors.primary}
-                style={styles.addressLabelIcon}
+              <Button
+                title={
+                  nearbyFarmersLoading ? "Loading…" : "Show nearby farmers"
+                }
+                variant="secondary"
+                onPress={fetchNearbyFarmers}
+                style={styles.nearbySearchButton}
+                disabled={nearbyFarmersLoading}
               />
-              <Text style={[styles.addressLabel, { color: colors.muted }]}>
-                Display Near by Farmers
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.nearbyRadiusLabel,
-                { color: colors.muted },
-              ]}
-            >
-              Radius (km)
-            </Text>
-            <View style={styles.nearbyRadiusRow}>
-              {NEARBY_RADIUS_OPTIONS.map((km) => (
-                <TouchableOpacity
-                  key={km}
-                  onPress={() => setNearbyRadiusKm(km)}
-                  style={[
-                    styles.nearbyRadiusOption,
-                    {
-                      backgroundColor:
-                        nearbyRadiusKm === km
-                          ? colors.primary
-                          : colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                  activeOpacity={0.7}
-                >
+              {nearbyFarmers.length > 0 ? (
+                <View style={styles.farmersMatchListWrap}>
                   <Text
                     style={[
-                      styles.nearbyRadiusOptionText,
-                      {
-                        color: nearbyRadiusKm === km ? "#fff" : colors.text,
-                      },
+                      styles.farmersMatchListLabel,
+                      { color: colors.muted },
                     ]}
                   >
-                    {km}
+                    Tap a farmer to select and continue
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Button
-              title={nearbyFarmersLoading ? "Loading…" : "Show nearby farmers"}
-              variant="secondary"
-              onPress={fetchNearbyFarmers}
-              style={styles.nearbySearchButton}
-              disabled={nearbyFarmersLoading}
-            />
-            {nearbyFarmers.length > 0 ? (
-              <View style={styles.farmersMatchListWrap}>
-                <Text
-                  style={[
-                    styles.farmersMatchListLabel,
-                    { color: colors.muted },
-                  ]}
-                >
-                  Tap a farmer to select and continue
-                </Text>
-                {nearbyFarmers.map((farmer) => (
-                  <TouchableOpacity
-                    key={farmer.farmerId}
-                    onPress={() => handlePickNearbyFarmer(farmer)}
-                    activeOpacity={0.7}
-                    style={[
-                      styles.farmerMatchCard,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <View
+                  {nearbyFarmers.map((farmer) => (
+                    <TouchableOpacity
+                      key={farmer.farmerId}
+                      onPress={() => handlePickNearbyFarmer(farmer)}
+                      activeOpacity={0.7}
                       style={[
-                        styles.farmerMatchCardIconWrap,
-                        { backgroundColor: colors.primary + "18" },
+                        styles.farmerMatchCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
                       ]}
                     >
-                      <FontAwesome
-                        name="user"
-                        size={18}
-                        color={colors.primary}
-                      />
-                    </View>
-                    <View style={styles.farmerMatchCardContent}>
-                      <View style={styles.farmerMatchCardNameRow}>
-                        <Text
-                          style={[
-                            styles.farmerMatchCardName,
-                            { color: colors.text },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {farmer.fullName}
-                        </Text>
-                        {farmer.distanceKm != null ? (
-                          <View
-                            style={[
-                              styles.distanceBadge,
-                              {
-                                backgroundColor: colors.primary + "18",
-                                borderColor: colors.primary + "40",
-                              },
-                            ]}
-                          >
-                            <FontAwesome
-                              name="map-marker"
-                              size={10}
-                              color={colors.primary}
-                              style={styles.distanceBadgeIcon}
-                            />
-                            <Text
-                              style={[
-                                styles.distanceBadgeText,
-                                { color: colors.primary },
-                              ]}
-                            >
-                              {formatDistance(farmer.distanceKm)}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <Text
+                      <View
                         style={[
-                          styles.farmerMatchCardMeta,
-                          { color: colors.muted },
+                          styles.farmerMatchCardIconWrap,
+                          { backgroundColor: colors.primary + "18" },
                         ]}
                       >
-                        {formatPhoneDisplay(
-                          normalizePhone(farmer.phoneNumber) ??
-                            farmer.phoneNumber,
-                        )}
-                      </Text>
-                      {farmer.villageName ? (
+                        <FontAwesome
+                          name="user"
+                          size={18}
+                          color={colors.primary}
+                        />
+                      </View>
+                      <View style={styles.farmerMatchCardContent}>
+                        <View style={styles.farmerMatchCardNameRow}>
+                          <Text
+                            style={[
+                              styles.farmerMatchCardName,
+                              { color: colors.text },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {farmer.fullName}
+                          </Text>
+                          {farmer.distanceKm != null ? (
+                            <View
+                              style={[
+                                styles.distanceBadge,
+                                {
+                                  backgroundColor: colors.primary + "18",
+                                  borderColor: colors.primary + "40",
+                                },
+                              ]}
+                            >
+                              <FontAwesome
+                                name="map-marker"
+                                size={10}
+                                color={colors.primary}
+                                style={styles.distanceBadgeIcon}
+                              />
+                              <Text
+                                style={[
+                                  styles.distanceBadgeText,
+                                  { color: colors.primary },
+                                ]}
+                              >
+                                {formatDistance(farmer.distanceKm)}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
                         <Text
                           style={[
                             styles.farmerMatchCardMeta,
                             { color: colors.muted },
                           ]}
                         >
-                          {farmer.villageName}
+                          {formatPhoneDisplay(
+                            normalizePhone(farmer.phoneNumber) ??
+                              farmer.phoneNumber,
+                          )}
                         </Text>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                        {farmer.villageName ? (
+                          <Text
+                            style={[
+                              styles.farmerMatchCardMeta,
+                              { color: colors.muted },
+                            ]}
+                          >
+                            {farmer.villageName}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+              <View
+                style={[
+                  styles.addressLabelWrap,
+                  { borderTopColor: colors.border },
+                ]}
+              >
+                <FontAwesome
+                  name="map-marker"
+                  size={14}
+                  color={colors.primary}
+                  style={styles.addressLabelIcon}
+                />
+                <Text style={[styles.addressLabel, { color: colors.muted }]}>
+                  Address
+                </Text>
               </View>
-            ) : null}
-            <View
-              style={[
-                styles.addressLabelWrap,
-                { borderTopColor: colors.border },
-              ]}
-            >
-              <FontAwesome
-                name="map-marker"
-                size={14}
-                color={colors.primary}
-                style={styles.addressLabelIcon}
+              <InputRow
+                label="Village"
+                value={farmerVillage}
+                onChangeText={setFarmerVillage}
+                placeholder="Village name"
+                colors={colors}
               />
-              <Text style={[styles.addressLabel, { color: colors.muted }]}>
-                Address
-              </Text>
-            </View>
-            <InputRow
-              label="Village"
-              value={farmerVillage}
-              onChangeText={setFarmerVillage}
-              placeholder="Village name"
-              colors={colors}
-            />
-            <InputRow
-              label="Tehsil"
-              value={farmerTehName}
-              onChangeText={setFarmerTehName}
-              placeholder="Tehsil name"
-              colors={colors}
-            />
-            <InputRow
-              label="District"
-              value={farmerDistrict}
-              onChangeText={setFarmerDistrict}
-              placeholder="District name"
-              colors={colors}
-            />
-          </Card>
-          {farmerStepLoading ? (
-            <View style={styles.farmerLoading}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.farmerLoadingText, { color: colors.muted }]}>
-                Saving farmer…
-              </Text>
-            </View>
-          ) : (
-            <Button
-              title="Next"
-              onPress={deferPress(handleFarmerNext)}
-              variant="primary"
-              style={styles.primaryButton}
-              disabled={!farmerPhone.trim() || !farmerName.trim()}
-            />
-          )}
-        </ScrollView>
+              <InputRow
+                label="Tehsil"
+                value={farmerTehName}
+                onChangeText={setFarmerTehName}
+                placeholder="Tehsil name"
+                colors={colors}
+              />
+              <InputRow
+                label="District"
+                value={farmerDistrict}
+                onChangeText={setFarmerDistrict}
+                placeholder="District name"
+                colors={colors}
+              />
+            </Card>
+            {farmerStepLoading ? (
+              <View style={styles.farmerLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text
+                  style={[styles.farmerLoadingText, { color: colors.muted }]}
+                >
+                  Saving farmer…
+                </Text>
+              </View>
+            ) : (
+              <Button
+                title="Next"
+                onPress={deferPress(handleFarmerNext)}
+                variant="primary"
+                style={styles.primaryButton}
+                disabled={!farmerPhone.trim() || !farmerName.trim()}
+              />
+            )}
+          </ScrollView>
 
-        <Modal
-          visible={
-            existingFarmersModal !== null && existingFarmersModal.length > 0
-          }
-          transparent
-          animationType="fade"
-          onRequestClose={() => setExistingFarmersModal(null)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setExistingFarmersModal(null)}
+          <Modal
+            visible={
+              existingFarmersModal !== null && existingFarmersModal.length > 0
+            }
+            transparent
+            animationType="fade"
+            onRequestClose={() => setExistingFarmersModal(null)}
           >
-            <View
-              style={[styles.modalContent, { backgroundColor: colors.surface }]}
-              onStartShouldSetResponder={() => true}
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setExistingFarmersModal(null)}
             >
               <View
                 style={[
-                  styles.modalHeader,
-                  { borderBottomColor: colors.border },
+                  styles.modalContent,
+                  { backgroundColor: colors.surface },
                 ]}
+                onStartShouldSetResponder={() => true}
               >
                 <View
                   style={[
-                    styles.modalIconWrap,
-                    { backgroundColor: colors.primary + "20" },
+                    styles.modalHeader,
+                    { borderBottomColor: colors.border },
                   ]}
                 >
-                  <FontAwesome name="users" size={22} color={colors.primary} />
-                </View>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>
-                  Farmer already exists
-                </Text>
-                <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
-                  Pick an existing farmer to link this animal.
-                </Text>
-              </View>
-              <FlatList
-                data={existingFarmersModal ?? []}
-                keyExtractor={(item) => String(item.farmerId)}
-                style={styles.farmerList}
-                contentContainerStyle={styles.farmerListContent}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <View
                     style={[
-                      styles.farmerOption,
-                      { borderColor: colors.border },
+                      styles.modalIconWrap,
+                      { backgroundColor: colors.primary + "20" },
                     ]}
-                    onPress={() => handlePickExistingFarmer(item)}
-                    activeOpacity={0.7}
                   >
-                    <Text
-                      style={[styles.farmerOptionName, { color: colors.text }]}
-                      numberOfLines={1}
-                    >
-                      {item.fullName}
-                    </Text>
-                    <Text
+                    <FontAwesome
+                      name="users"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>
+                    Farmer already exists
+                  </Text>
+                  <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
+                    Pick an existing farmer to link this animal.
+                  </Text>
+                </View>
+                <FlatList
+                  data={existingFarmersModal ?? []}
+                  keyExtractor={(item) => String(item.farmerId)}
+                  style={styles.farmerList}
+                  contentContainerStyle={styles.farmerListContent}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
                       style={[
-                        styles.farmerOptionPhone,
-                        { color: colors.muted },
+                        styles.farmerOption,
+                        { borderColor: colors.border },
                       ]}
+                      onPress={() => handlePickExistingFarmer(item)}
+                      activeOpacity={0.7}
                     >
-                      {formatPhoneDisplay(
-                        normalizePhone(item.phoneNumber) ?? item.phoneNumber,
-                      )}
-                    </Text>
-                    {item.nicNo ? (
                       <Text
                         style={[
-                          styles.farmerOptionNic,
+                          styles.farmerOptionName,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.fullName}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.farmerOptionPhone,
                           { color: colors.muted },
                         ]}
                       >
-                        NIC: {item.nicNo}
+                        {formatPhoneDisplay(
+                          normalizePhone(item.phoneNumber) ?? item.phoneNumber,
+                        )}
                       </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                )}
-              />
-              <Button
-                title="Cancel"
-                variant="secondary"
-                onPress={() => setExistingFarmersModal(null)}
-                style={styles.modalCancelButton}
-              />
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      </SafeAreaView>
+                      {item.nicNo ? (
+                        <Text
+                          style={[
+                            styles.farmerOptionNic,
+                            { color: colors.muted },
+                          ]}
+                        >
+                          NIC: {item.nicNo}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  )}
+                />
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setExistingFarmersModal(null)}
+                  style={styles.modalCancelButton}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     );
   }
 
   // Step 1: Upload 3 animal images (face, ear, body)
   if (step === "upload") {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <StatusBar style="auto" />
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
+        <SafeAreaView
+          style={[styles.container, { backgroundColor: colors.background }]}
         >
-          {renderHeader("Create New Animal")}
-          {renderStepper()}
-          {renderStepHeading(
+          <StatusBar style="auto" />
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {renderHeader("Create New Animal")}
+            {renderStepper()}
+            {/* {renderStepHeading(
             "camera",
             "Upload Animal Images",
             "AI identifies species, breed, and health insights",
             { fontSize: 14, lineHeight: 18 },
-          )}
+          )} */}
 
-          {(["face", "ear", "body"] as const).map((type) => (
-            <Card
-              key={type}
-              style={StyleSheet.flatten([
-                styles.cardElevated,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ])}
-            >
-              <View style={styles.imageLabelRow}>
-                <FontAwesome
-                  name="camera"
-                  size={16}
-                  color={colors.primary}
-                  style={styles.imageLabelIcon}
-                />
-                <Text style={[styles.imageLabel, { color: colors.text }]}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)} Image *
-                </Text>
-              </View>
-              {selectedImages.find((img) => img.type === type) ? (
-                <View style={styles.imageContainer}>
-                  <Image
-                    source={{
-                      uri: selectedImages.find((img) => img.type === type)?.uri,
-                    }}
-                    style={styles.image}
+            {(["face", "ear", "body"] as const).map((type) => (
+              <Card
+                key={type}
+                style={StyleSheet.flatten([
+                  styles.cardElevated,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ])}
+              >
+                <View style={styles.imageLabelRow}>
+                  <FontAwesome
+                    name="camera"
+                    size={16}
+                    color={colors.primary}
+                    style={styles.imageLabelIcon}
                   />
-                  <Button
-                    title="Change"
-                    onPress={() => pickImage(type)}
-                    variant="secondary"
-                    style={styles.changeButton}
-                  />
+                  <Text style={[styles.imageLabel, { color: colors.text }]}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)} Image *
+                  </Text>
                 </View>
-              ) : (
-                <View style={styles.buttonRow}>
-                  <Button
-                    title="Choose Images"
-                    onPress={() => pickImage(type)}
-                    variant="secondary"
-                    style={styles.selectButton}
-                  />
-                  <Button
-                    title="Take Photo"
-                    onPress={() => takePhoto(type)}
-                    variant="secondary"
-                    style={styles.selectButton}
-                  />
-                </View>
-              )}
-            </Card>
-          ))}
+                {selectedImages.find((img) => img.type === type) ? (
+                  <View style={styles.imageContainer}>
+                    <Image
+                      source={{
+                        uri: selectedImages.find((img) => img.type === type)
+                          ?.uri,
+                      }}
+                      style={styles.image}
+                    />
+                    <Button
+                      title="Change"
+                      onPress={() => pickImage(type)}
+                      variant="secondary"
+                      style={styles.changeButton}
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.buttonRow}>
+                    <Button
+                      title="Choose Images"
+                      onPress={() => pickImage(type)}
+                      variant="secondary"
+                      style={styles.selectButton}
+                    />
+                    <Button
+                      title="Take Photo"
+                      onPress={() => takePhoto(type)}
+                      variant="secondary"
+                      style={styles.selectButton}
+                    />
+                  </View>
+                )}
+              </Card>
+            ))}
 
-          <Button
-            title="Next"
-            onPress={deferPress(handleNextFromUpload)}
-            variant="primary"
-            style={styles.primaryButton}
-            disabled={!hasAllThreeImages}
-          />
-        </ScrollView>
-      </SafeAreaView>
+            <Button
+              title="Next"
+              onPress={deferPress(handleNextFromUpload)}
+              variant="primary"
+              style={styles.primaryButton}
+              disabled={!hasAllThreeImages}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     );
   }
 
   // Step: Chief complaint (images processing in background)
   if (step === "complaint") {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <StatusBar style="auto" />
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
+        <SafeAreaView
+          style={[styles.container, { backgroundColor: colors.background }]}
         >
-          {renderHeader("Create New Animal")}
-          {renderStepper()}
-          {renderStepHeading(
-            "comment",
-            "Chief complaint",
-            "What is the main reason for this visit? You can continue while we process your images.",
-          )}
-          {uploading && (
-            <View
-              style={[
-                styles.farmerCheckHint,
-                {
-                  backgroundColor: colors.primary + "18",
-                  borderColor: colors.primary + "40",
-                },
-              ]}
-            >
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text
-                style={[styles.farmerCheckHintText, { color: colors.primary }]}
+          <StatusBar style="auto" />
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {renderHeader("Create New Animal")}
+            {renderStepper()}
+            {renderStepHeading(
+              "comment",
+              "Chief complaint",
+              "What is the main reason for this visit? You can continue while we process your images.",
+            )}
+            {uploading && (
+              <View
+                style={[
+                  styles.farmerCheckHint,
+                  {
+                    backgroundColor: colors.primary + "18",
+                    borderColor: colors.primary + "40",
+                  },
+                ]}
               >
-                {uploading ? "Uploading images…" : "Analyzing images…"}
-              </Text>
-            </View>
-          )}
-          <Card style={styles.complaintInputCard}>
-            <Text style={[styles.complaintLabel, { color: colors.text }]}>
-              Chief Complaint
-            </Text>
-            <View style={styles.complaintInputContainer}>
-              {chiefComplaintVoiceRecording && (
-                <View
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text
                   style={[
-                    styles.voicePlaybackCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
+                    styles.farmerCheckHintText,
+                    { color: colors.primary },
                   ]}
                 >
-                  <View style={styles.voicePlaybackHeader}>
-                    <FontAwesome
-                      name="microphone"
-                      size={14}
-                      color={colors.primary}
-                    />
-                    <Text
-                      style={[
-                        styles.voicePlaybackTitle,
-                        { color: colors.text },
-                      ]}
-                    >
-                      Voice recorded
-                    </Text>
-                    <TouchableOpacity
-                      onPress={handleChiefComplaintPlayPause}
-                      style={styles.playbackIconButton}
-                    >
+                  {uploading ? "Uploading images…" : "Analyzing images…"}
+                </Text>
+              </View>
+            )}
+            <Card style={styles.complaintInputCard}>
+              <Text style={[styles.complaintLabel, { color: colors.text }]}>
+                Chief Complaint
+              </Text>
+              <View style={styles.complaintInputContainer}>
+                {chiefComplaintVoiceRecording && (
+                  <View
+                    style={[
+                      styles.voicePlaybackCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.voicePlaybackHeader}>
                       <FontAwesome
-                        name={isPlayingChiefComplaint ? "pause" : "play"}
-                        size={12}
+                        name="microphone"
+                        size={14}
                         color={colors.primary}
                       />
-                    </TouchableOpacity>
-                    {isPlayingChiefComplaint && (
+                      <Text
+                        style={[
+                          styles.voicePlaybackTitle,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Voice recorded
+                      </Text>
                       <TouchableOpacity
-                        onPress={handleChiefComplaintStop}
+                        onPress={handleChiefComplaintPlayPause}
                         style={styles.playbackIconButton}
                       >
                         <FontAwesome
-                          name="stop"
+                          name={isPlayingChiefComplaint ? "pause" : "play"}
+                          size={12}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      {isPlayingChiefComplaint && (
+                        <TouchableOpacity
+                          onPress={handleChiefComplaintStop}
+                          style={styles.playbackIconButton}
+                        >
+                          <FontAwesome
+                            name="stop"
+                            size={12}
+                            color={colors.muted}
+                          />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={handleChiefComplaintRecordAgain}
+                        style={styles.playbackIconButton}
+                      >
+                        <FontAwesome
+                          name="times"
                           size={12}
                           color={colors.muted}
                         />
                       </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      onPress={handleChiefComplaintRecordAgain}
-                      style={styles.playbackIconButton}
-                    >
-                      <FontAwesome
-                        name="times"
-                        size={12}
-                        color={colors.muted}
-                      />
-                    </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+                <View style={styles.complaintTextInputWrapper}>
+                  <TextInput
+                    style={[
+                      styles.complaintTextInput,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        color: colors.text,
+                      },
+                    ]}
+                    value={chiefComplaint}
+                    onChangeText={setChiefComplaint}
+                    placeholder="Type chief complaint or tap the microphone to record..."
+                    placeholderTextColor={colors.muted}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.complaintMicButtonWrapper}>
+                    <VoiceMessageRecorder
+                      onTranscriptReady={handleChiefComplaintTranscriptReady}
+                      onRecordingComplete={
+                        handleChiefComplaintVoiceRecordingComplete
+                      }
+                      onError={(error: Error) => {
+                        Alert.alert("Error", error.message);
+                      }}
+                      buttonSize={32}
+                      buttonColor={colors.primary}
+                      caseId={undefined}
+                    />
                   </View>
                 </View>
-              )}
-              <View style={styles.complaintTextInputWrapper}>
-                <TextInput
-                  style={[
-                    styles.complaintTextInput,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      color: colors.text,
-                    },
-                  ]}
-                  value={chiefComplaint}
-                  onChangeText={setChiefComplaint}
-                  placeholder="Type chief complaint or tap the microphone to record..."
-                  placeholderTextColor={colors.muted}
-                  multiline
-                  textAlignVertical="top"
-                />
-                <View style={styles.complaintMicButtonWrapper}>
-                  <VoiceMessageRecorder
-                    onTranscriptReady={handleChiefComplaintTranscriptReady}
-                    onRecordingComplete={
-                      handleChiefComplaintVoiceRecordingComplete
-                    }
-                    onError={(error: Error) => {
-                      Alert.alert("Error", error.message);
-                    }}
-                    buttonSize={32}
-                    buttonColor={colors.primary}
-                    caseId={undefined}
-                  />
-                </View>
               </View>
-            </View>
-          </Card>
-          <Button
-            title="Next"
-            onPress={() => setStep("attributes")}
-            variant="primary"
-            style={styles.primaryButton}
-          />
-        </ScrollView>
-      </SafeAreaView>
+            </Card>
+            <Button
+              title="Next"
+              onPress={() => setStep("attributes")}
+              variant="primary"
+              style={styles.primaryButton}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     );
   }
 
   // Step: Animal Attributes (auto-populated when analysis completes, editable)
   if (step === "attributes") {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        <StatusBar style="auto" />
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.content}
+        <SafeAreaView
+          style={[styles.container, { backgroundColor: colors.background }]}
         >
-          {renderHeader("Create New Animal")}
-          {renderStepper()}
-          {renderStepHeading(
-            "list",
-            "Animal details",
-            "Fill in what you know. Species is required.",
-          )}
-          {(uploading || attributesDetailsLoading) && (
-            <View
-              style={[
-                styles.farmerCheckHint,
-                {
-                  backgroundColor: colors.primary + "18",
-                  borderColor: colors.primary + "40",
-                },
-              ]}
-            >
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text
-                style={[styles.farmerCheckHintText, { color: colors.primary }]}
-              >
-                {uploading
-                  ? "Uploading images…"
-                  : attributesDetailsLoading
-                    ? "Loading animal details…"
-                    : "Analyzing images…"}
-              </Text>
-            </View>
-          )}
-          <View
-            style={[
-              styles.attributesBlock,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
+          <StatusBar style="auto" />
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text
-              style={[styles.attributesBlockTitle, { color: colors.primary }]}
-            >
-              Basic
-            </Text>
-            <InputRow
-              label="Species *"
-              value={species}
-              onChangeText={setSpecies}
-              placeholder="e.g. Cattle, Goat, Horse"
-              colors={colors}
-            />
-            <InputRow
-              label="Breed"
-              value={breed}
-              onChangeText={setBreed}
-              placeholder="Optional"
-              colors={colors}
-            />
-            <View style={inputRowStyles.row}>
-              <Text style={[inputRowStyles.label, { color: colors.text }]}>
-                Status
-              </Text>
-              <TouchableOpacity
+            {renderHeader("Create New Animal")}
+            {renderStepper()}
+            {renderStepHeading(
+              "list",
+              "Animal details",
+              "Fill in what you know. Species is required.",
+            )}
+            {(uploading || attributesDetailsLoading) && (
+              <View
                 style={[
-                  inputRowStyles.input,
+                  styles.farmerCheckHint,
                   {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    justifyContent: "center",
-                    flexDirection: "row",
-                    alignItems: "center",
+                    backgroundColor: colors.primary + "18",
+                    borderColor: colors.primary + "40",
                   },
                 ]}
-                onPress={() => setStatusPickerOpen(true)}
-                activeOpacity={0.7}
               >
+                <ActivityIndicator size="small" color={colors.primary} />
                 <Text
                   style={[
-                    styles.pickerButtonText,
-                    { color: status ? colors.text : colors.muted },
+                    styles.farmerCheckHintText,
+                    { color: colors.primary },
                   ]}
                 >
-                  {status || "Select status"}
+                  {uploading
+                    ? "Uploading images…"
+                    : attributesDetailsLoading
+                      ? "Loading animal details…"
+                      : "Analyzing images…"}
                 </Text>
-                <FontAwesome
-                  name="chevron-down"
-                  size={14}
-                  color={colors.muted}
-                  style={styles.pickerChevron}
-                />
-              </TouchableOpacity>
-            </View>
-            <Modal visible={statusPickerOpen} transparent animationType="fade">
-              <TouchableOpacity
-                style={styles.statusModalOverlay}
-                activeOpacity={1}
-                onPress={() => setStatusPickerOpen(false)}
+              </View>
+            )}
+            <View
+              style={[
+                styles.attributesBlock,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[styles.attributesBlockTitle, { color: colors.primary }]}
               >
-                <View
+                Basic
+              </Text>
+              <InputRow
+                label="Species *"
+                value={species}
+                onChangeText={setSpecies}
+                placeholder="e.g. Cattle, Goat, Horse"
+                colors={colors}
+              />
+              <InputRow
+                label="Breed"
+                value={breed}
+                onChangeText={setBreed}
+                placeholder="Optional"
+                colors={colors}
+              />
+              <View style={inputRowStyles.row}>
+                <Text style={[inputRowStyles.label, { color: colors.text }]}>
+                  Status
+                </Text>
+                <TouchableOpacity
                   style={[
-                    styles.statusModalContent,
+                    inputRowStyles.input,
                     {
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
+                      justifyContent: "center",
+                      flexDirection: "row",
+                      alignItems: "center",
                     },
                   ]}
+                  onPress={() => setStatusPickerOpen(true)}
+                  activeOpacity={0.7}
                 >
                   <Text
-                    style={[styles.statusModalTitle, { color: colors.text }]}
+                    style={[
+                      styles.pickerButtonText,
+                      { color: status ? colors.text : colors.muted },
+                    ]}
                   >
-                    Status
+                    {status || "Select status"}
                   </Text>
-                  {(
-                    [
-                      "MILKING",
-                      "DRY",
-                      "PREGNANT",
-                      "LACTATING",
-                      "IN_HEAT",
-                      "OTHER",
-                    ] as const
-                  ).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={[
-                        styles.statusModalOption,
-                        { borderBottomColor: colors.border },
-                      ]}
-                      onPress={() => {
-                        setStatus(s);
-                        setStatusPickerOpen(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.statusModalOptionText,
-                          { color: colors.text },
-                        ]}
-                      >
-                        {s.replace("_", " ")}
-                      </Text>
-                      {status === s && (
-                        <FontAwesome
-                          name="check"
-                          size={14}
-                          color={colors.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                  <Button
-                    title="Cancel"
-                    onPress={() => setStatusPickerOpen(false)}
-                    variant="secondary"
-                    style={styles.statusModalCancel}
+                  <FontAwesome
+                    name="chevron-down"
+                    size={14}
+                    color={colors.muted}
+                    style={styles.pickerChevron}
                   />
-                </View>
-              </TouchableOpacity>
-            </Modal>
-            {status === "OTHER" && (
+                </TouchableOpacity>
+              </View>
+              <Modal
+                visible={statusPickerOpen}
+                transparent
+                animationType="fade"
+              >
+                <TouchableOpacity
+                  style={styles.statusModalOverlay}
+                  activeOpacity={1}
+                  onPress={() => setStatusPickerOpen(false)}
+                >
+                  <View
+                    style={[
+                      styles.statusModalContent,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.statusModalTitle, { color: colors.text }]}
+                    >
+                      Status
+                    </Text>
+                    {(
+                      [
+                        "MILKING",
+                        "DRY",
+                        "PREGNANT",
+                        "LACTATING",
+                        "IN_HEAT",
+                        "OTHER",
+                      ] as const
+                    ).map((s) => (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          styles.statusModalOption,
+                          { borderBottomColor: colors.border },
+                        ]}
+                        onPress={() => {
+                          setStatus(s);
+                          setStatusPickerOpen(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.statusModalOptionText,
+                            { color: colors.text },
+                          ]}
+                        >
+                          {s.replace("_", " ")}
+                        </Text>
+                        {status === s && (
+                          <FontAwesome
+                            name="check"
+                            size={14}
+                            color={colors.primary}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                    <Button
+                      title="Cancel"
+                      onPress={() => setStatusPickerOpen(false)}
+                      variant="secondary"
+                      style={styles.statusModalCancel}
+                    />
+                  </View>
+                </TouchableOpacity>
+              </Modal>
+              {status === "OTHER" && (
+                <InputRow
+                  label="Other (specify)"
+                  value={otherStatusValue}
+                  onChangeText={setOtherStatusValue}
+                  placeholder="Specify status"
+                  colors={colors}
+                />
+              )}
+            </View>
+
+            <View
+              style={[
+                styles.attributesBlock,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[styles.attributesBlockTitle, { color: colors.primary }]}
+              >
+                Measurements
+              </Text>
+              <Text
+                style={[styles.attributesBlockHint, { color: colors.muted }]}
+              >
+                Enter girth & length to see estimated weight (Cattle,
+                Goat/Sheep, Horse).
+              </Text>
               <InputRow
-                label="Other (specify)"
-                value={otherStatusValue}
-                onChangeText={setOtherStatusValue}
-                placeholder="Specify status"
+                label="Heart girth (cm)"
+                value={heartGirthCm}
+                onChangeText={setHeartGirthCm}
+                placeholder="e.g. 177"
+                keyboardType="decimal-pad"
                 colors={colors}
               />
-            )}
-          </View>
+              <InputRow
+                label="Body length (cm)"
+                value={bodyLengthCm}
+                onChangeText={setBodyLengthCm}
+                placeholder="e.g. 198"
+                keyboardType="decimal-pad"
+                colors={colors}
+              />
+              <InputRow
+                label="Weight (kg)"
+                value={weightKg}
+                onChangeText={setWeightKg}
+                placeholder="Auto or enter"
+                keyboardType="decimal-pad"
+                colors={colors}
+              />
+            </View>
 
-          <View
-            style={[
-              styles.attributesBlock,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Text
-              style={[styles.attributesBlockTitle, { color: colors.primary }]}
+            <View
+              style={[
+                styles.attributesBlock,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
             >
-              Measurements
-            </Text>
-            <Text style={[styles.attributesBlockHint, { color: colors.muted }]}>
-              Enter girth & length to see estimated weight (Cattle, Goat/Sheep,
-              Horse).
-            </Text>
-            <InputRow
-              label="Heart girth (cm)"
-              value={heartGirthCm}
-              onChangeText={setHeartGirthCm}
-              placeholder="e.g. 177"
-              keyboardType="decimal-pad"
-              colors={colors}
-            />
-            <InputRow
-              label="Body length (cm)"
-              value={bodyLengthCm}
-              onChangeText={setBodyLengthCm}
-              placeholder="e.g. 198"
-              keyboardType="decimal-pad"
-              colors={colors}
-            />
-            <InputRow
-              label="Weight (kg)"
-              value={weightKg}
-              onChangeText={setWeightKg}
-              placeholder="Auto or enter"
-              keyboardType="decimal-pad"
-              colors={colors}
-            />
-          </View>
-
-          <View
-            style={[
-              styles.attributesBlock,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Text
-              style={[styles.attributesBlockTitle, { color: colors.primary }]}
-            >
-              Other details
-            </Text>
-            <InputRow
-              label="Age (months)"
-              value={ageMonths}
-              onChangeText={setAgeMonths}
-              placeholder="e.g. 24"
-              keyboardType="number-pad"
-              colors={colors}
-            />
-            <InputRow
-              label="Color"
-              value={color}
-              onChangeText={setColor}
-              placeholder="e.g. brown, white"
-              colors={colors}
-            />
-            <InputRow
-              label="Sex"
-              value={sex}
-              onChangeText={setSex}
-              placeholder="male, female, unknown"
-              colors={colors}
-            />
-            <InputRow
-              label="Tag ID"
-              value={tagId}
-              onChangeText={setTagId}
-              placeholder="Optional"
-              colors={colors}
-            />
-            <View style={inputRowStyles.row}>
-              <Text style={[inputRowStyles.label, { color: colors.text }]}>
-                Tagline
-              </Text>
-              <TextInput
-                style={[
-                  inputRowStyles.input,
-                  inputRowStyles.inputMultiline,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                ]}
-                value={animalTagline}
-                onChangeText={setAnimalTagline}
-                placeholder="Short phrase"
-                placeholderTextColor={colors.muted}
-                multiline
-                numberOfLines={2}
-              />
-            </View>
-            <View style={styles.fullWidthField}>
               <Text
-                style={[styles.fullWidthFieldLabel, { color: colors.text }]}
+                style={[styles.attributesBlockTitle, { color: colors.primary }]}
               >
-                Short Description (AI generated):
+                Other details
               </Text>
-              <TextInput
-                style={[
-                  styles.fullWidthInput,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                ]}
-                value={aiShortSummary}
-                onChangeText={setAiShortSummary}
-                placeholder="1–2 sentence summary"
-                placeholderTextColor={colors.muted}
-                multiline
-                numberOfLines={5}
-                textAlignVertical="top"
+              <InputRow
+                label="Age (months)"
+                value={ageMonths}
+                onChangeText={setAgeMonths}
+                placeholder="e.g. 24"
+                keyboardType="number-pad"
+                colors={colors}
               />
-            </View>
-            <View style={styles.fullWidthField}>
-              <Text
-                style={[styles.fullWidthFieldLabel, { color: colors.text }]}
-              >
-                Detailed Description (AI generated):
-              </Text>
-              <TextInput
-                style={[
-                  styles.fullWidthInput,
-                  styles.fullWidthInputLarge,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                ]}
-                value={aiSummary}
-                onChangeText={setAiSummary}
-                placeholder="Auto-generated summary"
-                placeholderTextColor={colors.muted}
-                multiline
-                numberOfLines={10}
-                textAlignVertical="top"
+              <InputRow
+                label="Color"
+                value={color}
+                onChangeText={setColor}
+                placeholder="e.g. brown, white"
+                colors={colors}
               />
+              <InputRow
+                label="Sex"
+                value={sex}
+                onChangeText={setSex}
+                placeholder="male, female, unknown"
+                colors={colors}
+              />
+              <InputRow
+                label="Tag ID"
+                value={tagId}
+                onChangeText={setTagId}
+                placeholder="Optional"
+                colors={colors}
+              />
+              <View style={inputRowStyles.row}>
+                <Text style={[inputRowStyles.label, { color: colors.text }]}>
+                  Tagline
+                </Text>
+                <TextInput
+                  style={[
+                    inputRowStyles.input,
+                    inputRowStyles.inputMultiline,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={animalTagline}
+                  onChangeText={setAnimalTagline}
+                  placeholder="Short phrase"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={2}
+                />
+              </View>
+              <View style={styles.fullWidthField}>
+                <Text
+                  style={[styles.fullWidthFieldLabel, { color: colors.text }]}
+                >
+                  Short Description (AI generated):
+                </Text>
+                <TextInput
+                  style={[
+                    styles.fullWidthInput,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={aiShortSummary}
+                  onChangeText={setAiShortSummary}
+                  placeholder="1–2 sentence summary"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                />
+              </View>
+              <View style={styles.fullWidthField}>
+                <Text
+                  style={[styles.fullWidthFieldLabel, { color: colors.text }]}
+                >
+                  Detailed Description (AI generated):
+                </Text>
+                <TextInput
+                  style={[
+                    styles.fullWidthInput,
+                    styles.fullWidthInputLarge,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={aiSummary}
+                  onChangeText={setAiSummary}
+                  placeholder="Auto-generated summary"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={10}
+                  textAlignVertical="top"
+                />
+              </View>
             </View>
-          </View>
-          <Button
-            title={
-              createAnimalMutation.isPending
-                ? "Creating..."
-                : creatingCase
-                  ? "Creating case..."
-                  : "Save & continue"
-            }
-            onPress={deferPress(handleNextFromAttributes)}
-            variant="primary"
-            style={styles.primaryButton}
-            disabled={
-              !species.trim() ||
-              createAnimalMutation.isPending ||
-              creatingCase
-            }
-            loading={
-              createAnimalMutation.isPending || creatingCase
-            }
-          />
-        </ScrollView>
-      </SafeAreaView>
+            <Button
+              title={
+                createAnimalMutation.isPending
+                  ? "Creating..."
+                  : creatingCase
+                    ? "Creating case..."
+                    : "Save & continue"
+              }
+              onPress={deferPress(handleNextFromAttributes)}
+              variant="primary"
+              style={styles.primaryButton}
+              disabled={
+                !species.trim() ||
+                createAnimalMutation.isPending ||
+                creatingCase
+              }
+              loading={createAnimalMutation.isPending || creatingCase}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -2240,6 +2295,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
   content: { padding: 20 },
+  scrollContent: { flexGrow: 1, padding: 20 },
   header: {
     flexDirection: "row",
     alignItems: "center",

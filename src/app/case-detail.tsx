@@ -628,8 +628,8 @@ export default function CaseDetailScreen() {
                     {animal.species}
                   </Text>
                   {animal.breed != null &&
-                    animal.breed !== "null" &&
-                    String(animal.breed).trim() !== "" ? (
+                  animal.breed !== "null" &&
+                  String(animal.breed).trim() !== "" ? (
                     <Text
                       style={[
                         styles.headerSpeciesText,
@@ -814,7 +814,7 @@ export default function CaseDetailScreen() {
                                 backgroundColor: colors.success,
                                 opacity:
                                   confirmingSuggestionIndex !== null &&
-                                    confirmingSuggestionIndex !== index
+                                  confirmingSuggestionIndex !== index
                                     ? 0.5
                                     : 1,
                               },
@@ -1061,7 +1061,7 @@ export default function CaseDetailScreen() {
                                     borderColor: colors.success,
                                     opacity:
                                       confirmingTreatmentKey !== null &&
-                                        confirmingTreatmentKey !== confirmKey
+                                      confirmingTreatmentKey !== confirmKey
                                         ? 0.5
                                         : 1,
                                   },
@@ -1307,8 +1307,7 @@ export default function CaseDetailScreen() {
           title={updateCaseMutation.isPending ? "Saving..." : "Save"}
           onPress={async () => {
             if (!caseId) return;
-            const isComplete =
-              diagnoses.length >= 1 && treatments.length >= 1;
+            const isComplete = diagnoses.length >= 1 && treatments.length >= 1;
             const doSave = async () => {
               try {
                 await updateCaseMutation.mutateAsync({

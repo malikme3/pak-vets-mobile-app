@@ -173,6 +173,8 @@ export interface Case {
   isActive?: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Distance in km when returned from nearby-cases (get cases by doctor with lat/long/radius). */
+  distanceKm?: number;
 }
 
 export interface CreateCaseRequest {

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as Location from "expo-location";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
@@ -19,11 +20,17 @@ import { Button } from "../components/ui/Button";
 import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useCasesByDoctor, useDeleteCase } from "../features/cases/hooks";
 import { useAnimalImages, useAnimal } from "../features/animals/hooks";
+import { caseApi } from "../services/vetApi";
+import {
+  getCaseDistanceKm,
+  formatCaseDistanceLabel,
+} from "../utils/formatDistance";
 import type { Case } from "../types/api";
 
 const ACTIVE_CASES_LIMIT_MIN = 1;
 const ACTIVE_CASES_LIMIT_MAX = 100;
 const ACTIVE_CASES_LIMIT_DEFAULT = 15;
+const NEARBY_RADIUS_KM = 0.5;
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -31,6 +38,9 @@ export default function DashboardScreen() {
   const [activeCasesLimit, setActiveCasesLimit] = useState(
     ACTIVE_CASES_LIMIT_DEFAULT,
   );
+  const [finding, setFinding] = useState(false);
+  const [nearbyCases, setNearbyCases] = useState<Case[] | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const {
     data: doctor,
     isLoading: doctorLoading,
@@ -52,6 +62,38 @@ export default function DashboardScreen() {
         )
         .slice(0, activeCasesLimit)
     : [];
+
+  const findNearby = useCallback(async () => {
+    if (!doctor) return;
+    setLocationError(null);
+    setFinding(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationError(
+          "Location permission is required to find nearby cases.",
+        );
+        setFinding(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const cases = await caseApi.getCasesByDoctor(doctor.doctorId, {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        radiusKm: NEARBY_RADIUS_KM,
+      });
+      setNearbyCases(cases);
+    } catch (err) {
+      setLocationError(
+        err instanceof Error ? err.message : "Could not get location",
+      );
+      setNearbyCases(null);
+    } finally {
+      setFinding(false);
+    }
+  }, [doctor]);
 
   const formatDate = useCallback((dateString: string): string => {
     const date = new Date(dateString);
@@ -202,11 +244,17 @@ export default function DashboardScreen() {
 
           {/* Quick Actions */}
           <View style={styles.quickActionsSection}>
-            {/* <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text> */}
             <Button
               title="New Case"
               onPress={handleNewCase}
               variant="primary"
+            />
+            <Button
+              title={finding ? "Finding…" : "Find nearby cases"}
+              onPress={findNearby}
+              variant="secondary"
+              style={styles.quickActionButton}
+              disabled={finding}
             />
           </View>
 
@@ -230,7 +278,10 @@ export default function DashboardScreen() {
                   }
                   style={[
                     styles.limitButton,
-                    { borderColor: colors.primary, backgroundColor: colors.surface },
+                    {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.surface,
+                    },
                   ]}
                   accessibilityLabel="Decrease limit"
                 >
@@ -250,7 +301,10 @@ export default function DashboardScreen() {
                   }
                   style={[
                     styles.limitButton,
-                    { borderColor: colors.primary, backgroundColor: colors.surface },
+                    {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.surface,
+                    },
                   ]}
                   accessibilityLabel="Increase limit"
                 >
@@ -274,6 +328,46 @@ export default function DashboardScreen() {
               </Card>
             )}
           </View>
+
+          {/* Nearby cases (shown after "Find nearby cases" is used) */}
+          {nearbyCases !== null && (
+            <View style={styles.nearbySection}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.text, marginBottom: 8 },
+                ]}
+              >
+                Nearby cases
+              </Text>
+              {locationError && (
+                <Text
+                  style={[styles.nearbyError, { color: colors.danger }]}
+                  numberOfLines={2}
+                >
+                  {locationError}
+                </Text>
+              )}
+              <Text style={[styles.nearbyHint, { color: colors.muted }]}>
+                Cases for animals within {NEARBY_RADIUS_KM} km of your location.
+              </Text>
+              {nearbyCases.length > 0 ? (
+                <View style={styles.casesList}>
+                  {nearbyCases.map((item) => (
+                    <View key={item.caseId} style={styles.caseCardSpacer}>
+                      {renderCaseItem({ item })}
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Card style={styles.emptyCard}>
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    No cases for animals in this area
+                  </Text>
+                </Card>
+              )}
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </>
@@ -315,6 +409,10 @@ const styles = StyleSheet.create({
   },
   quickActionsSection: {
     marginTop: 16,
+    gap: 12,
+  },
+  quickActionButton: {
+    marginTop: 0,
   },
   sectionTitle: {
     fontSize: 16,
@@ -348,6 +446,17 @@ const styles = StyleSheet.create({
   },
   recentCasesSection: {
     marginTop: 16,
+  },
+  nearbySection: {
+    marginTop: 24,
+  },
+  nearbyHint: {
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  nearbyError: {
+    fontSize: 14,
+    marginBottom: 8,
   },
   casesList: {
     gap: 0,
@@ -431,6 +540,26 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 6,
   },
+  caseCardHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    maxWidth: 80,
+  },
+  distanceBadgeIconWrap: {
+    marginRight: 4,
+  },
+  distanceBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
   caseCardStatusIcon: {
     width: 26,
     height: 26,
@@ -487,6 +616,8 @@ function CaseRow({
   const ownerName = animal?.farmer?.fullName ?? "—";
   const status = caseItem.status ?? "IN_PROGRESS";
   const isCompleted = status === "COMPLETED";
+  const distanceKm = getCaseDistanceKm(caseItem);
+  const distanceLabel = formatCaseDistanceLabel(distanceKm);
 
   return (
     <View style={[styles.caseCard, { backgroundColor: colors.surface }]}>
@@ -522,21 +653,48 @@ function CaseRow({
             >
               Case #{caseItem.caseId}
             </Text>
-            <View
-              style={[
-                styles.caseCardStatusIcon,
-                {
-                  backgroundColor: isCompleted
-                    ? (colors.success ?? "#22c55e") + "22"
-                    : (colors.warning ?? "#eab308") + "22",
-                },
-              ]}
-            >
-              <FontAwesome
-                name={isCompleted ? "check-circle" : "clock-o"}
-                size={14}
-                color={isCompleted ? colors.success : colors.warning}
-              />
+            <View style={styles.caseCardHeaderRight}>
+              {distanceLabel ? (
+                <View
+                  style={[
+                    styles.distanceBadge,
+                    { backgroundColor: `${colors.primary}18` },
+                  ]}
+                >
+                  <View style={styles.distanceBadgeIconWrap}>
+                    <FontAwesome
+                      name="map-marker"
+                      size={10}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.distanceBadgeText,
+                      { color: colors.primary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {distanceLabel}
+                  </Text>
+                </View>
+              ) : null}
+              <View
+                style={[
+                  styles.caseCardStatusIcon,
+                  {
+                    backgroundColor: isCompleted
+                      ? (colors.success ?? "#22c55e") + "22"
+                      : (colors.warning ?? "#eab308") + "22",
+                  },
+                ]}
+              >
+                <FontAwesome
+                  name={isCompleted ? "check-circle" : "clock-o"}
+                  size={14}
+                  color={isCompleted ? colors.success : colors.warning}
+                />
+              </View>
             </View>
           </View>
           {caseItem.chiefComplaint ? (

@@ -11,27 +11,30 @@ const SHARED_SERVICES_API_URL =
   "https://shared-dev.roundrocktennis.com";
 
 /**
- * Get the current stage from environment or API URL
- * Extracts stage from URLs like: pak-vets-dev.roundrocktennis.com -> dev
- * Or uses EXPO_PUBLIC_STAGE environment variable
+ * Effective pak-vets API base URL (must match apiClient.ts so bucket matches API).
+ * Preprod API → preprod bucket → preprod step function. Dev API → dev bucket → dev step function.
+ */
+function getEffectivePakVetsApiUrl(): string {
+  return (
+    process.env.EXPO_PUBLIC_API_URL ||
+    (typeof __DEV__ === "boolean" && !__DEV__
+      ? "https://pak-vets-preprod.roundrocktennis.com"
+      : "https://pak-vets-dev.roundrocktennis.com")
+  );
+}
+
+/**
+ * Get the current stage for S3 bucket (pak-vets-assets-<stage>).
+ * Derived from the same API URL as apiClient so uploads always trigger the step function for the env the app is using.
+ * EXPO_PUBLIC_STAGE is only used when API URL is not clearly dev/preprod (e.g. localhost).
  */
 function getStage(): string {
-  // Check for explicit stage environment variable
-  if (process.env.EXPO_PUBLIC_STAGE) {
-    return process.env.EXPO_PUBLIC_STAGE;
-  }
-
-  // Extract stage from API URL
-  const apiUrl =
-    process.env.EXPO_PUBLIC_API_URL ||
-    "https://pak-vets-dev.roundrocktennis.com";
+  const apiUrl = getEffectivePakVetsApiUrl();
+  if (apiUrl.includes("pak-vets-preprod")) return "preprod";
+  if (apiUrl.includes("pak-vets-dev")) return "dev";
   const match = apiUrl.match(/pak-vets-(\w+)\.roundrocktennis\.com/);
-  if (match && match[1]) {
-    return match[1];
-  }
-
-  // Default to dev if unable to determine
-  return "dev";
+  if (match?.[1]) return match[1];
+  return process.env.EXPO_PUBLIC_STAGE || "dev";
 }
 
 /**

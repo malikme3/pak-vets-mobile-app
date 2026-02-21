@@ -18,6 +18,7 @@ import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Location from "expo-location";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -35,14 +36,150 @@ import {
   getUploadSignedUrl,
   getBucketName,
 } from "../services/sharedServicesApi";
+import { formatDistance } from "../utils/formatDistance";
 import type { Animal, MatchAnimalImageResponse } from "../types/api";
 
-type SearchFilter = "tag" | "farmer_name" | "farmer_phone";
+type OwnerSearchFilter = "farmer_phone" | "farmer_nic" | "farmer_name";
 type ImageMatchType = "FACE" | "EAR" | "BODY";
+type NearbyRadiusUnit = "ft" | "m" | "km";
 
 const MATCH_BY_IMAGE_ERROR_TITLE = "Match failed";
+const NEARBY_DEFAULT_RADIUS_FT = 500;
+
+/** Convert user radius (value + unit) to km for API. */
+function radiusToKm(value: number, unit: NearbyRadiusUnit): number {
+  if (!Number.isFinite(value) || value <= 0) return 0.1524; // fallback ~500 ft
+  switch (unit) {
+    case "ft":
+      return (value * 0.3048) / 1000;
+    case "m":
+      return value / 1000;
+    case "km":
+      return value;
+    default:
+      return value / 1000;
+  }
+}
 const MATCH_BY_IMAGE_ERROR_FALLBACK =
   "Could not find animal by image. Try again.";
+
+const nearbyAnimalRowStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+    minHeight: 44,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: "hidden",
+    marginRight: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarImage: { width: "100%", height: "100%" },
+  avatarPlaceholder: { fontSize: 16, fontWeight: "600" },
+  content: { flex: 1, marginRight: 8, minWidth: 0 },
+  title: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
+  tagline: { fontSize: 13 },
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  distanceBadgeText: { fontSize: 12, fontWeight: "600" },
+});
+
+/** Single row for nearby list: avatar, species/breed, tag line (wrap), distance on right */
+function NearbyAnimalRow({
+  animal,
+  onPress,
+}: {
+  animal: Animal;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const { data: images = [] } = useAnimalImages(animal.animalId);
+  const faceUrl = images.find((i) => i.imageType === "FACE")?.s3Url ?? null;
+  const title = [animal.species, animal.breed].filter(Boolean).join(" • ");
+  const distanceStr =
+    animal.distanceKm != null ? formatDistance(animal.distanceKm) : "";
+
+  return (
+    <TouchableOpacity
+      style={nearbyAnimalRowStyles.row}
+      onPress={() => setTimeout(onPress, 50)}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          nearbyAnimalRowStyles.avatar,
+          { backgroundColor: colors.border },
+        ]}
+      >
+        {faceUrl ? (
+          <Image
+            source={{ uri: faceUrl }}
+            style={nearbyAnimalRowStyles.avatarImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text
+            style={[
+              nearbyAnimalRowStyles.avatarPlaceholder,
+              { color: colors.muted },
+            ]}
+          >
+            ?
+          </Text>
+        )}
+      </View>
+      <View style={nearbyAnimalRowStyles.content}>
+        {title ? (
+          <Text
+            style={[nearbyAnimalRowStyles.title, { color: colors.text }]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        ) : null}
+        {animal.animalTagline ? (
+          <Text
+            style={[nearbyAnimalRowStyles.tagline, { color: colors.muted }]}
+            numberOfLines={2}
+          >
+            {animal.animalTagline}
+          </Text>
+        ) : null}
+      </View>
+      {distanceStr ? (
+        <View
+          style={[
+            nearbyAnimalRowStyles.distanceBadge,
+            { backgroundColor: colors.border },
+          ]}
+        >
+          <FontAwesome name="map-marker" size={10} color={colors.primary} />
+          <Text
+            style={[
+              nearbyAnimalRowStyles.distanceBadgeText,
+              { color: colors.text },
+            ]}
+            numberOfLines={1}
+          >
+            {distanceStr}
+          </Text>
+        </View>
+      ) : null}
+    </TouchableOpacity>
+  );
+}
 
 const CREATE_ANIMAL_SPECIES_OPTIONS = [
   "Cow",
@@ -53,21 +190,22 @@ const CREATE_ANIMAL_SPECIES_OPTIONS = [
   "Sheep",
   "Other",
 ] as const;
-type CreateAnimalSpeciesOption =
-  (typeof CREATE_ANIMAL_SPECIES_OPTIONS)[number];
+type CreateAnimalSpeciesOption = (typeof CREATE_ANIMAL_SPECIES_OPTIONS)[number];
 
 export default function SelectAnimalScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const returnTo = (params.returnTo as string) || "/create-case";
   const createCaseAfterSelect = params.createCaseAfterSelect === "1";
   const { data: doctor } = useCurrentDoctor();
   const createCaseMutation = useCreateCase();
   const creatingCaseRef = useRef(false);
 
-  const [inputValue, setInputValue] = useState("");
-  const [filter, setFilter] = useState<SearchFilter>("tag");
+  const [ownerInputValue, setOwnerInputValue] = useState("");
+  const [ownerFilter, setOwnerFilter] =
+    useState<OwnerSearchFilter>("farmer_name");
+  const [tagInputValue, setTagInputValue] = useState("");
   const [imageMatchType, setImageMatchType] = useState<ImageMatchType>("FACE");
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] =
@@ -82,17 +220,30 @@ export default function SelectAnimalScreen() {
   const [otherSpeciesText, setOtherSpeciesText] = useState("");
   const [startUploadingLoading, setStartUploadingLoading] = useState(false);
 
-  // Build effective search query: tag-001, 009-0333-6831-836, or raw for farmer name
-  const searchQuery =
-    filter === "tag"
-      ? `tag-${inputValue}`
-      : filter === "farmer_phone"
-        ? `009-${inputValue}`
-        : inputValue;
+  // Find nearby: default 500 ft, user can pick value + unit (ft, m, km)
+  const [nearbyRadiusValue, setNearbyRadiusValue] = useState(
+    String(NEARBY_DEFAULT_RADIUS_FT),
+  );
+  const [nearbyRadiusUnit, setNearbyRadiusUnit] =
+    useState<NearbyRadiusUnit>("ft");
+  const [nearbyAnimals, setNearbyAnimals] = useState<Animal[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
 
-  const queryForSearch = inputValue.trim() ? searchQuery : "";
-  const { data: searchResults, isLoading: searchLoading } =
-    useSearchAnimals(queryForSearch);
+  // Owner search query (phone with prefix, NIC and name as-is)
+  const ownerQuery =
+    ownerInputValue.trim() === ""
+      ? ""
+      : ownerFilter === "farmer_phone"
+        ? `0092-${ownerInputValue}`
+        : ownerInputValue.trim();
+
+  const tagQuery =
+    tagInputValue.trim() === "" ? "" : `tag-${tagInputValue.trim()}`;
+
+  const { data: ownerSearchData, isLoading: ownerSearchLoading } =
+    useSearchAnimals(ownerQuery);
+  const { data: tagSearchData, isLoading: tagSearchLoading } =
+    useSearchAnimals(tagQuery);
   const { data: allAnimals, isLoading: animalsLoading } = useAnimals();
   const { data: matchedAnimalImages = [] } = useAnimalImages(
     matchedAnimal?.animalId ?? 0,
@@ -100,22 +251,37 @@ export default function SelectAnimalScreen() {
   const matchedFaceUrl =
     matchedAnimalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
 
-  // Filter results based on selected filter type
-  const results = inputValue.trim()
-    ? (searchResults || []).filter((animal) => {
-        const query = searchQuery.toLowerCase();
-        switch (filter) {
-          case "tag":
-            return animal.tagId?.toLowerCase().includes(query);
-          case "farmer_name":
-            return animal.farmer?.fullName?.toLowerCase().includes(query);
-          case "farmer_phone":
-            return animal.farmer?.phoneNumber?.includes(searchQuery);
-          default:
-            return false;
-        }
-      })
-    : [];
+  // Owner results: filter by selected owner field
+  const ownerResults =
+    ownerQuery === ""
+      ? []
+      : (ownerSearchData || []).filter((animal) => {
+          const q = ownerQuery.toLowerCase();
+          switch (ownerFilter) {
+            case "farmer_phone":
+              return animal.farmer?.phoneNumber?.includes(ownerQuery);
+            case "farmer_nic":
+              return animal.farmer?.nicNo?.toLowerCase().includes(q);
+            case "farmer_name":
+              return animal.farmer?.fullName?.toLowerCase().includes(q);
+            default:
+              return false;
+          }
+        });
+
+  // Tag results: filter by tagId
+  const tagResults =
+    tagQuery === ""
+      ? []
+      : (tagSearchData || []).filter((animal) =>
+          animal.tagId?.toLowerCase().includes(tagQuery.toLowerCase()),
+        );
+
+  // Combined results, dedupe by animalId
+  const resultsById = new Map<number, Animal>();
+  ownerResults.forEach((a) => resultsById.set(a.animalId, a));
+  tagResults.forEach((a) => resultsById.set(a.animalId, a));
+  const results = Array.from(resultsById.values());
 
   // Format phone as user types: XXXX-XXXX-XXX
   const formatPhoneInput = (text: string) => {
@@ -125,23 +291,73 @@ export default function SelectAnimalScreen() {
     return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
   };
 
-  const handleInputChange = useCallback(
+  const handleOwnerInputChange = useCallback(
     (text: string) => {
-      if (filter === "farmer_phone") {
-        setInputValue(formatPhoneInput(text));
+      if (ownerFilter === "farmer_phone") {
+        setOwnerInputValue(formatPhoneInput(text));
       } else {
-        setInputValue(text);
+        setOwnerInputValue(text);
       }
     },
-    [filter],
+    [ownerFilter],
   );
 
-  const handleFilterChange = useCallback((value: SearchFilter) => {
-    setFilter(value);
-    setInputValue("");
+  const handleOwnerFilterChange = useCallback((value: OwnerSearchFilter) => {
+    setOwnerFilter(value);
+    setOwnerInputValue("");
   }, []);
 
-  const isLoading = searchLoading || animalsLoading;
+  const fetchNearbyAnimals = useCallback(async () => {
+    setNearbyLoading(true);
+    setNearbyAnimals([]);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location required",
+          "Please allow location access to find animals nearby.",
+          [{ text: "OK" }],
+        );
+        setNearbyLoading(false);
+        return;
+      }
+      let loc = await Location.getLastKnownPositionAsync({
+        maxAge: 60_000,
+      });
+      if (!loc) {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Location timed out.")), 12_000),
+        );
+        loc = await Promise.race([
+          Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Low,
+          }),
+          timeoutPromise,
+        ]);
+      }
+      const lat = loc.coords.latitude;
+      const lng = loc.coords.longitude;
+      const value = parseFloat(nearbyRadiusValue) || NEARBY_DEFAULT_RADIUS_FT;
+      const radiusKm = radiusToKm(value, nearbyRadiusUnit);
+      const list = await animalApi.getAllAnimals({
+        latitude: lat,
+        longitude: lng,
+        radiusKm,
+      });
+      setNearbyAnimals(list);
+    } catch (err) {
+      Alert.alert(
+        "Error",
+        err instanceof Error
+          ? err.message
+          : "Failed to find animals nearby. Try again.",
+      );
+    } finally {
+      setNearbyLoading(false);
+    }
+  }, [nearbyRadiusValue, nearbyRadiusUnit]);
+
+  const isLoading = ownerSearchLoading || tagSearchLoading || animalsLoading;
 
   const handleAnimalSelect = useCallback(
     async (animal: Animal) => {
@@ -194,18 +410,20 @@ export default function SelectAnimalScreen() {
   const resolvedSpecies =
     selectedSpeciesOption === "Other"
       ? otherSpeciesText.trim()
-      : selectedSpeciesOption ?? "";
+      : (selectedSpeciesOption ?? "");
 
   const canStartUploading =
     selectedSpeciesOption != null &&
     (selectedSpeciesOption !== "Other" || otherSpeciesText.trim().length > 0);
 
+  const LOCATION_MAX_AGE_MS = 60_000; // Use cached location up to 1 min old
+  const LOCATION_TIMEOUT_MS = 12_000; // Don't wait for GPS longer than 12s
+
   const handleStartUploadingPhotos = async () => {
     if (!canStartUploading) return;
     setStartUploadingLoading(true);
     try {
-      const { status } =
-        await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Location required",
@@ -215,9 +433,29 @@ export default function SelectAnimalScreen() {
         setStartUploadingLoading(false);
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+      // Prefer last known position (instant when available); fallback to current with low accuracy + timeout
+      let loc = await Location.getLastKnownPositionAsync({
+        maxAge: LOCATION_MAX_AGE_MS,
       });
+      if (!loc) {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Location timed out. Try again with GPS or network enabled.",
+                ),
+              ),
+            LOCATION_TIMEOUT_MS,
+          ),
+        );
+        loc = await Promise.race([
+          Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Low,
+          }),
+          timeoutPromise,
+        ]);
+      }
       const lat = loc.coords.latitude;
       const lng = loc.coords.longitude;
 
@@ -245,7 +483,9 @@ export default function SelectAnimalScreen() {
       if (__DEV__) console.error("[SelectAnimal] Create animal / location:", e);
       Alert.alert(
         "Error",
-        e instanceof Error ? e.message : "Failed to create animal. Please try again.",
+        e instanceof Error
+          ? e.message
+          : "Failed to create animal. Please try again.",
         [{ text: "OK" }],
       );
     } finally {
@@ -314,10 +554,7 @@ export default function SelectAnimalScreen() {
       topK: 5,
     });
     setMatchResult(response);
-    if (
-      response.matchStatus === "MATCH" &&
-      response.matchedAnimalId != null
-    ) {
+    if (response.matchStatus === "MATCH" && response.matchedAnimalId != null) {
       const animal = await animalApi.getAnimal(response.matchedAnimalId);
       setMatchedAnimal(animal);
     }
@@ -405,24 +642,164 @@ export default function SelectAnimalScreen() {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
+      edges={["top"]}
     >
-      <StatusBar style="auto" />
+      <StatusBar style={isDark ? "light" : "dark"} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.title, { color: colors.text }]}>
-          Search Animal
-        </Text>
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Select animal
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.muted }]}>
+            Find by location, photo, or search
+          </Text>
+        </View>
+
+        {/* Find nearby */}
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={[
+                styles.sectionIconWrap,
+                { backgroundColor: `${colors.primary}18` },
+              ]}
+            >
+              <FontAwesome name="map-marker" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.sectionTitleWrap}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Find nearby
+              </Text>
+              <Text style={[styles.sectionHint, { color: colors.muted }]}>
+                Within radius · default 500 ft
+              </Text>
+            </View>
+          </View>
+          <View style={styles.nearbyRadiusRow}>
+            <TextInput
+              style={[
+                styles.nearbyRadiusInput,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                },
+              ]}
+              value={nearbyRadiusValue}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9.]/g, "");
+                setNearbyRadiusValue(cleaned);
+              }}
+              placeholder="500"
+              placeholderTextColor={colors.muted}
+              keyboardType="decimal-pad"
+            />
+            <View style={styles.nearbyUnitPillRow}>
+              {(
+                [
+                  { value: "ft" as const, label: "Feet" },
+                  { value: "m" as const, label: "Meter" },
+                  { value: "km" as const, label: "Km" },
+                ] as const
+              ).map(({ value, label }) => (
+                <TouchableOpacity
+                  key={value}
+                  onPress={() => setNearbyRadiusUnit(value)}
+                  style={[
+                    styles.nearbyUnitPill,
+                    {
+                      backgroundColor:
+                        nearbyRadiusUnit === value
+                          ? colors.primary
+                          : "transparent",
+                      borderColor:
+                        nearbyRadiusUnit === value
+                          ? colors.primary
+                          : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.nearbyUnitPillText,
+                      {
+                        color:
+                          nearbyRadiusUnit === value
+                            ? (colors.onPrimary ?? "#fff")
+                            : colors.text,
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <Button
+            title={nearbyLoading ? "Finding…" : "Find nearby"}
+            onPress={fetchNearbyAnimals}
+            variant="primary"
+            style={styles.primaryActionButton}
+            disabled={nearbyLoading}
+          />
+          {nearbyAnimals.length > 0 && (
+            <View
+              style={[styles.resultBlock, { borderTopColor: colors.border }]}
+            >
+              <Text style={[styles.resultCount, { color: colors.muted }]}>
+                {nearbyAnimals.length}{" "}
+                {nearbyAnimals.length === 1 ? "animal" : "animals"} in range
+              </Text>
+              <FlatList
+                data={nearbyAnimals}
+                keyExtractor={(item) => String(item.animalId)}
+                scrollEnabled={false}
+                renderItem={({ item }) => (
+                  <NearbyAnimalRow
+                    animal={item}
+                    onPress={() => handlePressAnimal(item)}
+                  />
+                )}
+                ItemSeparatorComponent={() => (
+                  <View
+                    style={[
+                      styles.listSeparator,
+                      { backgroundColor: colors.border },
+                    ]}
+                  />
+                )}
+              />
+            </View>
+          )}
+        </Card>
 
         {/* Find by image */}
-        <Card style={styles.card}>
-          <Text style={[styles.filterLabel, { color: colors.text }]}>
-            Find by image
-          </Text>
-          <Text style={[styles.findByImageHint, { color: colors.muted }]}>
-            Choose face, ear, or body photo to match an enrolled animal
-          </Text>
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={[
+                styles.sectionIconWrap,
+                { backgroundColor: `${colors.primary}18` },
+              ]}
+            >
+              <FontAwesome name="camera" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.sectionTitleWrap}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Find by image
+              </Text>
+              <Text style={[styles.sectionHint, { color: colors.muted }]}>
+                Face, ear, or body photo
+              </Text>
+            </View>
+          </View>
           <SegmentedControl
             options={[
               { label: "Face", value: "FACE" },
@@ -436,55 +813,45 @@ export default function SelectAnimalScreen() {
             }}
           />
           {matching ? (
-            <Button
-              title="Matching…"
-              onPress={() => {}}
-              disabled
-              variant="secondary"
-              style={styles.findByImageButton}
-            />
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.loadingRowText, { color: colors.muted }]}>
+                Finding animal…
+              </Text>
+            </View>
           ) : matchResult ? (
             <Button
               title="Try another photo"
               onPress={clearMatchResult}
               variant="secondary"
-              style={styles.findByImageButton}
+              style={styles.secondaryButton}
             />
           ) : (
-            <View style={styles.findByImageButtonRow}>
+            <View style={styles.twoButtonRow}>
               <Button
                 title="Choose photo"
                 onPress={handleChoosePhoto}
                 variant="secondary"
-                style={styles.findByImageButtonHalf}
+                style={styles.halfButton}
               />
               <Button
                 title="Take photo"
                 onPress={handleTakePhoto}
                 variant="secondary"
-                style={styles.findByImageButtonHalf}
+                style={styles.halfButton}
               />
-            </View>
-          )}
-          {matching && (
-            <View style={styles.matchLoading}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.matchLoadingText, { color: colors.muted }]}>
-                Finding animal…
-              </Text>
             </View>
           )}
           {matchResult && !matching && (
             <View
-              style={[styles.matchResult, { borderTopColor: colors.border }]}
+              style={[styles.resultBlock, { borderTopColor: colors.border }]}
             >
               {matchResult.matchStatus === "MATCH" && matchedAnimal ? (
                 <>
                   <Text
-                    style={[styles.matchStatusText, { color: colors.primary }]}
+                    style={[styles.matchSuccessText, { color: colors.primary }]}
                   >
-                    Match found ({(matchResult.bestScore * 100).toFixed(0)}%
-                    match)
+                    Match ({(matchResult.bestScore * 100).toFixed(0)}%)
                   </Text>
                   <TouchableOpacity
                     style={styles.matchRow}
@@ -537,15 +904,15 @@ export default function SelectAnimalScreen() {
                         {formatAnimalSubtitle(matchedAnimal)}
                       </Text>
                     </View>
-                    <Text
-                      style={[styles.matchRowChevron, { color: colors.muted }]}
-                    >
-                      ›
-                    </Text>
+                    <FontAwesome
+                      name="chevron-right"
+                      size={14}
+                      color={colors.muted}
+                    />
                   </TouchableOpacity>
                 </>
               ) : (
-                <Text style={[styles.matchStatusText, { color: colors.muted }]}>
+                <Text style={[styles.noMatchText, { color: colors.muted }]}>
                   No match found
                 </Text>
               )}
@@ -553,67 +920,127 @@ export default function SelectAnimalScreen() {
           )}
         </Card>
 
-        {/* Search section - filter first, then input */}
-        <Card style={styles.card}>
-          <Text style={[styles.filterLabel, { color: colors.text }]}>
-            Search by
-          </Text>
+        {/* Find by Owner */}
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={[
+                styles.sectionIconWrap,
+                { backgroundColor: `${colors.primary}18` },
+              ]}
+            >
+              <FontAwesome name="user" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.sectionTitleWrap}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Find by Owner
+              </Text>
+              <Text style={[styles.sectionHint, { color: colors.muted }]}>
+                Owner phone, NIC #, or name
+              </Text>
+            </View>
+          </View>
           <SegmentedControl
             options={[
-              { label: "Tag ID", value: "tag" },
-              { label: "Farmer Name", value: "farmer_name" },
-              { label: "Phone", value: "farmer_phone" },
+              { label: "Owner phone", value: "farmer_phone" },
+              { label: "NIC #", value: "farmer_nic" },
+              { label: "Name", value: "farmer_name" },
             ]}
-            selectedValue={filter}
-            onValueChange={(value) => handleFilterChange(value as SearchFilter)}
+            selectedValue={ownerFilter}
+            onValueChange={(value) =>
+              handleOwnerFilterChange(value as OwnerSearchFilter)
+            }
           />
           <View
             style={[
               styles.searchInputRow,
-              { borderColor: colors.border, backgroundColor: colors.surface },
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.background,
+              },
             ]}
           >
-            {(filter === "tag" || filter === "farmer_phone") && (
-              <Text style={[styles.searchPrefix, { color: colors.text }]}>
-                {filter === "tag" ? "tag-" : "0092-"}
+            {ownerFilter === "farmer_phone" && (
+              <Text style={[styles.searchPrefix, { color: colors.muted }]}>
+                0092-
               </Text>
             )}
             <TextInput
               style={[
                 styles.searchInputField,
-                {
-                  color: colors.text,
-                },
-                (filter === "tag" || filter === "farmer_phone") &&
-                  styles.searchInputWithPrefix,
+                { color: colors.text },
+                ownerFilter === "farmer_phone" && styles.searchInputWithPrefix,
               ]}
-              value={inputValue}
-              onChangeText={handleInputChange}
+              value={ownerInputValue}
+              onChangeText={handleOwnerInputChange}
               placeholder={
-                filter === "tag"
-                  ? "001"
-                  : filter === "farmer_phone"
-                    ? "0333-6831-836"
-                    : "Farmer name"
+                ownerFilter === "farmer_phone"
+                  ? "333-6831836"
+                  : ownerFilter === "farmer_nic"
+                    ? "NIC number"
+                    : "Owner name"
               }
               placeholderTextColor={colors.muted}
             />
           </View>
         </Card>
 
-        {/* Loading State */}
+        {/* Find by Tag */}
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={[
+                styles.sectionIconWrap,
+                { backgroundColor: `${colors.primary}18` },
+              ]}
+            >
+              <FontAwesome name="tag" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.sectionTitleWrap}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Find by Tag
+              </Text>
+              <Text style={[styles.sectionHint, { color: colors.muted }]}>
+                Animal tag ID
+              </Text>
+            </View>
+          </View>
+          <View
+            style={[
+              styles.searchInputRow,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
+            <Text style={[styles.searchPrefix, { color: colors.muted }]}>
+              tag-
+            </Text>
+            <TextInput
+              style={[
+                styles.searchInputField,
+                { color: colors.text },
+                styles.searchInputWithPrefix,
+              ]}
+              value={tagInputValue}
+              onChangeText={setTagInputValue}
+              placeholder="e.g. 001"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+        </Card>
+
         {isLoading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={colors.primary} />
           </View>
         )}
 
-        {/* Results */}
         {results.length > 0 && (
           <View style={styles.resultsSection}>
             <Text style={[styles.resultsTitle, { color: colors.muted }]}>
-              {results.length} {results.length === 1 ? "result" : "results"}{" "}
-              found
+              {results.length} {results.length === 1 ? "result" : "results"}
             </Text>
             <Card style={styles.resultsCard}>
               <FlatList
@@ -624,7 +1051,7 @@ export default function SelectAnimalScreen() {
                 ItemSeparatorComponent={() => (
                   <View
                     style={[
-                      styles.separator,
+                      styles.listSeparator,
                       { backgroundColor: colors.border },
                     ]}
                   />
@@ -634,21 +1061,19 @@ export default function SelectAnimalScreen() {
           </View>
         )}
 
-        {/* Create New Animal CTA */}
-        <View style={styles.createSection}>
-          <Text style={[styles.createLabel, { color: colors.muted }]}>
-            Animal not found?
+        <View style={styles.footer}>
+          <Text style={[styles.footerLabel, { color: colors.muted }]}>
+            Animal not in list?
           </Text>
           <Button
-            title="Create New Animal"
+            title="Create new animal"
             onPress={handleCreateAnimal}
             variant="secondary"
-            style={styles.createButton}
+            style={styles.footerButton}
           />
         </View>
       </ScrollView>
 
-      {/* Create New Animal – species selection modal */}
       <Modal
         visible={createAnimalModalVisible}
         animationType="slide"
@@ -656,44 +1081,33 @@ export default function SelectAnimalScreen() {
         onRequestClose={() => setCreateAnimalModalVisible(false)}
       >
         <TouchableOpacity
-          style={styles.createAnimalModalOverlay}
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setCreateAnimalModalVisible(false)}
         >
           <TouchableOpacity
             activeOpacity={1}
             onPress={(e) => e.stopPropagation()}
-            style={[
-              styles.createAnimalModalContent,
-              { backgroundColor: colors.surface },
-            ]}
+            style={[styles.modalSheet, { backgroundColor: colors.surface }]}
           >
-            <Text style={[styles.createAnimalModalTitle, { color: colors.text }]}>
-              Create New Animal
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Create new animal
             </Text>
-            <Text
-              style={[
-                styles.createAnimalModalSubtitle,
-                { color: colors.muted },
-              ]}
-            >
-              Select species
+            <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
+              Choose species
             </Text>
 
-            <View style={styles.createAnimalRadioGroup}>
+            <View style={styles.radioGroup}>
               {CREATE_ANIMAL_SPECIES_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option}
-                  style={[
-                    styles.createAnimalRadioRow,
-                    { borderColor: colors.border },
-                  ]}
+                  style={[styles.radioRow, { borderColor: colors.border }]}
                   onPress={() => setSelectedSpeciesOption(option)}
                   activeOpacity={0.7}
                 >
                   <View
                     style={[
-                      styles.createAnimalRadioOuter,
+                      styles.radioOuter,
                       {
                         borderColor:
                           selectedSpeciesOption === option
@@ -705,18 +1119,13 @@ export default function SelectAnimalScreen() {
                     {selectedSpeciesOption === option ? (
                       <View
                         style={[
-                          styles.createAnimalRadioInner,
+                          styles.radioInner,
                           { backgroundColor: colors.primary },
                         ]}
                       />
                     ) : null}
                   </View>
-                  <Text
-                    style={[
-                      styles.createAnimalRadioLabel,
-                      { color: colors.text },
-                    ]}
-                  >
+                  <Text style={[styles.radioLabel, { color: colors.text }]}>
                     {option}
                   </Text>
                 </TouchableOpacity>
@@ -724,18 +1133,15 @@ export default function SelectAnimalScreen() {
             </View>
 
             {selectedSpeciesOption === "Other" ? (
-              <View style={styles.createAnimalOtherWrap}>
+              <View style={styles.otherSpeciesWrap}>
                 <Text
-                  style={[
-                    styles.createAnimalOtherLabel,
-                    { color: colors.text },
-                  ]}
+                  style={[styles.otherSpeciesLabel, { color: colors.text }]}
                 >
-                  Species name *
+                  Species name
                 </Text>
                 <TextInput
                   style={[
-                    styles.createAnimalOtherInput,
+                    styles.otherSpeciesInput,
                     {
                       backgroundColor: colors.background,
                       borderColor: colors.border,
@@ -751,22 +1157,18 @@ export default function SelectAnimalScreen() {
               </View>
             ) : null}
 
-            <View style={styles.createAnimalModalActions}>
+            <View style={styles.modalActions}>
               <Button
                 title="Cancel"
                 variant="secondary"
                 onPress={() => setCreateAnimalModalVisible(false)}
-                style={styles.createAnimalModalCancel}
+                style={styles.modalCancelBtn}
               />
               <Button
-                title={
-                  startUploadingLoading
-                    ? "Getting location…"
-                    : "Next"
-                }
+                title={startUploadingLoading ? "Getting location…" : "Next"}
                 variant="primary"
                 onPress={handleStartUploadingPhotos}
-                style={styles.createAnimalModalStart}
+                style={styles.modalNextBtn}
                 disabled={!canStartUploading || startUploadingLoading}
               />
             </View>
@@ -778,39 +1180,161 @@ export default function SelectAnimalScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
   content: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 32,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "600",
+  header: {
     marginBottom: 24,
   },
-  card: {
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    marginTop: 4,
+    opacity: 0.85,
+  },
+  sectionCard: {
+    marginBottom: 20,
+    borderRadius: 16,
+    padding: 20,
+    overflow: "hidden",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 16,
   },
-  filterLabel: {
+  sectionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  sectionTitleWrap: { flex: 1 },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  sectionHint: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  nearbyRadiusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
+  nearbyRadiusInput: {
+    width: 72,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  nearbyUnitPillRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    flex: 1,
+  },
+  nearbyUnitPill: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nearbyUnitPillText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  primaryActionButton: {
+    marginTop: 4,
+  },
+  secondaryButton: {
+    marginTop: 12,
+  },
+  twoButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  halfButton: { flex: 1 },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+  },
+  loadingRowText: {
     fontSize: 14,
-    fontWeight: "500",
+  },
+  resultBlock: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+  },
+  resultCount: {
+    fontSize: 13,
     marginBottom: 12,
   },
+  matchSuccessText: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  noMatchText: {
+    fontSize: 15,
+  },
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    minHeight: 56,
+  },
+  matchAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: "hidden",
+    marginRight: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  matchAvatarImage: { width: "100%", height: "100%" },
+  matchAvatarPlaceholder: { fontSize: 20, fontWeight: "600" },
+  matchRowContent: { flex: 1, marginRight: 10, minWidth: 0 },
+  matchRowTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  matchRowSubtitle: { fontSize: 14 },
   searchInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 12,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    marginTop: 14,
+    minHeight: 48,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 14,
   },
   searchPrefix: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
   },
   searchInputField: {
@@ -819,184 +1343,96 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 0,
   },
-  searchInputWithPrefix: {
-    marginLeft: 4,
-  },
-  resultsSection: {
-    marginBottom: 24,
-  },
+  searchInputWithPrefix: { marginLeft: 6 },
+  resultsSection: { marginTop: 8, marginBottom: 24 },
   resultsTitle: {
-    fontSize: 14,
-    marginBottom: 8,
+    fontSize: 13,
+    marginBottom: 10,
   },
   resultsCard: {
-    paddingVertical: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
-  separator: {
+  listSeparator: {
     height: 1,
-    marginLeft: 16,
-  },
-  createSection: {
-    marginTop: 8,
-  },
-  createLabel: {
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  createButton: {
-    marginTop: 8,
+    marginLeft: 0,
   },
   loadingContainer: {
-    padding: 16,
+    paddingVertical: 20,
     alignItems: "center",
   },
-  findByImageHint: {
-    fontSize: 12,
-    marginBottom: 12,
-  },
-  findByImageButton: {
-    marginTop: 12,
-  },
-  findByImageButtonRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
-  },
-  findByImageButtonHalf: {
-    flex: 1,
-  },
-  matchLoading: {
-    flexDirection: "row",
+  footer: {
+    marginTop: 24,
+    paddingTop: 8,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 12,
   },
-  matchLoadingText: {
+  footerLabel: {
     fontSize: 14,
+    marginBottom: 10,
   },
-  matchResult: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
+  footerButton: {
+    minWidth: 200,
   },
-  matchStatusText: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  matchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 0,
-    minHeight: 44,
-  },
-  matchAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: "hidden",
-    marginRight: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  matchAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  matchAvatarPlaceholder: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  matchRowContent: {
-    flex: 1,
-    marginRight: 8,
-  },
-  matchRowTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  matchRowSubtitle: {
-    fontSize: 14,
-  },
-  matchRowChevron: {
-    fontSize: 24,
-  },
-  createAnimalModalOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
-  createAnimalModalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 24,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
-  createAnimalModalTitle: {
-    fontSize: 20,
+  modalTitle: {
+    fontSize: 22,
     fontWeight: "700",
     marginBottom: 4,
   },
-  createAnimalModalSubtitle: {
-    fontSize: 14,
-    marginBottom: 20,
+  modalSubtitle: {
+    fontSize: 15,
+    marginBottom: 22,
   },
-  createAnimalRadioGroup: {
-    marginBottom: 16,
-  },
-  createAnimalRadioRow: {
+  radioGroup: { marginBottom: 20 },
+  radioRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
-    paddingHorizontal: 0,
     borderBottomWidth: 1,
   },
-  createAnimalRadioOuter: {
+  radioOuter: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    marginRight: 12,
+    marginRight: 14,
     justifyContent: "center",
     alignItems: "center",
   },
-  createAnimalRadioInner: {
+  radioInner: {
     width: 12,
     height: 12,
     borderRadius: 6,
   },
-  createAnimalRadioLabel: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  createAnimalOtherWrap: {
-    marginBottom: 20,
-  },
-  createAnimalOtherLabel: {
+  radioLabel: { fontSize: 16, fontWeight: "500" },
+  otherSpeciesWrap: { marginBottom: 22 },
+  otherSpeciesLabel: {
     fontSize: 14,
     fontWeight: "600",
     marginBottom: 8,
   },
-  createAnimalOtherInput: {
+  otherSpeciesInput: {
     borderWidth: 1.5,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
   },
-  createAnimalModalActions: {
+  modalActions: {
     flexDirection: "row",
     gap: 12,
-    marginTop: 8,
+    marginTop: 16,
   },
-  createAnimalModalCancel: {
-    flex: 1,
-  },
-  createAnimalModalStart: {
-    flex: 1,
-  },
+  modalCancelBtn: { flex: 1 },
+  modalNextBtn: { flex: 1 },
 });
