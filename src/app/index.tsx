@@ -10,7 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -47,10 +47,18 @@ export default function DashboardScreen() {
     error: doctorError,
     refetch: refetchDoctor,
   } = useCurrentDoctor();
-  const { data: allCases, isLoading: casesLoading } = useCasesByDoctor(
-    doctor?.doctorId ?? 0,
-  );
+  const {
+    data: allCases,
+    isLoading: casesLoading,
+    refetch: refetchCases,
+  } = useCasesByDoctor(doctor?.doctorId ?? 0);
   const deleteCaseMutation = useDeleteCase();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (doctor?.doctorId) refetchCases();
+    }, [doctor?.doctorId, refetchCases]),
+  );
 
   const activeCases = allCases
     ? [...allCases]

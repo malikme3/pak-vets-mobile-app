@@ -63,6 +63,18 @@ function radiusToKm(value: number, unit: NearbyRadiusUnit): number {
 const MATCH_BY_IMAGE_ERROR_FALLBACK =
   "Could not find animal by image. Try again.";
 
+function getMatchErrorMessage(err: unknown): string {
+  if (
+    err &&
+    typeof err === "object" &&
+    "message" in err &&
+    typeof (err as { message: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
+  }
+  return err instanceof Error ? err.message : MATCH_BY_IMAGE_ERROR_FALLBACK;
+}
+
 const nearbyAnimalRowStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
@@ -579,10 +591,7 @@ export default function SelectAnimalScreen() {
       }
       await processImageUriAndMatch(result.assets[0].uri);
     } catch (err) {
-      Alert.alert(
-        MATCH_BY_IMAGE_ERROR_TITLE,
-        err instanceof Error ? err.message : MATCH_BY_IMAGE_ERROR_FALLBACK,
-      );
+      Alert.alert(MATCH_BY_IMAGE_ERROR_TITLE, getMatchErrorMessage(err));
     } finally {
       setMatching(false);
     }
@@ -607,10 +616,7 @@ export default function SelectAnimalScreen() {
       }
       await processImageUriAndMatch(result.assets[0].uri);
     } catch (err) {
-      Alert.alert(
-        MATCH_BY_IMAGE_ERROR_TITLE,
-        err instanceof Error ? err.message : MATCH_BY_IMAGE_ERROR_FALLBACK,
-      );
+      Alert.alert(MATCH_BY_IMAGE_ERROR_TITLE, getMatchErrorMessage(err));
     } finally {
       setMatching(false);
     }

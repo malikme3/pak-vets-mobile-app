@@ -64,6 +64,10 @@ export function useCreateCase() {
       queryClient.invalidateQueries({
         queryKey: animalKeys.detail(data.animalId),
       });
+      // Refetch animal images so Active Cases avatar appears once step function has enrolled images.
+      queryClient.invalidateQueries({
+        queryKey: animalKeys.images(data.animalId),
+      });
     },
   });
 }

@@ -28,6 +28,8 @@ export function useAnimalImages(animalId: number) {
     queryKey: animalKeys.images(animalId),
     queryFn: () => animalApi.getAnimalImages(animalId),
     enabled: animalId > 0,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 }
 

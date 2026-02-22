@@ -471,9 +471,10 @@ export default function CreateAnimalScreen() {
     return fileUrl;
   };
 
-  // Build S3 key path: create-animal-images/doctorId-1_lat-0_lng-0_speciesSlug-dog_timestamp-123_face.jpg
+  // S3 key: create-animal-images/{doctorId}/{speciesSlug}/lat-{lat}_lng-{lng}_animalId-{animalId}_timestamp-{timestamp}_{face|ear|body}.jpg
+  // Use one timestamp for all 3 so backend can find face/ear/body under same pathPrefix and run AI analyze.
   const buildImageS3Key = useCallback(
-    (imageType: "face" | "ear" | "body"): string => {
+    (imageType: "face" | "ear" | "body", timestamp?: number): string => {
       const doctorId = doctor?.doctorId ?? 0;
       const lat = latitude.trim() ? latitude.replace(/\s/g, "") : "0";
       const lng = longitude.trim() ? longitude.replace(/\s/g, "") : "0";
@@ -482,16 +483,15 @@ export default function CreateAnimalScreen() {
         .toLowerCase()
         .replace(/\s+/g, "-")
         .replace(/[^a-z0-9-]/g, "");
-      const timestamp = Date.now();
-      const pairs = [
-        `doctorId-${doctorId}`,
-        `lat-${lat}`,
-        `lng-${lng}`,
-        `speciesSlug-${speciesSlug}`,
-        `timestamp-${timestamp}`,
-        `${imageType}.jpg`,
-      ];
-      return ["create-animal-images", pairs.join("_")].join("/");
+      const animalId = existingAnimalIdRef.current ?? 0;
+      const ts = timestamp ?? Date.now();
+      const filename = `lat-${lat}_lng-${lng}_animalId-${animalId}_timestamp-${ts}_${imageType}.jpg`;
+      return [
+        "create-animal-images",
+        String(doctorId),
+        speciesSlug,
+        filename,
+      ].join("/");
     },
     [doctor?.doctorId, latitude, longitude, species],
   );
@@ -505,9 +505,11 @@ export default function CreateAnimalScreen() {
     ) => {
       setUploading(true);
       try {
-        const faceKey = buildImageS3Key("face");
-        const earKey = buildImageS3Key("ear");
-        const bodyKey = buildImageS3Key("body");
+        // One timestamp per batch (by second) so all 3 share pathPrefix and backend can run AI analyze once all 3 exist.
+        const timestamp = Math.floor(Date.now() / 1000);
+        const faceKey = buildImageS3Key("face", timestamp);
+        const earKey = buildImageS3Key("ear", timestamp);
+        const bodyKey = buildImageS3Key("body", timestamp);
 
         const faceImageUrl = await uploadImageToS3(faceImage.uri, faceKey);
         const earImageUrl = await uploadImageToS3(earImage.uri, earKey);
