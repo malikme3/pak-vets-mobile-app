@@ -1059,6 +1059,8 @@ export default function CreateAnimalScreen() {
 
       // No duplicate and we have phone + name: call backend to create farmer, then pass new farmer ID to next step
       if (hasPhone && hasName && normalized) {
+        const lat = latitude.trim() ? parseFloat(latitude) : undefined;
+        const lng = longitude.trim() ? parseFloat(longitude) : undefined;
         const created = await farmerApi.createFarmer({
           fullName: farmerName.trim(),
           phoneNumber: normalized,
@@ -1066,6 +1068,8 @@ export default function CreateAnimalScreen() {
           villageName: farmerVillage.trim() || undefined,
           tehName: farmerTehName.trim() || undefined,
           districtName: farmerDistrict.trim() || undefined,
+          latitude: lat != null && Number.isFinite(lat) ? lat : undefined,
+          longitude: lng != null && Number.isFinite(lng) ? lng : undefined,
         });
         setSelectedFarmerId(created.farmerId);
       }
@@ -1085,6 +1089,8 @@ export default function CreateAnimalScreen() {
     farmerVillage,
     farmerTehName,
     farmerDistrict,
+    latitude,
+    longitude,
   ]);
 
   const handlePickExistingFarmer = useCallback((farmer: Farmer) => {

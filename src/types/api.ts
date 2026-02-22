@@ -80,6 +80,8 @@ export interface CreateFarmerRequest {
   villageName?: string;
   tehName?: string;
   districtName?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export type AnimalStatus =
