@@ -65,6 +65,7 @@ export interface Farmer {
   villageName?: string;
   tehName?: string;
   districtName?: string;
+  fullAddress?: string;
   latitude?: number;
   longitude?: number;
   /** Set when list was filtered by lat/long/radius (distance in km). */
@@ -80,6 +81,7 @@ export interface CreateFarmerRequest {
   villageName?: string;
   tehName?: string;
   districtName?: string;
+  fullAddress?: string;
   latitude?: number;
   longitude?: number;
 }

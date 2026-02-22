@@ -31,6 +31,7 @@ import { animalApi, farmerApi } from "../services/vetApi";
 import {
   getUploadSignedUrl,
   getBucketName,
+  getReverseGeocode,
 } from "../services/sharedServicesApi";
 import {
   formatPhoneInput,
@@ -185,7 +186,11 @@ export default function CreateAnimalScreen() {
   const [farmerVillage, setFarmerVillage] = useState("");
   const [farmerTehName, setFarmerTehName] = useState("");
   const [farmerDistrict, setFarmerDistrict] = useState("");
+  const [farmerFullAddress, setFarmerFullAddress] = useState("");
   const [selectedFarmerId, setSelectedFarmerId] = useState<number | null>(null);
+  const [addressFromLocationLoading, setAddressFromLocationLoading] =
+    useState(false);
+  const addressFromLocationFetchedRef = useRef(false);
   const [farmerStepLoading, setFarmerStepLoading] = useState(false);
   const [existingFarmersModal, setExistingFarmersModal] = useState<
     Farmer[] | null
@@ -341,6 +346,40 @@ export default function CreateAnimalScreen() {
       cancelled = true;
     };
   }, [step]);
+
+  // Farmer step: fill address from lat/lon via shared-services reverse geocode (once per session)
+  useEffect(() => {
+    if (step !== "farmer" || addressFromLocationFetchedRef.current) return;
+    const lat = latitude.trim() ? parseFloat(latitude) : NaN;
+    const lon = longitude.trim() ? parseFloat(longitude) : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    let cancelled = false;
+    addressFromLocationFetchedRef.current = true;
+    setAddressFromLocationLoading(true);
+    getReverseGeocode(lat, lon)
+      .then((data) => {
+        if (cancelled) return;
+        const addr = data.address ?? {};
+        setFarmerTehName((prev) => prev || (addr.subdistrict ?? ""));
+        setFarmerDistrict((prev) => prev || (addr.district ?? ""));
+        setFarmerVillage(
+          (prev) => prev || (addr.village ?? addr.town ?? addr.road ?? ""),
+        );
+        setFarmerFullAddress((prev) => prev || (data.display_name ?? ""));
+      })
+      .catch((e) => {
+        if (!cancelled && __DEV__)
+          console.warn("[CreateAnimal] Reverse geocode failed:", e);
+        addressFromLocationFetchedRef.current = false;
+      })
+      .finally(() => {
+        if (!cancelled) setAddressFromLocationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, latitude, longitude]);
 
   // Step: Animal attributes (editable, pre-filled from API when analysis completes)
   const [species, setSpecies] = useState("");
@@ -1068,6 +1107,7 @@ export default function CreateAnimalScreen() {
           villageName: farmerVillage.trim() || undefined,
           tehName: farmerTehName.trim() || undefined,
           districtName: farmerDistrict.trim() || undefined,
+          fullAddress: farmerFullAddress.trim() || undefined,
           latitude: lat != null && Number.isFinite(lat) ? lat : undefined,
           longitude: lng != null && Number.isFinite(lng) ? lng : undefined,
         });
@@ -1089,6 +1129,7 @@ export default function CreateAnimalScreen() {
     farmerVillage,
     farmerTehName,
     farmerDistrict,
+    farmerFullAddress,
     latitude,
     longitude,
   ]);
@@ -1105,6 +1146,7 @@ export default function CreateAnimalScreen() {
     setFarmerVillage(farmer.villageName ?? "");
     setFarmerTehName(farmer.tehName ?? "");
     setFarmerDistrict(farmer.districtName ?? "");
+    setFarmerFullAddress(farmer.fullAddress ?? "");
     setExistingFarmersModal(null);
     setStep("complaint");
   }, []);
@@ -1528,6 +1570,35 @@ export default function CreateAnimalScreen() {
                   Address
                 </Text>
               </View>
+              {addressFromLocationLoading && (
+                <View
+                  style={[
+                    styles.farmerCheckHint,
+                    {
+                      backgroundColor: colors.border + "25",
+                      borderColor: colors.border + "50",
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text
+                    style={[
+                      styles.farmerCheckHintText,
+                      { color: colors.muted },
+                    ]}
+                  >
+                    Filling address from location…
+                  </Text>
+                </View>
+              )}
+              <InputRow
+                label="Full address"
+                value={farmerFullAddress}
+                onChangeText={setFarmerFullAddress}
+                placeholder="From location or type"
+                colors={colors}
+                multiline
+              />
               <InputRow
                 label="Village"
                 value={farmerVillage}

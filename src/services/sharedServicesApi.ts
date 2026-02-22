@@ -115,6 +115,50 @@ export interface ProcessStructuredTranscriptionApiResponse {
   };
 }
 
+/** Reverse geocode response (GET /geocode/reverse). address may include village, town, road when backend supports them. */
+export interface ReverseGeocodeAddress {
+  city?: string;
+  subdistrict?: string;
+  district?: string;
+  state_district?: string;
+  state?: string;
+  country?: string;
+  country_code?: string;
+  village?: string;
+  town?: string;
+  road?: string;
+}
+
+export interface ReverseGeocodeData {
+  display_name: string;
+  address: ReverseGeocodeAddress;
+}
+
+export interface ReverseGeocodeApiResponse {
+  success: boolean;
+  data?: ReverseGeocodeData;
+  meta: { requestId: string; timestamp: string };
+}
+
+/**
+ * Reverse geocode: lat/lon → display_name and structured address.
+ * Uses shared-services-api GET /geocode/reverse.
+ */
+export async function getReverseGeocode(
+  lat: number,
+  lon: number,
+): Promise<ReverseGeocodeData> {
+  const base = getSharedServicesApiUrl();
+  const url = `${base}/geocode/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+  const response = await axios.get<ReverseGeocodeApiResponse>(url);
+  if (!response.data.success || !response.data.data) {
+    throw new Error(
+      response.data?.error?.message ?? "Reverse geocode request failed",
+    );
+  }
+  return response.data.data;
+}
+
 /**
  * Get presigned URL for S3 upload
  */
