@@ -353,42 +353,46 @@ export default function DashboardScreen() {
                     {nextThemeLabel}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.logoutButton,
-                    {
-                      borderColor: `${colors.primary}50`,
-                      backgroundColor: `${colors.primary}12`,
-                    },
-                  ]}
-                  onPress={async () => {
-                    const auth = getFirebaseAuth();
-                    if (auth.currentUser) {
-                      await auth.signOut();
-                    }
-                    await clearAuth();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome
-                    name="sign-out"
-                    size={12}
-                    color={colors.primary}
-                  />
-                  <Text style={[styles.logoutText, { color: colors.primary }]}>
-                    Logout
-                  </Text>
-                </TouchableOpacity>
               </View>
+            </View>
+            <View style={styles.heroTitleRow}>
+              <Text
+                style={[
+                  styles.heroTitle,
+                  isNeonTheme && styles.heroTitleAlt,
+                  { color: colors.text },
+                ]}
+              >
+                Welcome back
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.logoutIconButton,
+                  {
+                    borderColor: `${colors.danger}45`,
+                    backgroundColor: `${colors.danger}12`,
+                  },
+                ]}
+                onPress={async () => {
+                  const auth = getFirebaseAuth();
+                  if (auth.currentUser) {
+                    await auth.signOut();
+                  }
+                  await clearAuth();
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="sign-out" size={14} color={colors.danger} />
+              </TouchableOpacity>
             </View>
             <Text
               style={[
-                styles.heroTitle,
+                styles.heroName,
                 isNeonTheme && styles.heroTitleAlt,
                 { color: colors.text },
               ]}
             >
-              Welcome back, {copy.dashboardGreetingPrefix} {doctor.fullName}
+              {copy.dashboardGreetingPrefix} {doctor.fullName}
             </Text>
             <Text
               style={[
@@ -675,15 +679,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   logoutText: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   heroTitle: {
     fontSize: 24,
@@ -696,6 +699,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
   },
+  heroTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  heroName: {
+    marginTop: 4,
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 24,
+  },
   heroSubtitle: {
     fontSize: 14,
     lineHeight: 20,
@@ -705,6 +720,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     letterSpacing: 0.2,
+  },
+  heroFooterActions: {
+    marginTop: 12,
+    alignItems: "flex-end",
+  },
+  logoutIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   locationRow: {
     marginTop: 12,
