@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as AuthSession from "expo-auth-session";
+import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -55,26 +56,20 @@ export default function LoginScreen() {
     googleConfig.googleAndroidClientId ||
     "";
 
-  const discovery = AuthSession.useAutoDiscovery("https://accounts.google.com");
-
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: "pak-vets",
-    path: "auth",
-  });
-
-  const baseRequestConfig = useMemo(
-    () => ({
-      clientId: googleClientId,
-      responseType: AuthSession.ResponseType.Code,
-      usePKCE: true,
-      scopes: ["openid", "profile", "email"],
-      redirectUri,
-    }),
-    [googleClientId, redirectUri],
-  );
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
 
   const [googleRequest, googleResponse, googlePromptAsync] =
-    AuthSession.useAuthRequest(baseRequestConfig, discovery);
+    Google.useAuthRequest(
+      {
+        expoClientId: googleClientId,
+        webClientId: googleClientId,
+        responseType: AuthSession.ResponseType.IdToken,
+        scopes: ["openid", "profile", "email"],
+        prompt: "select_account",
+        redirectUri,
+      },
+      { useProxy: true },
+    );
 
   useEffect(() => {
     if (isAuthed) router.replace("/");
@@ -123,26 +118,15 @@ export default function LoginScreen() {
   useEffect(() => {
     const runGoogleLogin = async () => {
       if (!googleResponse || googleResponse.type !== "success") return;
-      if (!discovery || !googleRequest) return;
+      const idToken =
+        googleResponse.authentication?.idToken ||
+        (googleResponse.params as { id_token?: string })?.id_token;
+      if (!idToken) {
+        Alert.alert("Google login failed", "Missing Google ID token.");
+        return;
+      }
       try {
-        const tokenResult = await AuthSession.exchangeCodeAsync(
-          {
-            clientId: googleClientId,
-            code: googleResponse.params.code,
-            redirectUri,
-            extraParams: {
-              code_verifier: googleRequest.codeVerifier ?? "",
-            },
-          },
-          discovery,
-        );
-        if (!tokenResult.idToken) {
-          throw new Error("Missing Google ID token");
-        }
-        const credential = GoogleAuthProvider.credential(
-          tokenResult.idToken,
-          tokenResult.accessToken,
-        );
+        const credential = GoogleAuthProvider.credential(idToken);
         const auth = getFirebaseAuth();
         await signInWithCredential(auth, credential);
         await finalizeLogin();
@@ -158,13 +142,7 @@ export default function LoginScreen() {
       }
     };
     runGoogleLogin();
-  }, [
-    discovery,
-    googleClientId,
-    googleRequest,
-    googleResponse,
-    redirectUri,
-  ]);
+  }, [googleResponse]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
@@ -231,7 +209,7 @@ export default function LoginScreen() {
         />
         <Button
           title="Continue with Google"
-          onPress={() => googlePromptAsync({ useProxy: false })}
+          onPress={() => googlePromptAsync({ useProxy: true })}
           variant="secondary"
           style={styles.secondaryButton}
           disabled={!googleRequest || !googleClientId || !isFirebaseConfigured}
