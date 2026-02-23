@@ -516,19 +516,14 @@ export default function SelectAnimalScreen() {
     );
     const fileInfo = await FileSystem.getInfoAsync(imageUri);
     if (!fileInfo.exists) throw new Error("File does not exist");
-    const fileBase64 = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const binaryString = atob(fileBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    await fetch(signedUrl, {
-      method: "PUT",
-      body: bytes,
+    const uploadResult = await FileSystem.uploadAsync(signedUrl, imageUri, {
+      httpMethod: "PUT",
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       headers: { "Content-Type": "image/jpeg" },
     });
+    if (uploadResult.status !== 200) {
+      throw new Error(`S3 upload failed with status ${uploadResult.status}`);
+    }
     return { fileUrl, s3Key };
   };
 
