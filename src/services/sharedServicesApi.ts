@@ -5,6 +5,16 @@
 
 import axios from "axios";
 
+const isDev = typeof __DEV__ === "boolean" ? __DEV__ : false;
+
+function devLog(message?: unknown, ...optionalParams: unknown[]) {
+  if (isDev) console.log(message, ...optionalParams);
+}
+
+function devError(message?: unknown, ...optionalParams: unknown[]) {
+  if (isDev) console.error(message, ...optionalParams);
+}
+
 /**
  * Effective pak-vets API base URL (must match apiClient.ts so bucket matches API).
  * Preprod API → preprod bucket → preprod step function. Dev API → dev bucket → dev step function.
@@ -137,6 +147,11 @@ export interface ReverseGeocodeData {
 export interface ReverseGeocodeApiResponse {
   success: boolean;
   data?: ReverseGeocodeData;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: Record<string, unknown>;
+  };
   meta: { requestId: string; timestamp: string };
 }
 
@@ -168,7 +183,7 @@ export async function getUploadSignedUrl(
   tags?: string,
 ): Promise<UploadSignedUrlResponse> {
   try {
-    console.log("[SharedServicesAPI] Requesting presigned URL:", {
+    devLog("[SharedServicesAPI] Requesting presigned URL:", {
       bucketName,
       filePath,
       tags,
@@ -184,14 +199,14 @@ export async function getUploadSignedUrl(
       },
     );
 
-    console.log("[SharedServicesAPI] Presigned URL received:", {
+    devLog("[SharedServicesAPI] Presigned URL received:", {
       signedUrlLength: response.data.signedUrl.length,
       fileUrl: response.data.fileUrl,
     });
 
     return response.data;
   } catch (error) {
-    console.error("[SharedServicesAPI] Error getting upload signed URL:", {
+    devError("[SharedServicesAPI] Error getting upload signed URL:", {
       error: error instanceof Error ? error.message : String(error),
       bucketName,
       filePath,
@@ -208,7 +223,7 @@ export async function getDownloadSignedUrl(
   filePath: string,
 ): Promise<string> {
   try {
-    console.log("[SharedServicesAPI] Requesting download signed URL:", {
+    devLog("[SharedServicesAPI] Requesting download signed URL:", {
       bucketName,
       filePath,
       url: `${getSharedServicesApiUrl()}/s3/download-signed-url`,
@@ -224,14 +239,14 @@ export async function getDownloadSignedUrl(
       },
     );
 
-    console.log("[SharedServicesAPI] Download signed URL received:", {
+    devLog("[SharedServicesAPI] Download signed URL received:", {
       urlLength: response.data.length,
       urlPreview: response.data.substring(0, 150) + "...",
     });
 
     return response.data;
   } catch (error) {
-    console.error("[SharedServicesAPI] Error getting download signed URL:", {
+    devError("[SharedServicesAPI] Error getting download signed URL:", {
       error: error instanceof Error ? error.message : String(error),
       bucketName,
       filePath,
@@ -249,7 +264,7 @@ export async function transcribeAudio(
   bucketName: string,
 ): Promise<TranscribeAudioResponse> {
   try {
-    console.log("[SharedServicesAPI] Requesting audio transcription:", {
+    devLog("[SharedServicesAPI] Requesting audio transcription:", {
       s3Key,
       bucketName,
       url: `${getSharedServicesApiUrl()}/audio/transcribe`,
@@ -263,7 +278,7 @@ export async function transcribeAudio(
       },
     );
 
-    console.log("[SharedServicesAPI] Transcription response received:", {
+    devLog("[SharedServicesAPI] Transcription response received:", {
       status: response.data.status,
       hasRawText: !!response.data.transcript.rawText,
       hasImprovedText: !!response.data.transcript.improvedText,
@@ -271,7 +286,7 @@ export async function transcribeAudio(
 
     return response.data;
   } catch (error) {
-    console.error("[SharedServicesAPI] Error transcribing audio:", {
+    devError("[SharedServicesAPI] Error transcribing audio:", {
       error: error instanceof Error ? error.message : String(error),
       s3Key,
       bucketName,
@@ -281,14 +296,14 @@ export async function transcribeAudio(
     if (axios.isAxiosError(error)) {
       const axiosError = error;
       if (axiosError.response) {
-        console.error("[SharedServicesAPI] API Error Details:", {
+        devError("[SharedServicesAPI] API Error Details:", {
           status: axiosError.response.status,
           statusText: axiosError.response.statusText,
           data: JSON.stringify(axiosError.response.data, null, 2),
           headers: axiosError.response.headers,
         });
       } else if (axiosError.request) {
-        console.error("[SharedServicesAPI] Network Error:", {
+        devError("[SharedServicesAPI] Network Error:", {
           request: axiosError.request,
           message: axiosError.message,
         });
@@ -311,15 +326,15 @@ export async function processStructuredTranscription(
       expectedSchema: request.expectedSchema,
     };
 
-    console.log(
+    devLog(
       "[SharedServicesAPI] Requesting structured transcription - API URL:",
       `${getSharedServicesApiUrl()}/audio/process-structured`,
     );
-    console.log(
+    devLog(
       "[SharedServicesAPI] Request body (actual HTTP payload):",
       JSON.stringify(requestBody, null, 2),
     );
-    console.log(
+    devLog(
       "[SharedServicesAPI] Schema keys (for reference only):",
       Object.keys(request.expectedSchema),
     );
@@ -335,14 +350,14 @@ export async function processStructuredTranscription(
         },
       );
 
-    console.log(
+    devLog(
       "[SharedServicesAPI] Full API response:",
       JSON.stringify(response.data, null, 2),
     );
 
     if (!response.data.success) {
       const errorData = response.data.error;
-      console.error("[SharedServicesAPI] API returned error:", errorData);
+      devError("[SharedServicesAPI] API returned error:", errorData);
       throw new Error(
         errorData?.message || "API request failed without error details",
       );
@@ -355,7 +370,7 @@ export async function processStructuredTranscription(
 
     const structuredData = responseData.audioTranscriptStructured;
 
-    console.log(
+    devLog(
       "[SharedServicesAPI] Structured transcription response received:",
       {
         status: responseData.status,
@@ -374,7 +389,7 @@ export async function processStructuredTranscription(
       status: responseData.status,
     };
   } catch (error) {
-    console.error(
+    devError(
       "[SharedServicesAPI] Error processing structured transcription:",
       {
         error: error instanceof Error ? error.message : String(error),
@@ -386,19 +401,19 @@ export async function processStructuredTranscription(
     if (axios.isAxiosError(error)) {
       const axiosError = error;
       if (axiosError.response) {
-        console.error("[SharedServicesAPI] API Error Response:", {
+        devError("[SharedServicesAPI] API Error Response:", {
           status: axiosError.response.status,
           statusText: axiosError.response.statusText,
           headers: axiosError.response.headers,
           data: JSON.stringify(axiosError.response.data, null, 2),
         });
       } else if (axiosError.request) {
-        console.error("[SharedServicesAPI] Network Error - No response:", {
+        devError("[SharedServicesAPI] Network Error - No response:", {
           request: axiosError.request,
           message: axiosError.message,
         });
       } else {
-        console.error("[SharedServicesAPI] Request setup error:", {
+        devError("[SharedServicesAPI] Request setup error:", {
           message: axiosError.message,
         });
       }

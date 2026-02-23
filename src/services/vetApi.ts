@@ -27,6 +27,7 @@ import type {
   UpdateMediaFileRequest,
   PresignedUrlResponse,
   ApiSuccessResponse,
+  PaginatedData,
   MatchAnimalImageRequest,
   MatchAnimalImageResponse,
   AnimalImage,
@@ -158,6 +159,57 @@ export const animalApi = {
     return response.data.data;
   },
 
+  getAnimalsPage: async (options?: {
+    species?: string;
+    search?: string;
+    latitude?: number;
+    longitude?: number;
+    radiusKm?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<PaginatedData<Animal>> => {
+    const params: Record<string, string | number> = {};
+    if (options?.species) params.species = options.species;
+    if (options?.search?.trim()) params.search = options.search.trim();
+    if (options?.latitude != null) params.latitude = options.latitude;
+    if (options?.longitude != null) params.longitude = options.longitude;
+    if (options?.radiusKm != null) params.radiusKm = options.radiusKm;
+    if (options?.limit != null) params.limit = options.limit;
+    if (options?.offset != null) params.offset = options.offset;
+
+    const response = await apiClient.instance.get<ApiSuccessResponse<Animal[]>>(
+      "/animals",
+      { params: Object.keys(params).length ? params : undefined },
+    );
+    const limit = options?.limit;
+    const offset = options?.offset ?? 0;
+    const items = response.data.data;
+    const metaPagination = response.data.meta?.pagination;
+    const hasNext =
+      typeof metaPagination?.hasNext === "boolean"
+        ? metaPagination.hasNext
+        : typeof limit === "number"
+          ? items.length === limit
+          : false;
+    const nextOffset =
+      typeof metaPagination?.nextOffset === "number"
+        ? metaPagination.nextOffset
+        : hasNext && typeof limit === "number"
+          ? offset + limit
+          : undefined;
+    return {
+      items,
+      pagination: {
+        limit: metaPagination?.limit ?? limit,
+        offset: metaPagination?.offset ?? offset,
+        count: metaPagination?.count ?? items.length,
+        total: metaPagination?.total,
+        hasNext,
+        nextOffset,
+      },
+    };
+  },
+
   createAnimal: async (request: CreateAnimalRequest): Promise<Animal> => {
     const response = await apiClient.instance.post<ApiSuccessResponse<Animal>>(
       "/animals",
@@ -183,17 +235,40 @@ export const animalApi = {
 
   // Search animals by tag ID, farmer name, phone, or NIC
   searchAnimals: async (query: string): Promise<Animal[]> => {
-    // Since backend doesn't have a search endpoint, we'll fetch all and filter client-side
-    // TODO: Implement proper search endpoint on backend
-    const allAnimals = await animalApi.getAllAnimals();
-    const lowerQuery = query.toLowerCase();
-    return allAnimals.filter(
-      (animal) =>
-        animal.tagId?.toLowerCase().includes(lowerQuery) ||
-        animal.farmer?.fullName?.toLowerCase().includes(lowerQuery) ||
-        animal.farmer?.phoneNumber?.includes(query) ||
-        animal.farmer?.nicNo?.toLowerCase().includes(lowerQuery),
-    );
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) {
+      return [];
+    }
+    const pageData = await animalApi.getAnimalsPage({
+      search: normalizedQuery,
+      limit: 100,
+      offset: 0,
+    });
+    return pageData.items;
+  },
+
+  searchAnimalsPage: async (
+    query: string,
+    offset: number,
+    limit: number,
+  ): Promise<PaginatedData<Animal>> => {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) {
+      return {
+        items: [],
+        pagination: {
+          limit,
+          offset,
+          hasNext: false,
+        },
+      };
+    }
+    const pageData = await animalApi.getAnimalsPage({
+      search: normalizedQuery,
+      limit,
+      offset,
+    });
+    return pageData;
   },
 
   matchAnimalImage: async (

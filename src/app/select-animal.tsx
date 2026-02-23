@@ -25,8 +25,7 @@ import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import {
-  useSearchAnimals,
-  useAnimals,
+  useSearchAnimalsPaginated,
   useAnimalImages,
 } from "../features/animals/hooks";
 import { useCurrentDoctor } from "../features/doctors/hooks";
@@ -37,6 +36,7 @@ import {
   getBucketName,
 } from "../services/sharedServicesApi";
 import { formatDistance } from "../utils/formatDistance";
+import { getSpeciesImageSource } from "../utils/speciesImage";
 import type { Animal, MatchAnimalImageResponse } from "../types/api";
 
 type OwnerSearchFilter = "farmer_phone" | "farmer_nic" | "farmer_name";
@@ -117,11 +117,10 @@ function NearbyAnimalRow({
   onPress: () => void;
 }) {
   const { colors } = useTheme();
-  const { data: images = [] } = useAnimalImages(animal.animalId);
-  const faceUrl = images.find((i) => i.imageType === "FACE")?.s3Url ?? null;
   const title = [animal.species, animal.breed].filter(Boolean).join(" • ");
   const distanceStr =
     animal.distanceKm != null ? formatDistance(animal.distanceKm) : "";
+  const speciesImage = getSpeciesImageSource(animal.species);
 
   return (
     <TouchableOpacity
@@ -135,22 +134,11 @@ function NearbyAnimalRow({
           { backgroundColor: colors.border },
         ]}
       >
-        {faceUrl ? (
-          <Image
-            source={{ uri: faceUrl }}
-            style={nearbyAnimalRowStyles.avatarImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <Text
-            style={[
-              nearbyAnimalRowStyles.avatarPlaceholder,
-              { color: colors.muted },
-            ]}
-          >
-            ?
-          </Text>
-        )}
+        <Image
+          source={speciesImage}
+          style={nearbyAnimalRowStyles.avatarImage}
+          resizeMode="cover"
+        />
       </View>
       <View style={nearbyAnimalRowStyles.content}>
         {title ? (
@@ -252,11 +240,20 @@ export default function SelectAnimalScreen() {
   const tagQuery =
     tagInputValue.trim() === "" ? "" : `tag-${tagInputValue.trim()}`;
 
-  const { data: ownerSearchData, isLoading: ownerSearchLoading } =
-    useSearchAnimals(ownerQuery);
-  const { data: tagSearchData, isLoading: tagSearchLoading } =
-    useSearchAnimals(tagQuery);
-  const { data: allAnimals, isLoading: animalsLoading } = useAnimals();
+  const {
+    data: ownerSearchPages,
+    isLoading: ownerSearchLoading,
+    isFetchingNextPage: ownerFetchingNextPage,
+    hasNextPage: ownerHasNextPage,
+    fetchNextPage: fetchOwnerNextPage,
+  } = useSearchAnimalsPaginated(ownerQuery, 20);
+  const {
+    data: tagSearchPages,
+    isLoading: tagSearchLoading,
+    isFetchingNextPage: tagFetchingNextPage,
+    hasNextPage: tagHasNextPage,
+    fetchNextPage: fetchTagNextPage,
+  } = useSearchAnimalsPaginated(tagQuery, 20);
   const { data: matchedAnimalImages = [] } = useAnimalImages(
     matchedAnimal?.animalId ?? 0,
   );
@@ -267,7 +264,8 @@ export default function SelectAnimalScreen() {
   const ownerResults =
     ownerQuery === ""
       ? []
-      : (ownerSearchData || []).filter((animal) => {
+      : (ownerSearchPages?.pages.flatMap((page) => page.items) || []).filter(
+          (animal) => {
           const q = ownerQuery.toLowerCase();
           switch (ownerFilter) {
             case "farmer_phone":
@@ -279,13 +277,15 @@ export default function SelectAnimalScreen() {
             default:
               return false;
           }
-        });
+        },
+        );
 
   // Tag results: filter by tagId
   const tagResults =
     tagQuery === ""
       ? []
-      : (tagSearchData || []).filter((animal) =>
+      : (tagSearchPages?.pages.flatMap((page) => page.items) || []).filter(
+          (animal) =>
           animal.tagId?.toLowerCase().includes(tagQuery.toLowerCase()),
         );
 
@@ -369,7 +369,16 @@ export default function SelectAnimalScreen() {
     }
   }, [nearbyRadiusValue, nearbyRadiusUnit]);
 
-  const isLoading = ownerSearchLoading || tagSearchLoading || animalsLoading;
+  const isLoading = ownerSearchLoading || tagSearchLoading;
+  const isLoadingMore = ownerFetchingNextPage || tagFetchingNextPage;
+  const hasMoreResults = Boolean(ownerHasNextPage || tagHasNextPage);
+
+  const handleLoadMoreResults = useCallback(async () => {
+    await Promise.all([
+      ownerHasNextPage ? fetchOwnerNextPage() : Promise.resolve(),
+      tagHasNextPage ? fetchTagNextPage() : Promise.resolve(),
+    ]);
+  }, [ownerHasNextPage, tagHasNextPage, fetchOwnerNextPage, fetchTagNextPage]);
 
   const handleAnimalSelect = useCallback(
     async (animal: Animal) => {
@@ -1064,6 +1073,15 @@ export default function SelectAnimalScreen() {
                 )}
               />
             </Card>
+            {hasMoreResults && (
+              <Button
+                title={isLoadingMore ? "Loading more..." : "Load more results"}
+                onPress={handleLoadMoreResults}
+                disabled={isLoadingMore}
+                variant="secondary"
+                style={styles.loadMoreButton}
+              />
+            )}
           </View>
         )}
 
@@ -1358,6 +1376,9 @@ const styles = StyleSheet.create({
   resultsCard: {
     paddingVertical: 4,
     paddingHorizontal: 4,
+  },
+  loadMoreButton: {
+    marginTop: 12,
   },
   listSeparator: {
     height: 1,

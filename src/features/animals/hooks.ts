@@ -1,17 +1,24 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
 import { animalApi } from "../../services/vetApi";
 import type {
   Animal,
   CreateAnimalRequest,
   UpdateAnimalRequest,
+  PaginatedData,
 } from "../../types/api";
 
 export const animalKeys = {
   all: ["animal"] as const,
   detail: (id: number) => [...animalKeys.all, id] as const,
   images: (id: number) => [...animalKeys.all, id, "images"] as const,
+  listRoot: () => [...animalKeys.all, "list"] as const,
   list: (filters?: { species?: string }) =>
-    [...animalKeys.all, "list", filters] as const,
+    [...animalKeys.listRoot(), filters?.species ?? "all"] as const,
   search: (query: string) => [...animalKeys.all, "search", query] as const,
 };
 
@@ -41,10 +48,36 @@ export function useAnimals(species?: string) {
 }
 
 export function useSearchAnimals(query: string) {
+  const normalizedQuery = query.trim();
   return useQuery({
-    queryKey: animalKeys.search(query),
-    queryFn: () => animalApi.searchAnimals(query),
-    enabled: query.length > 0,
+    queryKey: animalKeys.search(normalizedQuery),
+    queryFn: () => animalApi.searchAnimals(normalizedQuery),
+    enabled: normalizedQuery.length >= 2,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSearchAnimalsPaginated(query: string, pageSize: number = 20) {
+  const normalizedQuery = query.trim();
+
+  return useInfiniteQuery<PaginatedData<Animal>, Error>({
+    queryKey: ["animal", "search-paginated", normalizedQuery, pageSize] as const,
+    enabled: normalizedQuery.length >= 2,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      animalApi.searchAnimalsPage(
+        normalizedQuery,
+        typeof pageParam === "number" ? pageParam : 0,
+        pageSize,
+      ),
+    getNextPageParam: (lastPage) => {
+      const pagination = lastPage.pagination;
+      if (!pagination?.hasNext) return undefined;
+      if (typeof pagination.nextOffset === "number")
+        return pagination.nextOffset;
+      return undefined;
+    },
+    staleTime: 60 * 1000,
   });
 }
 
@@ -56,7 +89,7 @@ export function useCreateAnimal() {
       animalApi.createAnimal(request),
     onSuccess: () => {
       // Invalidate animal list queries
-      queryClient.invalidateQueries({ queryKey: animalKeys.list() });
+      queryClient.invalidateQueries({ queryKey: animalKeys.listRoot() });
       queryClient.invalidateQueries({ queryKey: animalKeys.all });
     },
   });
@@ -78,7 +111,7 @@ export function useUpdateAnimal() {
       queryClient.invalidateQueries({
         queryKey: animalKeys.detail(data.animalId),
       });
-      queryClient.invalidateQueries({ queryKey: animalKeys.list() });
+      queryClient.invalidateQueries({ queryKey: animalKeys.listRoot() });
     },
   });
 }
@@ -90,7 +123,7 @@ export function useDeleteAnimal() {
     mutationFn: (animalId: number) => animalApi.deleteAnimal(animalId),
     onSuccess: () => {
       // Invalidate animal list queries
-      queryClient.invalidateQueries({ queryKey: animalKeys.list() });
+      queryClient.invalidateQueries({ queryKey: animalKeys.listRoot() });
       queryClient.invalidateQueries({ queryKey: animalKeys.all });
     },
   });

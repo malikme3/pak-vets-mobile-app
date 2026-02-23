@@ -6,6 +6,7 @@ export interface ApiSuccessResponse<T> {
   meta: {
     requestId: string;
     timestamp: string;
+    pagination?: PaginationMeta;
   };
 }
 
@@ -23,6 +24,20 @@ export interface ApiErrorResponse {
 }
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+export interface PaginationMeta {
+  limit?: number;
+  offset?: number;
+  count?: number;
+  total?: number;
+  hasNext?: boolean;
+  nextOffset?: number;
+}
+
+export interface PaginatedData<T> {
+  items: T[];
+  pagination?: PaginationMeta;
+}
 
 // Request/Response types matching backend models
 export interface Doctor {

@@ -10,8 +10,10 @@ import { animalKeys } from "../animals/hooks";
 export const caseKeys = {
   all: ["case"] as const,
   detail: (id: number) => [...caseKeys.all, id] as const,
-  list: (filters?: { animalId?: number; doctorId?: number }) =>
-    [...caseKeys.all, "list", filters] as const,
+  listRoot: () => [...caseKeys.all, "list"] as const,
+  byAnimal: (animalId: number) => [...caseKeys.listRoot(), "animal", animalId] as const,
+  byDoctor: (doctorId: number) => [...caseKeys.listRoot(), "doctor", doctorId] as const,
+  allList: () => [...caseKeys.listRoot(), "all"] as const,
 };
 
 export function useCase(caseId: number) {
@@ -24,7 +26,7 @@ export function useCase(caseId: number) {
 
 export function useCasesByAnimal(animalId: number) {
   return useQuery({
-    queryKey: caseKeys.list({ animalId }),
+    queryKey: caseKeys.byAnimal(animalId),
     queryFn: () => caseApi.getCasesByAnimal(animalId),
     enabled: animalId > 0,
   });
@@ -32,7 +34,7 @@ export function useCasesByAnimal(animalId: number) {
 
 export function useCasesByDoctor(doctorId: number) {
   return useQuery({
-    queryKey: caseKeys.list({ doctorId }),
+    queryKey: caseKeys.byDoctor(doctorId),
     queryFn: () => caseApi.getCasesByDoctor(doctorId),
     enabled: doctorId > 0,
   });
@@ -40,7 +42,7 @@ export function useCasesByDoctor(doctorId: number) {
 
 export function useAllCases() {
   return useQuery({
-    queryKey: caseKeys.list(),
+    queryKey: caseKeys.allList(),
     queryFn: () => caseApi.getAllCases(),
   });
 }
@@ -55,12 +57,12 @@ export function useCreateCase() {
         queryKey: caseKeys.detail(data.caseId),
       });
       queryClient.invalidateQueries({
-        queryKey: caseKeys.list({ animalId: data.animalId }),
+        queryKey: caseKeys.byAnimal(data.animalId),
       });
       queryClient.invalidateQueries({
-        queryKey: caseKeys.list({ doctorId: data.doctorId }),
+        queryKey: caseKeys.byDoctor(data.doctorId),
       });
-      queryClient.invalidateQueries({ queryKey: caseKeys.list() });
+      queryClient.invalidateQueries({ queryKey: caseKeys.listRoot() });
       queryClient.invalidateQueries({
         queryKey: animalKeys.detail(data.animalId),
       });
@@ -88,10 +90,10 @@ export function useUpdateCase() {
         queryKey: caseKeys.detail(data.caseId),
       });
       queryClient.invalidateQueries({
-        queryKey: caseKeys.list({ animalId: data.animalId }),
+        queryKey: caseKeys.byAnimal(data.animalId),
       });
       queryClient.invalidateQueries({
-        queryKey: caseKeys.list({ doctorId: data.doctorId }),
+        queryKey: caseKeys.byDoctor(data.doctorId),
       });
     },
   });

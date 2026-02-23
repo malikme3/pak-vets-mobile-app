@@ -1,11 +1,4 @@
-import { StatusBar } from 'expo-status-bar';
-import DashboardScreen from './src/app/(tabs)/index';
-
 export default function App() {
-  return (
-    <>
-      <DashboardScreen />
-      <StatusBar style="auto" />
-    </>
-  );
+  // Expo Router boots from index.ts (`expo-router/entry`), so this file is not used at runtime.
+  return null;
 }
