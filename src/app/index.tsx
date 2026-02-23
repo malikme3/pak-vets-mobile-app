@@ -412,6 +412,7 @@ export default function DashboardScreen() {
                   style={[
                     styles.sectionCaption,
                     (isNeonTheme || isEcoTheme) && styles.sectionCaptionAlt,
+                    styles.sectionCaptionNoUpper,
                     { color: colors.muted },
                   ]}
                 >
@@ -695,6 +696,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.7,
+  },
+  sectionCaptionNoUpper: {
+    textTransform: "none",
+    letterSpacing: 0,
   },
   limitCounter: {
     flexDirection: "row",

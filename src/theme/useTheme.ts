@@ -68,101 +68,35 @@ export function useTheme() {
         : isEcoTheme
           ? "Caretaker"
           : "Dr.",
-      dashboardSubtitle: isNeonTheme
-        ? "Command roaming constellations of cases and launch bright rescue runs."
-        : isEcoTheme
-          ? "Keep cases rooted and moving with calm, natural flow."
-        : "Keep your active cases moving and quickly find nearby visits.",
-      primaryActionTitle: isNeonTheme
-        ? "Launch New Expedition"
-        : isEcoTheme
-          ? "Start Fresh Case"
-        : "Start New Case",
-      nearbyActionTitle: isNeonTheme
-        ? "Scout Nearby Herds"
-        : isEcoTheme
-          ? "Find Nearby Farms"
-        : "Find Nearby Cases",
-      nearbyActionLoadingTitle: isNeonTheme
-        ? "Scanning cosmic trails..."
-        : isEcoTheme
-          ? "Walking the nearby fields..."
-        : "Locating nearby cases...",
-      openCasesTitle: isNeonTheme
-        ? "Active Constellations"
-        : isEcoTheme
-          ? "Open Field Cases"
-          : "Open Cases",
-      openCasesCaption: isNeonTheme
-        ? "Recent rescue missions in orbit"
-        : isEcoTheme
-          ? "Most recent active records in your region"
-        : "Most recent active records",
-      nearbyTitle: isNeonTheme
-        ? "Beacon Echoes"
-        : isEcoTheme
-          ? "Nearby Grounds"
-          : "Nearby Results",
-      nearbyHint: isNeonTheme
-        ? "Animals detected within {{radius}} km of your current orbit node."
-        : isEcoTheme
-          ? "Animals found within {{radius}} km of your current area."
-        : "Cases for animals within {{radius}} km of your location.",
-      noCasesText: isNeonTheme
-        ? "No active constellations yet. Launch your first expedition."
-        : isEcoTheme
-          ? "No open field cases yet. Start a fresh one to begin."
-        : "No active cases. Start a new case to begin.",
-      noNearbyText: isNeonTheme
-        ? "No beacon echoes in this quadrant yet."
-        : isEcoTheme
-          ? "No nearby cases found on these grounds."
-        : "No nearby cases in this area.",
-      voicePlaceholder: isNeonTheme
-        ? "Describe the creature saga or tap the star-mic to narrate..."
-        : isEcoTheme
-          ? "Describe signs from the field or tap the mic to record..."
-        : "Type chief complaint or tap the microphone to record…",
-      voiceHelpEmpty: isNeonTheme
-        ? "Tell us the key signs of this creature so the Orbit Oracle can chart a diagnosis."
-        : isEcoTheme
-          ? "Add main signs and symptoms so we can suggest the likely diagnosis."
-        : "Please add the main signs and symptoms so our AI can suggest the most likely diagnosis.",
-      voiceHelpFilled: isNeonTheme
-        ? "Refine these signs so the Orbit Oracle can sharpen the diagnosis path."
-        : isEcoTheme
-          ? "Refine signs and symptoms to improve diagnosis suggestions."
-        : "Update the main signs and symptoms so our AI can suggest the most likely diagnosis.",
-      voicePermissionDeniedTitle: isNeonTheme
-        ? "Star-Mic Locked"
-        : isEcoTheme
-          ? "Mic Access Needed"
-        : "Permission Denied",
-      voicePermissionDeniedMessage: isNeonTheme
-        ? "Microphone access is needed to capture your field narration."
-        : isEcoTheme
-          ? "Microphone access is required to capture your note."
-        : "Microphone access is required.",
-      voiceRejectedTitle: isNeonTheme
-        ? "Transmission Rejected"
-        : isEcoTheme
-          ? "Audio Rejected"
-          : "Rejected",
-      voiceRejectedMessage: isNeonTheme
-        ? "That transmission is not allowed in this orbit."
-        : isEcoTheme
-          ? "This recording content is not allowed."
-        : "Content not allowed.",
-      voiceNoSpeechTitle: isNeonTheme
-        ? "Silent Frequency"
-        : isEcoTheme
-          ? "No Voice Detected"
-        : "No Speech Detected",
-      voiceNoSpeechMessage: isNeonTheme
-        ? "No clear narration was detected. Please record again."
-        : isEcoTheme
-          ? "No clear voice was detected. Please record again."
-        : "The recording doesn't contain any detectable speech. Please try recording again.",
+      dashboardSubtitle:
+        "View and manage your active cases, or find animals near you to start a visit.",
+      primaryActionTitle: "Start New Case",
+      nearbyActionTitle: "Find Nearby Cases",
+      nearbyActionLoadingTitle: "Searching for cases near you...",
+      openCasesTitle: "Open Cases",
+      openCasesCaption: "Tap a case to open it and add diagnoses or treatments.",
+      nearbyTitle: "Nearby Cases",
+      nearbyHint:
+        "Animals with cases within {{radius}} km of your location. Tap one to view or start a visit.",
+      noCasesText:
+        "You have no open cases. Tap “Start New Case” below to create one.",
+      noNearbyText:
+        "No cases found in this area. Try a larger radius or start a new case.",
+      voicePlaceholder:
+        "Describe the chief complaint or tap the mic to record voice.",
+      voiceHelpEmpty:
+        "Add the main signs and symptoms you see—this helps suggest a diagnosis.",
+      voiceHelpFilled:
+        "You can edit the text above to improve the suggested diagnosis.",
+      voicePermissionDeniedTitle: "Microphone Access Required",
+      voicePermissionDeniedMessage:
+        "Allow microphone access in Settings to record voice notes and chief complaints.",
+      voiceRejectedTitle: "Recording Not Allowed",
+      voiceRejectedMessage:
+        "This recording could not be used. Please try again or type your note.",
+      voiceNoSpeechTitle: "No Speech Detected",
+      voiceNoSpeechMessage:
+        "We didn’t hear any speech. Speak clearly and try recording again.",
     },
   };
 }

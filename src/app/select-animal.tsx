@@ -946,7 +946,7 @@ export default function SelectAnimalScreen() {
           </View>
           <SegmentedControl
             options={[
-              { label: "Owner phone", value: "farmer_phone" },
+              { label: "Phone", value: "farmer_phone" },
               { label: "NIC #", value: "farmer_nic" },
               { label: "Name", value: "farmer_name" },
             ]}

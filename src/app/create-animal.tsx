@@ -77,6 +77,7 @@ function InputRow({
   colors,
   multiline,
   icon,
+  fullWidth,
 }: {
   label: string;
   value: string;
@@ -92,27 +93,49 @@ function InputRow({
   };
   multiline?: boolean;
   icon?: string;
+  fullWidth?: boolean;
 }) {
   return (
-    <View style={inputRowStyles.row}>
-      <View style={inputRowStyles.labelWrap}>
-        {icon ? (
-          <FontAwesome
-            name={
-              icon as "phone" | "user" | "id-card" | "map-marker" | "comment"
-            }
-            size={14}
-            color={colors.primary}
-            style={inputRowStyles.labelIcon}
-          />
-        ) : null}
-        <Text
-          style={[inputRowStyles.label, { color: colors.text }]}
-          numberOfLines={1}
-        >
-          {label}
-        </Text>
-      </View>
+    <View style={[inputRowStyles.row, fullWidth && inputRowStyles.rowStacked]}>
+      {fullWidth ? (
+        <View style={inputRowStyles.labelRow}>
+          {icon ? (
+            <FontAwesome
+              name={
+                icon as "phone" | "user" | "id-card" | "map-marker" | "comment"
+              }
+              size={14}
+              color={colors.primary}
+              style={inputRowStyles.labelIcon}
+            />
+          ) : null}
+          <Text
+            style={[inputRowStyles.label, { color: colors.text }]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        </View>
+      ) : (
+        <View style={inputRowStyles.labelWrap}>
+          {icon ? (
+            <FontAwesome
+              name={
+                icon as "phone" | "user" | "id-card" | "map-marker" | "comment"
+              }
+              size={14}
+              color={colors.primary}
+              style={inputRowStyles.labelIcon}
+            />
+          ) : null}
+          <Text
+            style={[inputRowStyles.label, { color: colors.text }]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        </View>
+      )}
       <TextInput
         style={[
           inputRowStyles.input,
@@ -122,6 +145,7 @@ function InputRow({
             color: colors.text,
           },
           multiline && inputRowStyles.inputMultiline,
+          fullWidth && inputRowStyles.inputFullWidth,
         ]}
         value={value}
         onChangeText={onChangeText}
@@ -142,6 +166,12 @@ const inputRowStyles = StyleSheet.create({
     marginBottom: 14,
     gap: 12,
   },
+  rowStacked: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 6,
+  },
+  labelRow: { flexDirection: "row", alignItems: "center" },
   labelWrap: { flexDirection: "row", alignItems: "center", minWidth: 100 },
   labelIcon: { marginRight: 6 },
   label: {
@@ -158,6 +188,9 @@ const inputRowStyles = StyleSheet.create({
     fontSize: 15,
   },
   inputMultiline: { minHeight: 72, textAlignVertical: "top" },
+  inputFullWidth: {
+    width: "100%",
+  },
 });
 
 export default function CreateAnimalScreen() {
@@ -1598,6 +1631,7 @@ export default function CreateAnimalScreen() {
                 placeholder="From location or type"
                 colors={colors}
                 multiline
+                fullWidth
               />
               <InputRow
                 label="Village"
@@ -2271,28 +2305,15 @@ export default function CreateAnimalScreen() {
                 placeholder="Optional"
                 colors={colors}
               />
-              <View style={inputRowStyles.row}>
-                <Text style={[inputRowStyles.label, { color: colors.text }]}>
-                  Tagline
-                </Text>
-                <TextInput
-                  style={[
-                    inputRowStyles.input,
-                    inputRowStyles.inputMultiline,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      color: colors.text,
-                    },
-                  ]}
-                  value={animalTagline}
-                  onChangeText={setAnimalTagline}
-                  placeholder="Short phrase"
-                  placeholderTextColor={colors.muted}
-                  multiline
-                  numberOfLines={2}
-                />
-              </View>
+              <InputRow
+                label="Tagline"
+                value={animalTagline}
+                onChangeText={setAnimalTagline}
+                placeholder="Short phrase"
+                colors={colors}
+                multiline
+                fullWidth
+              />
               <View style={styles.fullWidthField}>
                 <Text
                   style={[styles.fullWidthFieldLabel, { color: colors.text }]}
