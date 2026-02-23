@@ -18,17 +18,41 @@ export default function RootLayout() {
       <ThemePreferenceProvider>
         <QueryClientProvider client={queryClient}>
           <Stack>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="animal-details" />
-            <Stack.Screen name="select-animal" />
-            <Stack.Screen name="create-animal" />
-            <Stack.Screen name="add-diagnosis" />
-            <Stack.Screen name="add-treatment" />
-            <Stack.Screen name="add-note" />
-            <Stack.Screen name="add-media" />
-            <Stack.Screen name="create-case" />
-            <Stack.Screen name="case-detail" />
-            <Stack.Screen name="nearby-cases" />
+            <Stack.Screen name="index" options={{ title: "Home" }} />
+            <Stack.Screen
+              name="animal-details"
+              options={{ title: "Animal Details" }}
+            />
+            <Stack.Screen
+              name="select-animal"
+              options={{ title: "Select Animal" }}
+            />
+            <Stack.Screen
+              name="create-animal"
+              options={{ title: "Create Animal" }}
+            />
+            <Stack.Screen
+              name="add-diagnosis"
+              options={{ title: "Add Diagnosis" }}
+            />
+            <Stack.Screen
+              name="add-treatment"
+              options={{ title: "Add Treatment" }}
+            />
+            <Stack.Screen name="add-note" options={{ title: "Add Note" }} />
+            <Stack.Screen name="add-media" options={{ title: "Add Media" }} />
+            <Stack.Screen
+              name="create-case"
+              options={{ title: "Create Case" }}
+            />
+            <Stack.Screen
+              name="case-detail"
+              options={{ title: "Case Details" }}
+            />
+            <Stack.Screen
+              name="nearby-cases"
+              options={{ title: "Nearby Cases" }}
+            />
           </Stack>
         </QueryClientProvider>
       </ThemePreferenceProvider>

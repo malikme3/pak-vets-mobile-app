@@ -9,6 +9,8 @@ import {
   Image,
   ImageBackground,
   Alert,
+  TouchableOpacity,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -101,6 +103,21 @@ export default function AnimalDetailsScreen() {
     }
   }, [animalId, doctor, createCaseMutation, router]);
 
+  const handleDialPhone = useCallback(async (phoneNumber: string) => {
+    const sanitized = phoneNumber.replace(/[^\d+]/g, "");
+    const url = `tel:${sanitized}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert("Dialer unavailable", "This device cannot place calls.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Error", "Unable to open the dialer.");
+    }
+  }, []);
+
   if (animalLoading) {
     return (
       <SafeAreaView
@@ -167,6 +184,12 @@ export default function AnimalDetailsScreen() {
             >
               <View
                 style={[
+                  styles.profileHeaderOverlayTop,
+                  { backgroundColor: "rgba(0,0,0,0.2)" },
+                ]}
+              />
+              <View
+                style={[
                   styles.profileHeaderOverlay,
                   { backgroundColor: "rgba(0,0,0,0.45)" },
                 ]}
@@ -231,19 +254,33 @@ export default function AnimalDetailsScreen() {
                 Farmer
               </Text>
             </View>
-            {animal.farmer?.fullName && (
-              <Text style={[styles.farmerName, { color: colors.text }]}>
-                {capitalizeFirst(animal.farmer.fullName)}
-              </Text>
-            )}
-            {animal.farmer?.phoneNumber && (
-              <Text
-                style={[styles.farmerDetail, { color: colors.muted }]}
-                selectable
-              >
-                {animal.farmer.phoneNumber}
-              </Text>
-            )}
+            <View style={styles.farmerTopRow}>
+              {animal.farmer?.fullName ? (
+                <Text
+                  style={[styles.farmerName, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {capitalizeFirst(animal.farmer.fullName)}
+                </Text>
+              ) : (
+                <View />
+              )}
+              {animal.farmer?.phoneNumber ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    handleDialPhone(animal.farmer?.phoneNumber ?? "")
+                  }
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[styles.farmerPhone, { color: colors.primary }]}
+                    numberOfLines={1}
+                  >
+                    {animal.farmer.phoneNumber}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
             {animal.farmer?.villageName && (
               <Text style={[styles.farmerDetail, { color: colors.muted }]}>
                 {animal.farmer.villageName}
@@ -417,16 +454,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   profileHeader: {
-    height: 120,
+    height: 156,
     marginBottom: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 4,
   },
   profileHeaderBg: {
     flex: 1,
     justifyContent: "flex-end",
   },
   profileHeaderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  profileHeaderOverlayTop: {
     ...StyleSheet.absoluteFillObject,
   },
   profileHeaderContent: {
@@ -462,12 +507,12 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    gap: 10,
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   caseCount: {
     fontSize: 13,
@@ -481,13 +526,27 @@ const styles = StyleSheet.create({
   ownerPhone: {
     fontSize: 15,
   },
+  farmerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
   farmerName: {
+    flex: 1,
     fontSize: 17,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  farmerPhone: {
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "right",
+    maxWidth: "48%",
   },
   farmerDetail: {
     fontSize: 15,
+    marginTop: 4,
   },
   summaryText: {
     fontSize: 15,

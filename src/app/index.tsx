@@ -398,7 +398,7 @@ export default function DashboardScreen() {
 
           <View style={styles.recentCasesSection}>
             <View style={styles.sectionHeaderRow}>
-              <View>
+              <View style={styles.sectionHeaderTextWrap}>
                 <Text
                   style={[
                     styles.sectionTitle,
@@ -419,6 +419,16 @@ export default function DashboardScreen() {
                 </Text>
               </View>
               <View style={styles.limitCounter}>
+                <View style={styles.limitHintWrap}>
+                  <FontAwesome
+                    name="info-circle"
+                    size={11}
+                    color={colors.muted}
+                  />
+                  <Text style={[styles.limitHintText, { color: colors.muted }]}>
+                    Show up to
+                  </Text>
+                </View>
                 <TouchableOpacity
                   onPress={() =>
                     setActiveCasesLimit((n) =>
@@ -655,10 +665,16 @@ const styles = StyleSheet.create({
   },
   sectionHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
+    flexWrap: "wrap",
     marginBottom: 12,
     gap: 10,
+  },
+  sectionHeaderTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
   sectionTitle: {
     fontSize: 18,
@@ -684,6 +700,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 0,
+    marginLeft: "auto",
+    marginTop: 2,
+  },
+  limitHintWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginRight: 2,
+  },
+  limitHintText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
   limitButton: {
     width: 30,

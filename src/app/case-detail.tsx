@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  ImageBackground,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -35,7 +36,8 @@ import {
   getDownloadSignedUrl,
 } from "../services/sharedServicesApi";
 import { caseDiagnosisApi, caseTreatmentApi } from "../services/vetApi";
-import { getSpeciesImageSource } from "../utils/speciesImage";
+import { SpeciesIcon } from "../components/SpeciesIcon";
+import { getSpeciesHeroBannerSource } from "../utils/speciesImage";
 import type {
   CaseDiagnosis,
   CaseTreatment,
@@ -183,7 +185,7 @@ const DEFAULT_EXPANDED: AccordionKey[] = ["diagnoses"];
 export default function CaseDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { colors } = useTheme();
+  const { colors, variant } = useTheme();
 
   const caseId = params.caseId ? Number(params.caseId) : undefined;
   const [expanded, setExpanded] = useState<Record<AccordionKey, boolean>>(
@@ -573,91 +575,108 @@ export default function CaseDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header: row 1 = date | species+icon, row 2 = tagline, row 3 = chief complaint (editable on tap) */}
-        <View
-          style={[
-            styles.header,
-            {
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border,
-              paddingBottom: 16,
-            },
-          ]}
+        <ImageBackground
+          source={getSpeciesHeroBannerSource(animal?.species ?? "", variant)}
+          style={styles.headerHero}
+          imageStyle={styles.headerHeroImage}
         >
-          {/* Row 1: Species + icon (tappable to animal profile) */}
-          <View style={styles.headerRow1}>
-            {animal ? (
-              <TouchableOpacity
-                style={styles.headerSpeciesRow}
-                onPress={() =>
-                  router.push(`/animal-details?animalId=${animal.animalId}`)
-                }
-                activeOpacity={0.7}
-              >
-                <Image
-                  source={getSpeciesImageSource(animal.species)}
-                  style={styles.headerSpeciesAvatar}
-                  resizeMode="contain"
-                />
-                <View style={styles.headerSpeciesTextBlock}>
-                  <Text
-                    style={[styles.headerSpeciesText, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    {animal.species}
-                  </Text>
-                  {animal.breed != null &&
-                  animal.breed !== "null" &&
-                  String(animal.breed).trim() !== "" ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.headerScrim,
+              {
+                backgroundColor: colors.surface,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.headerContent,
+              {
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            {/* Row 1: Species + icon (tappable to animal profile) */}
+            <View style={styles.headerRow1}>
+              {animal ? (
+                <TouchableOpacity
+                  style={styles.headerSpeciesRow}
+                  onPress={() =>
+                    router.push(`/animal-details?animalId=${animal.animalId}`)
+                  }
+                  activeOpacity={0.7}
+                >
+                  <SpeciesIcon
+                    species={animal.species}
+                    size={36}
+                    style={styles.headerSpeciesAvatar}
+                    resizeMode="contain"
+                  />
+                  <View style={styles.headerSpeciesTextBlock}>
                     <Text
-                      style={[
-                        styles.headerSpeciesText,
-                        styles.headerBreedText,
-                        { color: colors.text },
-                      ]}
+                      style={[styles.headerSpeciesText, { color: colors.text }]}
                       numberOfLines={1}
                     >
-                      {animal.breed}
+                      {animal.species}
                     </Text>
-                  ) : null}
-                </View>
-              </TouchableOpacity>
-            ) : (
-              <Text style={[styles.headerSpeciesText, { color: colors.muted }]}>
-                —
+                    {animal.breed != null &&
+                    animal.breed !== "null" &&
+                    String(animal.breed).trim() !== "" ? (
+                      <Text
+                        style={[
+                          styles.headerSpeciesText,
+                          styles.headerBreedText,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {animal.breed}
+                      </Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <Text
+                  style={[styles.headerSpeciesText, { color: colors.muted }]}
+                >
+                  —
+                </Text>
+              )}
+            </View>
+            {/* Row 2: Animal tagline */}
+            {animal?.animalTagline ? (
+              <Text
+                style={[styles.headerTagline, { color: colors.muted }]}
+                numberOfLines={2}
+              >
+                {animal.animalTagline}
               </Text>
-            )}
+            ) : null}
+            {/* Row 3: Date (own row so always fully visible) */}
+            <View style={styles.headerDateRow}>
+              <Text style={[styles.headerDate, { color: colors.muted }]}>
+                {caseData ? formatDate(caseData.caseDatetime) : ""}
+              </Text>
+            </View>
+            {/* Row 4: Chief complaint — editable on tap */}
+            <ChiefComplaintField
+              ref={chiefComplaintInputRef}
+              value={chiefComplaint}
+              onChangeText={setChiefComplaint}
+              disabled={isLoading}
+              showVoiceInput
+              onRecordingComplete={(_, rawText, improvedText) => {
+                const text = (improvedText ?? rawText).trim();
+                if (text !== "") setChiefComplaint(text);
+              }}
+              onTranscriptReady={(transcript) => setChiefComplaint(transcript)}
+              onVoiceError={(error) => Alert.alert("Error", error.message)}
+              caseId={caseData?.caseId}
+            />
           </View>
-          {/* Row 2: Animal tagline */}
-          {animal?.animalTagline ? (
-            <Text
-              style={[styles.headerTagline, { color: colors.muted }]}
-              numberOfLines={2}
-            >
-              {animal.animalTagline}
-            </Text>
-          ) : null}
-          {/* Row 3: Date (own row so always fully visible) */}
-          <View style={styles.headerDateRow}>
-            <Text style={[styles.headerDate, { color: colors.muted }]}>
-              {caseData ? formatDate(caseData.caseDatetime) : ""}
-            </Text>
-          </View>
-          {/* Row 4: Chief complaint — editable on tap */}
-          <ChiefComplaintField
-            ref={chiefComplaintInputRef}
-            value={chiefComplaint}
-            onChangeText={setChiefComplaint}
-            disabled={isLoading}
-            showVoiceInput
-            onRecordingComplete={(_, rawText, improvedText) => {
-              const text = (improvedText ?? rawText).trim();
-              if (text !== "") setChiefComplaint(text);
-            }}
-            onTranscriptReady={(transcript) => setChiefComplaint(transcript)}
-            onVoiceError={(error) => Alert.alert("Error", error.message)}
-            caseId={caseData?.caseId}
-          />
-        </View>
+        </ImageBackground>
 
         {/* 1. Diagnoses (with AI suggestions inline) */}
         <AccordionSection
@@ -1353,8 +1372,23 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 24,
   },
-  header: {
+  headerHero: {
     marginBottom: 20,
+    borderRadius: 16,
+    overflow: "hidden",
+    minHeight: 125,
+  },
+  headerHeroImage: {
+    opacity: 0.65,
+    resizeMode: "cover",
+  },
+  headerScrim: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.5,
+  },
+  headerContent: {
+    padding: 16,
+    paddingBottom: 16,
   },
   headerDate: {
     fontSize: 13,
@@ -1382,9 +1416,6 @@ const styles = StyleSheet.create({
     height: 36,
     marginRight: 8,
     backgroundColor: "transparent",
-  },
-  headerSpeciesIcon: {
-    marginRight: 6,
   },
   headerSpeciesTextBlock: {
     flex: 1,

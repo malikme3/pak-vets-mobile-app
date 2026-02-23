@@ -36,7 +36,7 @@ import {
   getBucketName,
 } from "../services/sharedServicesApi";
 import { formatDistance } from "../utils/formatDistance";
-import { getSpeciesImageSource } from "../utils/speciesImage";
+import { SpeciesIcon } from "../components/SpeciesIcon";
 import type { Animal, MatchAnimalImageResponse } from "../types/api";
 
 type OwnerSearchFilter = "farmer_phone" | "farmer_nic" | "farmer_name";
@@ -83,17 +83,13 @@ const nearbyAnimalRowStyles = StyleSheet.create({
     paddingHorizontal: 0,
     minHeight: 44,
   },
-  avatar: {
+  avatarContainer: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    overflow: "hidden",
     marginRight: 10,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarImage: { width: "100%", height: "100%" },
-  avatarPlaceholder: { fontSize: 16, fontWeight: "600" },
   content: { flex: 1, marginRight: 8, minWidth: 0 },
   title: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
   tagline: { fontSize: 13 },
@@ -120,23 +116,16 @@ function NearbyAnimalRow({
   const title = [animal.species, animal.breed].filter(Boolean).join(" • ");
   const distanceStr =
     animal.distanceKm != null ? formatDistance(animal.distanceKm) : "";
-  const speciesImage = getSpeciesImageSource(animal.species);
-
   return (
     <TouchableOpacity
       style={nearbyAnimalRowStyles.row}
       onPress={() => setTimeout(onPress, 50)}
       activeOpacity={0.7}
     >
-      <View
-        style={[
-          nearbyAnimalRowStyles.avatar,
-          { backgroundColor: colors.border },
-        ]}
-      >
-        <Image
-          source={speciesImage}
-          style={nearbyAnimalRowStyles.avatarImage}
+      <View style={nearbyAnimalRowStyles.avatarContainer}>
+        <SpeciesIcon
+          species={animal.species}
+          size={40}
           resizeMode="cover"
         />
       </View>
