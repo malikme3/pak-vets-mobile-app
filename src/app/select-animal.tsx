@@ -33,6 +33,7 @@ import { useCreateCase } from "../features/cases/hooks";
 import { animalApi } from "../services/vetApi";
 import {
   getUploadSignedUrl,
+  getDownloadSignedUrl,
   getBucketName,
 } from "../services/sharedServicesApi";
 import { formatDistance } from "../utils/formatDistance";
@@ -506,7 +507,7 @@ export default function SelectAnimalScreen() {
   const uploadImageToS3 = async (
     imageUri: string,
     s3Key: string,
-  ): Promise<string> => {
+  ): Promise<{ fileUrl: string; s3Key: string }> => {
     const bucketName = getBucketName();
     const { signedUrl, fileUrl } = await getUploadSignedUrl(
       bucketName,
@@ -528,7 +529,7 @@ export default function SelectAnimalScreen() {
       body: bytes,
       headers: { "Content-Type": "image/jpeg" },
     });
-    return fileUrl;
+    return { fileUrl, s3Key };
   };
 
   const requestMediaPermission = async () => {
@@ -557,7 +558,14 @@ export default function SelectAnimalScreen() {
 
   const processImageUriAndMatch = async (uri: string) => {
     const s3Key = `match-query/original-image/${Date.now()}-${imageMatchType.toLowerCase()}.jpg`;
-    const imageUrl = await uploadImageToS3(uri, s3Key);
+    const { fileUrl } = await uploadImageToS3(uri, s3Key);
+    const bucketName = getBucketName();
+    let imageUrl = fileUrl;
+    try {
+      imageUrl = await getDownloadSignedUrl(bucketName, s3Key);
+    } catch {
+      // fallback to fileUrl if signed download fails
+    }
     const response = await animalApi.matchAnimalImage({
       queryImageUrl: imageUrl,
       expectedType: imageMatchType,
