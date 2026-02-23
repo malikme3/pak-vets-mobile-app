@@ -44,6 +44,8 @@ import { estimateWeightKg } from "../utils/animalWeight";
 import { formatDistance } from "../utils/formatDistance";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { VoiceMessageRecorder } from "../components/voice/VoiceMessageRecorder";
+import { useBackNavigationGuard } from "../hooks/useBackNavigationGuard";
+import { useStepFlow } from "../hooks/useStepFlow";
 
 type VoiceRecording = {
   s3Key: string;
@@ -240,6 +242,7 @@ export default function CreateAnimalScreen() {
   );
   const didNavigateFromAttributesRef = useRef(false);
   const existingAnimalIdRef = useRef<number | null>(null);
+  const allowExitRef = useRef(false);
 
   // Nearby farmers (farmer step): radius in km, default 0.25; options 0.25, 0.5, 1, 2
   const NEARBY_RADIUS_OPTIONS = [0.25, 0.5, 1, 2] as const;
@@ -304,6 +307,8 @@ export default function CreateAnimalScreen() {
   // On "Animal details" step: if we have an existing animal ID (from previous step / select-animal), fetch latest from backend (includes AI-updated fields) and pre-fill form
   useEffect(() => {
     if (step !== "attributes") return;
+    didNavigateFromAttributesRef.current = false;
+    allowExitRef.current = false;
     const animalId = existingAnimalIdRef.current;
     if (animalId == null) return;
     let cancelled = false;
@@ -768,6 +773,7 @@ export default function CreateAnimalScreen() {
 
       if (isReturnToCreateCase && doctor) {
         didNavigateFromAttributesRef.current = true;
+        allowExitRef.current = true;
         setCreatingCase(true);
         try {
           const caseData = await createCaseMutation.mutateAsync({
@@ -777,7 +783,7 @@ export default function CreateAnimalScreen() {
             chiefComplaint: chiefComplaint.trim() || undefined,
             status: "IN_PROGRESS",
           });
-          router.replace(`/case-detail?caseId=${caseData.caseId}`);
+          router.push(`/case-detail?caseId=${caseData.caseId}`);
         } catch (caseErr) {
           didNavigateFromAttributesRef.current = false;
           Alert.alert(
@@ -793,6 +799,7 @@ export default function CreateAnimalScreen() {
       }
 
       didNavigateFromAttributesRef.current = true;
+      allowExitRef.current = true;
       try {
         if (returnTo && typeof returnTo === "string") {
           router.replace(`${toPath(returnTo)}?animalId=${animalIdToUse}`);
@@ -825,12 +832,19 @@ export default function CreateAnimalScreen() {
     createCaseMutation,
   ]);
 
-  const goBack = () => {
-    if (step === "upload") router.back();
-    else if (step === "farmer") setStep("upload");
-    else if (step === "complaint") setStep("farmer");
-    else if (step === "attributes") setStep("complaint");
-  };
+  const stepFlow = useStepFlow({
+    steps: STEPS.map((s) => s.key),
+    currentStep: step,
+    setStep,
+    onExitFirst: () => router.back(),
+  });
+
+  useBackNavigationGuard({
+    hideHeader: true,
+    shouldHandleBack: () => !stepFlow.isFirstStep,
+    onBack: stepFlow.goBack,
+    allowExitRef,
+  });
 
   /** Per development-guidelines: avoid ScrollView canceling button press. */
   const deferPress = useCallback(
@@ -843,12 +857,10 @@ export default function CreateAnimalScreen() {
     selectedImages.some((i) => i.type === "ear") &&
     selectedImages.some((i) => i.type === "body");
 
-  const currentStepIndex = STEPS.findIndex((s) => s.key === step) + 1;
-
   const renderHeader = (title: string) => (
     <View style={[styles.header, { borderBottomColor: colors.border }]}>
       <TouchableOpacity
-        onPress={goBack}
+        onPress={stepFlow.goBack}
         style={[styles.backButton, { backgroundColor: colors.surface }]}
         activeOpacity={0.7}
       >
@@ -866,7 +878,8 @@ export default function CreateAnimalScreen() {
     </View>
   );
 
-  const progressPercent = (currentStepIndex / STEPS.length) * 100;
+  const currentStepIndex = stepFlow.currentIndex + 1;
+  const progressPercent = stepFlow.progressPercent;
   const renderStepper = () => (
     <View
       style={[

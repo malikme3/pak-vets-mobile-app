@@ -117,6 +117,32 @@ Dark mode:
   - `status` (number)
 - Map `fieldErrors` to React Hook Form errors
 
+---
+
+## 🧭 Step Flows (Required for Multi-step Screens)
+
+- Use `useStepFlow` to manage step index, progress, and back navigation.
+- Use `useBackNavigationGuard` to handle Android hardware back and in-app back.
+- Always allow programmatic navigation after submit by setting `allowExitRef.current = true` before `router.push/replace`.
+- Do not implement custom back interception in screens; use the hooks for uniform behavior.
+
+Example usage:
+```ts
+const stepFlow = useStepFlow({
+  steps: STEPS.map((s) => s.key),
+  currentStep: step,
+  setStep,
+  onExitFirst: () => router.back(),
+});
+
+useBackNavigationGuard({
+  hideHeader: true,
+  shouldHandleBack: () => !stepFlow.isFirstStep,
+  onBack: stepFlow.goBack,
+  allowExitRef,
+});
+```
+
 ### Logging
 - Dev mode: log request/response summary (no secrets)
 - Never log tokens or PII in production builds
