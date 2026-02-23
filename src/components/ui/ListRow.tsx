@@ -1,17 +1,19 @@
 import {
-  TouchableOpacity,
+  Pressable,
   View,
   Text,
   StyleSheet,
+  StyleProp,
   ViewStyle,
 } from "react-native";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../../theme/useTheme";
 
 interface ListRowProps {
   title: string;
   subtitle?: string;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
@@ -38,19 +40,21 @@ export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
           </Text>
         )}
       </View>
-      <Text style={[styles.chevron, { color: colors.muted }]}>›</Text>
+      <FontAwesome name="chevron-right" size={14} color={colors.muted} />
     </View>
   );
 
   if (onPress) {
     return (
-      <TouchableOpacity
+      <Pressable
         onPress={handlePress}
-        activeOpacity={0.7}
-        style={styles.touchable}
+        style={({ pressed }) => [
+          styles.touchable,
+          pressed && { backgroundColor: `${colors.primary}10` },
+        ]}
       >
         {content}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
 
@@ -64,9 +68,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    minHeight: 44,
+    minHeight: 48,
   },
   content: {
     flex: 1,
@@ -74,13 +78,10 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: "600",
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-  },
-  chevron: {
-    fontSize: 24,
   },
 });

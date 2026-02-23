@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useTheme } from "../../theme/useTheme";
 
 interface SegmentedControlProps {
@@ -32,16 +32,16 @@ export function SegmentedControl({
 
         return (
           <View key={option.value} style={styles.segmentWrapper}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              style={({ pressed }) => [
                 styles.segment,
                 isFirst && styles.segmentFirst,
                 isLast && styles.segmentLast,
                 isSelected && { backgroundColor: colors.primary },
                 !isSelected && { backgroundColor: colors.surface },
+                pressed && !isSelected && { backgroundColor: `${colors.primary}12` },
               ]}
               onPress={() => onValueChange(option.value)}
-              activeOpacity={0.7}
             >
               <Text
                 style={[
@@ -51,7 +51,7 @@ export function SegmentedControl({
               >
                 {option.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             {showRightSeparator && (
               <View
                 style={[styles.separator, { backgroundColor: colors.border }]}
@@ -67,9 +67,9 @@ export function SegmentedControl({
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    minHeight: 44,
+    minHeight: 48,
     overflow: "hidden",
   },
   segmentWrapper: {
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 12,
   },
   segmentFirst: {
@@ -102,5 +102,6 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 14,
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
 });

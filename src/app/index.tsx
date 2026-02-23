@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -60,16 +60,20 @@ export default function DashboardScreen() {
     }, [doctor?.doctorId, refetchCases]),
   );
 
-  const activeCases = allCases
-    ? [...allCases]
-        .filter((c) => c.isActive)
-        .sort(
-          (a, b) =>
-            new Date(b.caseDatetime).getTime() -
-            new Date(a.caseDatetime).getTime(),
-        )
-        .slice(0, activeCasesLimit)
-    : [];
+  const activeCases = useMemo(
+    () =>
+      allCases
+        ? [...allCases]
+            .filter((c) => c.isActive)
+            .sort(
+              (a, b) =>
+                new Date(b.caseDatetime).getTime() -
+                new Date(a.caseDatetime).getTime(),
+            )
+            .slice(0, activeCasesLimit)
+        : [],
+    [allCases, activeCasesLimit],
+  );
 
   const findNearby = useCallback(async () => {
     if (!doctor) return;
@@ -203,20 +207,20 @@ export default function DashboardScreen() {
             onPress={() => refetchDoctor()}
             variant="primary"
             style={styles.retryButton}
+            leftIcon={<FontAwesome name="refresh" size={14} color={colors.onPrimary} />}
           />
         </View>
       </SafeAreaView>
     );
   }
 
-  const handleNewCase = () => {
-    router.push("/create-case");
-  };
-
-  // Guard: ensure doctor exists before rendering
   if (!doctor) {
     return null;
   }
+
+  const handleNewCase = () => {
+    router.push("/create-case");
+  };
 
   return (
     <>
@@ -227,56 +231,50 @@ export default function DashboardScreen() {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={[styles.welcomeText, { color: colors.text }]}>
-            Welcome to Dashboard
-          </Text>
-
-          {/* Doctor Header Card */}
-          <Card style={styles.doctorCard}>
-            <View style={styles.doctorHeader}>
-              <View style={styles.doctorInfo}>
-                <Text style={[styles.doctorName, { color: colors.text }]}>
-                  {doctor.fullName}
-                </Text>
-                {doctor.locationName && (
-                  <Text
-                    style={[styles.doctorLocation, { color: colors.muted }]}
-                  >
-                    {doctor.locationName}
-                  </Text>
-                )}
+          <Card style={[styles.heroCard, { backgroundColor: `${colors.primary}14` }]}>
+            <View style={styles.heroTop}>
+              <View style={styles.heroBadge}>
+                <FontAwesome name="stethoscope" size={14} color={colors.primary} />
+                <Text style={[styles.heroBadgeText, { color: colors.primary }]}>Dashboard</Text>
               </View>
             </View>
+            <Text style={[styles.heroTitle, { color: colors.text }]}>Welcome back, Dr. {doctor.fullName}</Text>
+            <Text style={[styles.heroSubtitle, { color: colors.muted }]}>
+              Keep your active cases moving and quickly find nearby visits.
+            </Text>
+            {doctor.locationName ? (
+              <View style={styles.locationRow}>
+                <FontAwesome name="map-marker" size={13} color={colors.muted} />
+                <Text style={[styles.locationText, { color: colors.muted }]}>{doctor.locationName}</Text>
+              </View>
+            ) : null}
           </Card>
 
-          {/* Quick Actions */}
           <View style={styles.quickActionsSection}>
             <Button
-              title="New Case"
+              title="Start New Case"
               onPress={handleNewCase}
               variant="primary"
+              leftIcon={<FontAwesome name="plus" size={12} color={colors.onPrimary} />}
             />
             <Button
-              title={finding ? "Finding…" : "Find nearby cases"}
+              title={finding ? "Locating nearby cases..." : "Find Nearby Cases"}
               onPress={findNearby}
               variant="secondary"
               style={styles.quickActionButton}
               disabled={finding}
+              leftIcon={<FontAwesome name="location-arrow" size={12} color={colors.primary} />}
             />
           </View>
 
-          {/* Active Cases */}
           <View style={styles.recentCasesSection}>
             <View style={styles.sectionHeaderRow}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: colors.text, marginBottom: 0 },
-                ]}
-              >
-                Active Cases
-              </Text>
+              <View>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Open Cases</Text>
+                <Text style={[styles.sectionCaption, { color: colors.muted }]}>Most recent active records</Text>
+              </View>
               <View style={styles.limitCounter}>
                 <TouchableOpacity
                   onPress={() =>
@@ -287,11 +285,11 @@ export default function DashboardScreen() {
                   style={[
                     styles.limitButton,
                     {
-                      borderColor: colors.primary,
+                      borderColor: `${colors.primary}44`,
                       backgroundColor: colors.surface,
                     },
                   ]}
-                  accessibilityLabel="Decrease limit"
+                  accessibilityLabel="Decrease list limit"
                 >
                   <FontAwesome name="minus" size={12} color={colors.primary} />
                 </TouchableOpacity>
@@ -310,11 +308,11 @@ export default function DashboardScreen() {
                   style={[
                     styles.limitButton,
                     {
-                      borderColor: colors.primary,
+                      borderColor: `${colors.primary}44`,
                       backgroundColor: colors.surface,
                     },
                   ]}
-                  accessibilityLabel="Increase limit"
+                  accessibilityLabel="Increase list limit"
                 >
                   <FontAwesome name="plus" size={12} color={colors.primary} />
                 </TouchableOpacity>
@@ -331,23 +329,18 @@ export default function DashboardScreen() {
             ) : (
               <Card style={styles.emptyCard}>
                 <Text style={[styles.emptyText, { color: colors.muted }]}>
-                  No active cases
+                  No active cases. Start a new case to begin.
                 </Text>
               </Card>
             )}
           </View>
 
-          {/* Nearby cases (shown after "Find nearby cases" is used) */}
           {nearbyCases !== null && (
             <View style={styles.nearbySection}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: colors.text, marginBottom: 8 },
-                ]}
-              >
-                Nearby cases
-              </Text>
+              <View style={styles.nearbyHeader}>
+                <FontAwesome name="crosshairs" size={14} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Nearby Results</Text>
+              </View>
               {locationError && (
                 <Text
                   style={[styles.nearbyError, { color: colors.danger }]}
@@ -370,7 +363,7 @@ export default function DashboardScreen() {
               ) : (
                 <Card style={styles.emptyCard}>
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
-                    No cases for animals in this area
+                    No nearby cases in this area.
                   </Text>
                 </Card>
               )}
@@ -391,47 +384,73 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingBottom: 28,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 16,
+  heroCard: {
+    marginTop: 4,
+    marginBottom: 8,
+    borderWidth: 0,
   },
-  doctorCard: {
-    marginTop: 8,
+  heroTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-  doctorHeader: {
+  heroBadge: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
-  doctorInfo: {
-    flex: 1,
+  heroBadgeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
-  doctorName: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 4,
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 30,
   },
-  doctorLocation: {
-    fontSize: 16,
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  locationRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   quickActionsSection: {
-    marginTop: 16,
+    marginTop: 14,
     gap: 12,
   },
   quickActionButton: {
     marginTop: 0,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 10,
+  recentCasesSection: {
+    marginTop: 24,
   },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 12,
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 0,
+  },
+  sectionCaption: {
+    fontSize: 13,
+    marginTop: 2,
   },
   limitCounter: {
     flexDirection: "row",
@@ -439,24 +458,27 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   limitButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   limitValue: {
     fontSize: 16,
-    fontWeight: "600",
-    minWidth: 24,
+    fontWeight: "700",
+    minWidth: 22,
     textAlign: "center",
   },
-  recentCasesSection: {
-    marginTop: 16,
-  },
   nearbySection: {
-    marginTop: 24,
+    marginTop: 26,
+  },
+  nearbyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
   },
   nearbyHint: {
     fontSize: 14,
@@ -473,10 +495,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyCard: {
-    paddingVertical: 16,
+    paddingVertical: 18,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 15,
     textAlign: "center",
   },
   loadingContainer: {
@@ -505,33 +527,29 @@ const styles = StyleSheet.create({
   caseCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: "hidden",
-    height: 60,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    minHeight: 72,
+    borderWidth: 1,
   },
   caseCardPhoto: {
-    width: 60,
-    height: 60,
+    width: 72,
+    height: 72,
     backgroundColor: "#2a2a2a",
     justifyContent: "center",
     alignItems: "center",
   },
   caseCardPhotoImage: {
-    width: 60,
-    height: 60,
+    width: 72,
+    height: 72,
   },
   caseCardPhotoPlaceholder: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
   },
   caseCardBody: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     justifyContent: "center",
     minWidth: 0,
@@ -540,7 +558,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 2,
+    marginBottom: 3,
   },
   caseCardTitle: {
     fontSize: 14,
@@ -558,15 +576,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
-    maxWidth: 80,
+    borderRadius: 9,
+    maxWidth: 84,
   },
   distanceBadgeIconWrap: {
     marginRight: 4,
   },
   distanceBadgeText: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   caseCardStatusIcon: {
     width: 26,
@@ -578,29 +596,29 @@ const styles = StyleSheet.create({
   caseCardComplaint: {
     fontSize: 12,
     lineHeight: 16,
-    marginBottom: 0,
-    opacity: 0.9,
+    marginBottom: 1,
+    opacity: 0.95,
   },
   caseCardMeta: {
     fontSize: 12,
-    opacity: 0.75,
+    opacity: 0.78,
   },
   caseCardActions: {
     flexDirection: "row",
     alignItems: "center",
     marginLeft: 8,
+    paddingRight: 10,
   },
   caseCardDeleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
 });
 
-// Modern case card: one side photo, other side case info + status icon
 interface CaseRowProps {
   caseItem: Case;
   formatDate: (dateString: string) => string;
@@ -621,14 +639,19 @@ function CaseRow({
   const { data: animal } = useAnimal(caseItem.animalId);
   const faceUrl =
     animalImages.find((i) => i.imageType === "FACE")?.s3Url ?? null;
-  const ownerName = animal?.farmer?.fullName ?? "—";
+  const ownerName = animal?.farmer?.fullName ?? "-";
   const status = caseItem.status ?? "IN_PROGRESS";
   const isCompleted = status === "COMPLETED";
   const distanceKm = getCaseDistanceKm(caseItem);
   const distanceLabel = formatCaseDistanceLabel(distanceKm);
 
   return (
-    <View style={[styles.caseCard, { backgroundColor: colors.surface }]}>
+    <View
+      style={[
+        styles.caseCard,
+        { backgroundColor: colors.surface, borderColor: `${colors.border}` },
+      ]}
+    >
       <TouchableOpacity
         style={styles.caseCardPhoto}
         onPress={onPress}
@@ -727,7 +750,7 @@ function CaseRow({
           disabled={isDeleting}
           style={[
             styles.caseCardDeleteBtn,
-            { borderColor: colors.danger },
+            { borderColor: `${colors.danger}a3` },
             isDeleting && { opacity: 0.5 },
           ]}
           activeOpacity={0.7}
@@ -735,7 +758,7 @@ function CaseRow({
           {isDeleting ? (
             <ActivityIndicator size="small" color={colors.danger} />
           ) : (
-            <FontAwesome name="trash-o" size={12} color={colors.danger} />
+            <FontAwesome name="trash-o" size={13} color={colors.danger} />
           )}
         </TouchableOpacity>
       </View>

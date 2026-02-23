@@ -1,8 +1,10 @@
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   StyleSheet,
   ActivityIndicator,
+  View,
+  StyleProp,
   ViewStyle,
 } from "react-native";
 import { useTheme } from "../../theme/useTheme";
@@ -13,7 +15,9 @@ interface ButtonProps {
   variant?: "primary" | "secondary";
   loading?: boolean;
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 }
 
 export function Button({
@@ -23,6 +27,8 @@ export function Button({
   loading = false,
   disabled = false,
   style,
+  leftIcon,
+  rightIcon,
 }: ButtonProps) {
   const { colors } = useTheme();
   const isPrimary = variant === "primary";
@@ -35,53 +41,71 @@ export function Button({
   };
 
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      style={({ pressed }) => [
         styles.button,
         isPrimary
           ? { backgroundColor: colors.primary }
           : {
-              backgroundColor: "transparent",
+              backgroundColor: `${colors.primary}12`,
               borderWidth: 1,
-              borderColor: colors.primary,
+              borderColor: `${colors.primary}30`,
             },
-        isDisabled && { opacity: 0.5 },
+        pressed && !isDisabled && styles.buttonPressed,
+        isDisabled && { opacity: 0.55 },
         style,
       ]}
       onPress={handlePress}
       disabled={isDisabled}
-      activeOpacity={0.7}
     >
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={isPrimary ? colors.surface : colors.primary}
+          color={isPrimary ? colors.onPrimary : colors.primary}
         />
       ) : (
-        <Text
-          style={[
-            styles.buttonText,
-            { color: isPrimary ? colors.surface : colors.primary },
-          ]}
-        >
-          {title}
-        </Text>
+        <View style={styles.content}>
+          {leftIcon ? <View style={styles.iconWrap}>{leftIcon}</View> : null}
+          <Text
+            style={[
+              styles.buttonText,
+              { color: isPrimary ? colors.onPrimary : colors.primary },
+            ]}
+          >
+            {title}
+          </Text>
+          {rightIcon ? <View style={styles.iconWrap}>{rightIcon}</View> : null}
+        </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 44,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    minHeight: 48,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
     justifyContent: "center",
+    alignItems: "center",
+  },
+  buttonPressed: {
+    transform: [{ scale: 0.99 }],
+  },
+  content: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  iconWrap: {
+    width: 16,
     alignItems: "center",
   },
   buttonText: {
     fontSize: 16,
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
 });

@@ -3,15 +3,17 @@ import {
   Text,
   TextInput,
   StyleSheet,
+  StyleProp,
   ViewStyle,
   TextInputProps,
 } from "react-native";
+import { useState } from "react";
 import { useTheme } from "../../theme/useTheme";
 
 interface AppInputProps extends TextInputProps {
   label?: string;
   error?: string;
-  containerStyle?: ViewStyle;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
 export function AppInput({
@@ -22,24 +24,41 @@ export function AppInput({
   ...textInputProps
 }: AppInputProps) {
   const { colors } = useTheme();
+  const [isFocused, setIsFocused] = useState(false);
 
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
-        <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+        <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
       )}
       <TextInput
         style={[
           styles.input,
           {
-            backgroundColor: colors.surface,
+            backgroundColor: `${colors.surface}`,
             borderColor: colors.border,
             color: colors.text,
+          },
+          isFocused && {
+            borderColor: colors.primary,
+            shadowColor: colors.primary,
+            shadowOpacity: 0.15,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 1,
           },
           error && { borderColor: colors.danger },
           style,
         ]}
         placeholderTextColor={colors.muted}
+        onFocus={(e) => {
+          setIsFocused(true);
+          textInputProps.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setIsFocused(false);
+          textInputProps.onBlur?.(e);
+        }}
         {...textInputProps}
       />
       {error && (
@@ -56,15 +75,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 7,
   },
   input: {
-    minHeight: 44,
+    minHeight: 48,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
   },
