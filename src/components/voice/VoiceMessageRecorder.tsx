@@ -51,7 +51,7 @@ export function VoiceMessageRecorder({
   disabled = false,
   caseId,
 }: VoiceMessageRecorderProps) {
-  const { colors } = useTheme();
+  const { colors, copy } = useTheme();
   const resolvedButtonColor = buttonColor ?? colors.primary;
   const recordingColor = colors.danger;
 
@@ -107,7 +107,10 @@ export function VoiceMessageRecorder({
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert("Permission Denied", "Microphone access is required.");
+        Alert.alert(
+          copy.voicePermissionDeniedTitle,
+          copy.voicePermissionDeniedMessage,
+        );
         isRecordingInProgressRef.current = false;
         return;
       }
@@ -147,7 +150,7 @@ export function VoiceMessageRecorder({
     } finally {
       isRecordingInProgressRef.current = false;
     }
-  }, [recordingStatus, disabled]);
+  }, [recordingStatus, disabled, copy]);
 
   /**
    * Formats error messages for user-friendly display
@@ -275,7 +278,7 @@ export function VoiceMessageRecorder({
       });
 
       if (result.status === "REJECTED") {
-        Alert.alert("Rejected", "Content not allowed.");
+        Alert.alert(copy.voiceRejectedTitle, copy.voiceRejectedMessage);
         await resetRecording();
         return;
       }
@@ -289,8 +292,8 @@ export function VoiceMessageRecorder({
           "[VoiceRecorder] Empty transcription - audio may be silent or too short",
         );
         Alert.alert(
-          "No Speech Detected",
-          "The recording doesn't contain any detectable speech. Please try recording again.",
+          copy.voiceNoSpeechTitle,
+          copy.voiceNoSpeechMessage,
         );
         await resetRecording();
         return;
@@ -339,6 +342,7 @@ export function VoiceMessageRecorder({
     generateS3Key,
     formatErrorMessage,
     caseId,
+    copy,
   ]);
 
   const handleButtonPress = useCallback(() => {

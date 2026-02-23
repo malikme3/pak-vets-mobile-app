@@ -17,7 +17,7 @@ interface ListRowProps {
 }
 
 export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
-  const { colors } = useTheme();
+  const { colors, isAltTheme } = useTheme();
 
   const handlePress = () => {
     if (onPress) {
@@ -50,6 +50,7 @@ export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
         onPress={handlePress}
         style={({ pressed }) => [
           styles.touchable,
+          isAltTheme && styles.altTouchable,
           pressed && { backgroundColor: `${colors.primary}10` },
         ]}
       >
@@ -64,6 +65,11 @@ export function ListRow({ title, subtitle, onPress, style }: ListRowProps) {
 const styles = StyleSheet.create({
   touchable: {
     minHeight: 44,
+  },
+  altTouchable: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#00000014",
   },
   row: {
     flexDirection: "row",

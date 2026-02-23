@@ -34,7 +34,16 @@ const NEARBY_RADIUS_KM = 0.5;
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const {
+    colors,
+    isAltTheme,
+    variant,
+    isNeonTheme,
+    isEcoTheme,
+    toggleThemeVariant,
+    themeName,
+    copy,
+  } = useTheme();
   const [activeCasesLimit, setActiveCasesLimit] = useState(
     ACTIVE_CASES_LIMIT_DEFAULT,
   );
@@ -207,7 +216,9 @@ export default function DashboardScreen() {
             onPress={() => refetchDoctor()}
             variant="primary"
             style={styles.retryButton}
-            leftIcon={<FontAwesome name="refresh" size={14} color={colors.onPrimary} />}
+            leftIcon={
+              <FontAwesome name="refresh" size={14} color={colors.onPrimary} />
+            }
           />
         </View>
       </SafeAreaView>
@@ -221,6 +232,22 @@ export default function DashboardScreen() {
   const handleNewCase = () => {
     router.push("/create-case");
   };
+  const nearbyHintText = copy.nearbyHint.replace(
+    "{{radius}}",
+    String(NEARBY_RADIUS_KM),
+  );
+  const nextThemeLabel =
+    variant === "classic"
+      ? "Neon Menagerie Orbit"
+      : variant === "neonMenagerieOrbit"
+        ? "Eco-Organic"
+        : "Classic Clinical";
+  const nextThemeIcon: keyof typeof FontAwesome.glyphMap =
+    variant === "classic"
+      ? "magic"
+      : variant === "neonMenagerieOrbit"
+        ? "leaf"
+        : "sun-o";
 
   return (
     <>
@@ -233,47 +260,163 @@ export default function DashboardScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <Card style={[styles.heroCard, { backgroundColor: `${colors.primary}14` }]}>
+          <Card
+            style={[
+              styles.heroCard,
+              isAltTheme && styles.heroCardAlt,
+              {
+                backgroundColor: `${colors.primary}14`,
+                borderColor: isAltTheme ? `${colors.accent}88` : colors.border,
+              },
+            ]}
+          >
+            {isAltTheme ? (
+              <>
+                <View
+                  style={[
+                    styles.heroTextureBlob,
+                    { backgroundColor: `${colors.accent}35` },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.heroTextureRing,
+                    { borderColor: `${colors.primary}5f` },
+                  ]}
+                />
+              </>
+            ) : null}
             <View style={styles.heroTop}>
               <View style={styles.heroBadge}>
-                <FontAwesome name="stethoscope" size={14} color={colors.primary} />
-                <Text style={[styles.heroBadgeText, { color: colors.primary }]}>Dashboard</Text>
+                <FontAwesome
+                  name="stethoscope"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text
+                  style={[
+                    styles.heroBadgeText,
+                    isAltTheme && styles.heroBadgeTextAlt,
+                    { color: colors.primary },
+                  ]}
+                >
+                  {copy.dashboardLabel}
+                </Text>
               </View>
+              <TouchableOpacity
+                style={[
+                  styles.themeToggle,
+                  {
+                    backgroundColor: isAltTheme
+                      ? `${colors.accent}2e`
+                      : `${colors.primary}1a`,
+                    borderColor: isAltTheme
+                      ? `${colors.accent}a8`
+                      : `${colors.primary}65`,
+                  },
+                ]}
+                onPress={toggleThemeVariant}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Switch theme from ${themeName} to ${nextThemeLabel}`}
+              >
+                <FontAwesome
+                  name={nextThemeIcon}
+                  size={12}
+                  color={isAltTheme ? colors.accent : colors.primary}
+                />
+                <Text
+                  style={[
+                    styles.themeToggleText,
+                    { color: isAltTheme ? colors.accent : colors.primary },
+                  ]}
+                >
+                  {nextThemeLabel}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.heroTitle, { color: colors.text }]}>Welcome back, Dr. {doctor.fullName}</Text>
-            <Text style={[styles.heroSubtitle, { color: colors.muted }]}>
-              Keep your active cases moving and quickly find nearby visits.
+            <Text
+              style={[
+                styles.heroTitle,
+                isNeonTheme && styles.heroTitleAlt,
+                { color: colors.text },
+              ]}
+            >
+              Welcome back, {copy.dashboardGreetingPrefix} {doctor.fullName}
+            </Text>
+            <Text
+              style={[
+                styles.heroSubtitle,
+                isNeonTheme && styles.heroSubtitleAlt,
+                { color: colors.muted },
+              ]}
+            >
+              {copy.dashboardSubtitle}
             </Text>
             {doctor.locationName ? (
               <View style={styles.locationRow}>
                 <FontAwesome name="map-marker" size={13} color={colors.muted} />
-                <Text style={[styles.locationText, { color: colors.muted }]}>{doctor.locationName}</Text>
+                <Text
+                  style={[
+                    styles.locationText,
+                    (isNeonTheme || isEcoTheme) && styles.locationTextAlt,
+                    { color: colors.muted },
+                  ]}
+                >
+                  {doctor.locationName}
+                </Text>
               </View>
             ) : null}
           </Card>
 
           <View style={styles.quickActionsSection}>
             <Button
-              title="Start New Case"
+              title={copy.primaryActionTitle}
               onPress={handleNewCase}
               variant="primary"
-              leftIcon={<FontAwesome name="plus" size={12} color={colors.onPrimary} />}
+              leftIcon={
+                <FontAwesome name="plus" size={12} color={colors.onPrimary} />
+              }
             />
             <Button
-              title={finding ? "Locating nearby cases..." : "Find Nearby Cases"}
+              title={
+                finding ? copy.nearbyActionLoadingTitle : copy.nearbyActionTitle
+              }
               onPress={findNearby}
               variant="secondary"
               style={styles.quickActionButton}
               disabled={finding}
-              leftIcon={<FontAwesome name="location-arrow" size={12} color={colors.primary} />}
+              leftIcon={
+                <FontAwesome
+                  name="location-arrow"
+                  size={12}
+                  color={colors.primary}
+                />
+              }
             />
           </View>
 
           <View style={styles.recentCasesSection}>
             <View style={styles.sectionHeaderRow}>
               <View>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Open Cases</Text>
-                <Text style={[styles.sectionCaption, { color: colors.muted }]}>Most recent active records</Text>
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    (isNeonTheme || isEcoTheme) && styles.sectionTitleAlt,
+                    { color: colors.text },
+                  ]}
+                >
+                  {copy.openCasesTitle}
+                </Text>
+                <Text
+                  style={[
+                    styles.sectionCaption,
+                    (isNeonTheme || isEcoTheme) && styles.sectionCaptionAlt,
+                    { color: colors.muted },
+                  ]}
+                >
+                  {copy.openCasesCaption}
+                </Text>
               </View>
               <View style={styles.limitCounter}>
                 <TouchableOpacity
@@ -329,7 +472,7 @@ export default function DashboardScreen() {
             ) : (
               <Card style={styles.emptyCard}>
                 <Text style={[styles.emptyText, { color: colors.muted }]}>
-                  No active cases. Start a new case to begin.
+                  {copy.noCasesText}
                 </Text>
               </Card>
             )}
@@ -338,8 +481,20 @@ export default function DashboardScreen() {
           {nearbyCases !== null && (
             <View style={styles.nearbySection}>
               <View style={styles.nearbyHeader}>
-                <FontAwesome name="crosshairs" size={14} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Nearby Results</Text>
+                <FontAwesome
+                  name="crosshairs"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    (isNeonTheme || isEcoTheme) && styles.sectionTitleAlt,
+                    { color: colors.text },
+                  ]}
+                >
+                  {copy.nearbyTitle}
+                </Text>
               </View>
               {locationError && (
                 <Text
@@ -349,8 +504,14 @@ export default function DashboardScreen() {
                   {locationError}
                 </Text>
               )}
-              <Text style={[styles.nearbyHint, { color: colors.muted }]}>
-                Cases for animals within {NEARBY_RADIUS_KM} km of your location.
+              <Text
+                style={[
+                  styles.nearbyHint,
+                  (isNeonTheme || isEcoTheme) && styles.nearbyHintAlt,
+                  { color: colors.muted },
+                ]}
+              >
+                {nearbyHintText}
               </Text>
               {nearbyCases.length > 0 ? (
                 <View style={styles.casesList}>
@@ -363,7 +524,7 @@ export default function DashboardScreen() {
               ) : (
                 <Card style={styles.emptyCard}>
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
-                    No nearby cases in this area.
+                    {copy.noNearbyText}
                   </Text>
                 </Card>
               )}
@@ -390,11 +551,33 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     borderWidth: 0,
+    overflow: "hidden",
+    position: "relative",
+  },
+  heroCardAlt: {
+    borderWidth: 1,
   },
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
+  },
+  heroTextureBlob: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    top: -48,
+    right: -50,
+  },
+  heroTextureRing: {
+    position: "absolute",
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    borderWidth: 2,
+    bottom: -96,
+    left: -42,
   },
   heroBadge: {
     flexDirection: "row",
@@ -406,15 +589,45 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
+  heroBadgeTextAlt: {
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  themeToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  themeToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
   heroTitle: {
     fontSize: 24,
     fontWeight: "700",
     lineHeight: 30,
   },
+  heroTitleAlt: {
+    fontSize: 26,
+    lineHeight: 31,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
   heroSubtitle: {
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
+  },
+  heroSubtitleAlt: {
+    fontSize: 15,
+    lineHeight: 21,
+    letterSpacing: 0.2,
   },
   locationRow: {
     marginTop: 12,
@@ -425,6 +638,10 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 14,
     fontWeight: "500",
+  },
+  locationTextAlt: {
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   quickActionsSection: {
     marginTop: 14,
@@ -448,9 +665,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 0,
   },
+  sectionTitleAlt: {
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontWeight: "800",
+    fontSize: 17,
+  },
   sectionCaption: {
     fontSize: 13,
     marginTop: 2,
+  },
+  sectionCaptionAlt: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
   },
   limitCounter: {
     flexDirection: "row",
@@ -483,6 +711,10 @@ const styles = StyleSheet.create({
   nearbyHint: {
     fontSize: 14,
     marginBottom: 10,
+  },
+  nearbyHintAlt: {
+    fontSize: 13,
+    letterSpacing: 0.25,
   },
   nearbyError: {
     fontSize: 14,
@@ -634,7 +866,7 @@ function CaseRow({
   onDelete,
   isDeleting,
 }: CaseRowProps) {
-  const { colors } = useTheme();
+  const { colors, isAltTheme } = useTheme();
   const { data: animalImages = [] } = useAnimalImages(caseItem.animalId);
   const { data: animal } = useAnimal(caseItem.animalId);
   const faceUrl =
@@ -649,7 +881,15 @@ function CaseRow({
     <View
       style={[
         styles.caseCard,
-        { backgroundColor: colors.surface, borderColor: `${colors.border}` },
+        {
+          backgroundColor: colors.surface,
+          borderColor: `${colors.border}`,
+          shadowColor: isAltTheme ? colors.accent : "#0f172a",
+          shadowOpacity: isAltTheme ? 0.18 : 0.07,
+          shadowRadius: isAltTheme ? 11 : 7,
+          shadowOffset: { width: 0, height: isAltTheme ? 8 : 3 },
+          elevation: isAltTheme ? 5 : 2,
+        },
       ]}
     >
       <TouchableOpacity
@@ -717,6 +957,10 @@ function CaseRow({
                     backgroundColor: isCompleted
                       ? (colors.success ?? "#22c55e") + "22"
                       : (colors.warning ?? "#eab308") + "22",
+                    borderWidth: isAltTheme ? 1 : 0,
+                    borderColor: isCompleted
+                      ? `${colors.success}67`
+                      : `${colors.warning}67`,
                   },
                 ]}
               >

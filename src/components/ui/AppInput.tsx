@@ -23,13 +23,21 @@ export function AppInput({
   style,
   ...textInputProps
 }: AppInputProps) {
-  const { colors } = useTheme();
+  const { colors, shape, isAltTheme } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
 
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
-        <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
+        <Text
+          style={[
+            styles.label,
+            isAltTheme && styles.altLabel,
+            { color: colors.muted },
+          ]}
+        >
+          {label}
+        </Text>
       )}
       <TextInput
         style={[
@@ -38,6 +46,7 @@ export function AppInput({
             backgroundColor: `${colors.surface}`,
             borderColor: colors.border,
             color: colors.text,
+            borderRadius: shape.inputRadius,
           },
           isFocused && {
             borderColor: colors.primary,
@@ -79,10 +88,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 7,
   },
+  altLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
   input: {
     minHeight: 48,
     borderWidth: 1,
-    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,

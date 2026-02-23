@@ -7,13 +7,22 @@ interface CardProps {
 }
 
 export function Card({ children, style }: CardProps) {
-  const { colors } = useTheme();
+  const { colors, shape, shadow, isAltTheme } = useTheme();
 
   return (
     <View
       style={[
         styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border },
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: shape.cardRadius,
+          shadowColor: isAltTheme ? colors.accent : "#0f172a",
+          shadowOffset: { width: 0, height: shadow.cardOffsetY },
+          shadowOpacity: shadow.cardOpacity,
+          shadowRadius: shadow.cardRadius,
+          elevation: shadow.cardElevation,
+        },
         style,
       ]}
     >
@@ -24,14 +33,8 @@ export function Card({ children, style }: CardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
     padding: 18,
     marginVertical: 8,
     borderWidth: 1,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 2,
   },
 });

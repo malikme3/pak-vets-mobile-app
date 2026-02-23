@@ -30,7 +30,7 @@ export function Button({
   leftIcon,
   rightIcon,
 }: ButtonProps) {
-  const { colors } = useTheme();
+  const { colors, shape, shadow, isAltTheme } = useTheme();
   const isPrimary = variant === "primary";
   const isDisabled = disabled || loading;
 
@@ -51,6 +51,14 @@ export function Button({
               borderWidth: 1,
               borderColor: `${colors.primary}30`,
             },
+        {
+          borderRadius: shape.buttonRadius,
+          shadowColor: colors.primary,
+          shadowOpacity: shadow.buttonOpacity,
+          shadowRadius: shadow.buttonRadius,
+          shadowOffset: { width: 0, height: shadow.buttonOffsetY },
+          elevation: shadow.buttonElevation,
+        },
         pressed && !isDisabled && styles.buttonPressed,
         isDisabled && { opacity: 0.55 },
         style,
@@ -69,6 +77,7 @@ export function Button({
           <Text
             style={[
               styles.buttonText,
+              isAltTheme && styles.altButtonText,
               { color: isPrimary ? colors.onPrimary : colors.primary },
             ]}
           >
@@ -84,7 +93,6 @@ export function Button({
 const styles = StyleSheet.create({
   button: {
     minHeight: 48,
-    borderRadius: 12,
     paddingVertical: 13,
     paddingHorizontal: 18,
     justifyContent: "center",
@@ -107,5 +115,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     letterSpacing: 0.2,
+  },
+  altButtonText: {
+    fontWeight: "800",
+    fontSize: 15,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
 });

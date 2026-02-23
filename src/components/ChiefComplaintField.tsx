@@ -54,7 +54,7 @@ export const ChiefComplaintField = forwardRef<
   },
   ref,
 ) {
-  const { colors } = useTheme();
+  const { colors, copy } = useTheme();
   const hasValue = value.trim().length > 0;
 
   const inputContent = (
@@ -77,11 +77,7 @@ export const ChiefComplaintField = forwardRef<
         ]}
         value={value}
         onChangeText={onChangeText}
-        placeholder={
-          showVoiceInput
-            ? "Type chief complaint or tap the microphone to record…"
-            : placeholder
-        }
+        placeholder={showVoiceInput ? copy.voicePlaceholder : placeholder}
         placeholderTextColor={colors.muted}
         multiline
         textAlignVertical="top"
@@ -112,7 +108,13 @@ export const ChiefComplaintField = forwardRef<
         inputContent
       )}
       <Text style={[styles.help, { color: colors.muted }]}>
-        {hasValue ? helpTextFilled : helpTextEmpty}
+        {hasValue
+          ? helpTextFilled === HELP_FILLED
+            ? copy.voiceHelpFilled
+            : helpTextFilled
+          : helpTextEmpty === HELP_EMPTY
+            ? copy.voiceHelpEmpty
+            : helpTextEmpty}
       </Text>
     </View>
   );
