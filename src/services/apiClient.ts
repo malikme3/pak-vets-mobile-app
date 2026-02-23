@@ -3,6 +3,7 @@ import axios, {
   AxiosError,
   InternalAxiosRequestConfig,
 } from "axios";
+import { useAuthStore } from "../store/authStore";
 
 // API base URL:
 // - EXPO_PUBLIC_API_URL overrides (e.g. http://localhost:3001 for local backend)
@@ -36,11 +37,14 @@ class ApiClient {
     // Request interceptor: auth + dev logging (full payload as JSON)
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        // TODO: Get token from auth store
-        // const token = authStore.getToken();
-        // if (token) {
-        //   config.headers.Authorization = `Bearer ${token}`;
-        // }
+        const existingAuth =
+          config.headers?.Authorization || config.headers?.authorization;
+        if (!existingAuth) {
+          const token = useAuthStore.getState().getAccessToken();
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        }
         if (__DEV__ && config.data != null) {
           const body =
             typeof config.data === "string"
@@ -79,6 +83,9 @@ class ApiClient {
             "\n" +
               JSON.stringify(error.response?.data ?? error.message, null, 2),
           );
+        }
+        if (error.response?.status === 401) {
+          useAuthStore.getState().clear();
         }
         return Promise.reject(this.normalizeError(error));
       },

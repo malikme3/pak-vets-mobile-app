@@ -33,7 +33,17 @@
     "extra": {
       "eas": {
         "projectId": "4cb5d1a3-7f31-4911-9101-a6097aeda41a"
-      }
+      },
+      "firebaseApiKey": "AIzaSyAv3-EsoJdRgk_cm7OmgmB1W0",
+      "firebaseAuthDomain": "pak-vets-auth.firebaseapp.com",
+      "firebaseProjectId": "pak-vets-auth",
+      "firebaseAppId": "1:723134103138:web:1ff6062dd25a92532",
+      "firebaseMessagingSenderId": "723134103000",
+      "firebaseStorageBucket": "pak-vets-auth.firebasestorage.app",
+      "googleWebClientId": "",
+      "googleExpoClientId": "",
+      "googleIosClientId": "",
+      "googleAndroidClientId": ""
     },
     "plugins": ["expo-font", "@react-native-community/datetimepicker"]
   }

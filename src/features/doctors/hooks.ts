@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { doctorApi } from "../../services/vetApi";
+import { authApi } from "../../services/authApi";
+import { useAuthStore } from "../../store/authStore";
 import type { Doctor } from "../../types/api";
 
 export const doctorKeys = {
@@ -11,22 +12,11 @@ export const doctorKeys = {
 };
 
 export function useCurrentDoctor() {
-  // For now, get all doctors and use the first active one
-  // TODO: Get doctor ID from auth store when auth is implemented
+  const authStatus = useAuthStore((state) => state.status);
   return useQuery({
     queryKey: doctorKeys.me(),
-    queryFn: async () => {
-      const doctors = await doctorApi.getAllDoctors("ACTIVE");
-      if (doctors.length === 0) {
-        // If no active doctors, try getting all doctors
-        const allDoctors = await doctorApi.getAllDoctors();
-        if (allDoctors.length === 0) {
-          throw new Error("No doctors found");
-        }
-        return allDoctors[0];
-      }
-      return doctors[0];
-    },
+    queryFn: () => authApi.me(),
+    enabled: authStatus === "signedIn",
   });
 }
 

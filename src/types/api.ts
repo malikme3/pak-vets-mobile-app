@@ -45,7 +45,8 @@ export interface Doctor {
   fullName: string;
   phone: string;
   email?: string;
-  status: "ACTIVE" | "INACTIVE";
+  status: "ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED";
+  firebaseUid?: string;
   locationName?: string;
   createdAt: string;
 }
@@ -61,7 +62,7 @@ export interface UpdateDoctorRequest {
   fullName?: string;
   phone?: string;
   email?: string;
-  status?: "ACTIVE" | "INACTIVE";
+  status?: "ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED";
   locationName?: string;
 }
 

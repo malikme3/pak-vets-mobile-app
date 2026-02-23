@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
+import { useAuthStore } from "../store/authStore";
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -21,6 +22,7 @@ import { useCurrentDoctor } from "../features/doctors/hooks";
 import { useCasesByDoctor, useDeleteCase } from "../features/cases/hooks";
 import { useAnimalImages, useAnimal } from "../features/animals/hooks";
 import { caseApi } from "../services/vetApi";
+import { getFirebaseAuth } from "../services/firebase";
 import {
   getCaseDistanceKm,
   formatCaseDistanceLabel,
@@ -34,6 +36,9 @@ const NEARBY_RADIUS_KM = 0.5;
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const authStatus = useAuthStore((state) => state.status);
+  const clearAuth = useAuthStore((state) => state.clear);
+  const isAuthed = authStatus === "signedIn";
   const {
     colors,
     isAltTheme,
@@ -181,6 +186,19 @@ export default function DashboardScreen() {
     ],
   );
 
+  if (!isAuthed) {
+    return (
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <StatusBar style="auto" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (doctorLoading || casesLoading) {
     return (
       <SafeAreaView
@@ -303,37 +321,65 @@ export default function DashboardScreen() {
                   {copy.dashboardLabel}
                 </Text>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.themeToggle,
-                  {
-                    backgroundColor: isAltTheme
-                      ? `${colors.accent}2e`
-                      : `${colors.primary}1a`,
-                    borderColor: isAltTheme
-                      ? `${colors.accent}a8`
-                      : `${colors.primary}65`,
-                  },
-                ]}
-                onPress={toggleThemeVariant}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel={`Switch theme from ${themeName} to ${nextThemeLabel}`}
-              >
-                <FontAwesome
-                  name={nextThemeIcon}
-                  size={12}
-                  color={isAltTheme ? colors.accent : colors.primary}
-                />
-                <Text
+              <View style={styles.heroTopActions}>
+                <TouchableOpacity
                   style={[
-                    styles.themeToggleText,
-                    { color: isAltTheme ? colors.accent : colors.primary },
+                    styles.themeToggle,
+                    {
+                      backgroundColor: isAltTheme
+                        ? `${colors.accent}2e`
+                        : `${colors.primary}1a`,
+                      borderColor: isAltTheme
+                        ? `${colors.accent}a8`
+                        : `${colors.primary}65`,
+                    },
                   ]}
+                  onPress={toggleThemeVariant}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Switch theme from ${themeName} to ${nextThemeLabel}`}
                 >
-                  {nextThemeLabel}
-                </Text>
-              </TouchableOpacity>
+                  <FontAwesome
+                    name={nextThemeIcon}
+                    size={12}
+                    color={isAltTheme ? colors.accent : colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.themeToggleText,
+                      { color: isAltTheme ? colors.accent : colors.primary },
+                    ]}
+                  >
+                    {nextThemeLabel}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.logoutButton,
+                    {
+                      borderColor: `${colors.primary}50`,
+                      backgroundColor: `${colors.primary}12`,
+                    },
+                  ]}
+                  onPress={async () => {
+                    const auth = getFirebaseAuth();
+                    if (auth.currentUser) {
+                      await auth.signOut();
+                    }
+                    await clearAuth();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome
+                    name="sign-out"
+                    size={12}
+                    color={colors.primary}
+                  />
+                  <Text style={[styles.logoutText, { color: colors.primary }]}>
+                    Logout
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <Text
               style={[
@@ -604,6 +650,11 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+  heroTopActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   themeToggle: {
     flexDirection: "row",
     alignItems: "center",
@@ -614,6 +665,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   themeToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  logoutText: {
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
