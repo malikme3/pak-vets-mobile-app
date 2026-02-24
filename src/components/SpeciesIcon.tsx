@@ -3,6 +3,8 @@ import {
   View,
   Image,
   type ImageSourcePropType,
+  type ImageStyle,
+  type StyleProp,
   type ViewStyle,
 } from "react-native";
 import { useTheme } from "../theme/useTheme";
@@ -57,7 +59,7 @@ export function SpeciesIcon({
   return (
     <Image
       source={source}
-      style={[{ width: size, height: size }, style]}
+      style={[{ width: size, height: size }, style as StyleProp<ImageStyle>]}
       resizeMode={resizeMode}
     />
   );

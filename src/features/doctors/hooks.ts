@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { authApi } from "../../services/authApi";
+import { doctorApi } from "../../services/vetApi";
 import { useAuthStore } from "../../store/authStore";
 import type { Doctor } from "../../types/api";
 
