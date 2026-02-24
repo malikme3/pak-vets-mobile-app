@@ -32,6 +32,7 @@ import {
   getUploadSignedUrl,
   getBucketName,
   getReverseGeocode,
+  processStructuredImage,
 } from "../services/sharedServicesApi";
 import {
   formatPhoneInput,
@@ -249,6 +250,11 @@ export default function CreateAnimalScreen() {
   const [nearbyRadiusKm, setNearbyRadiusKm] = useState(0.25);
   const [nearbyFarmers, setNearbyFarmers] = useState<Farmer[]>([]);
   const [nearbyFarmersLoading, setNearbyFarmersLoading] = useState(false);
+  const [nearbySearchOpen, setNearbySearchOpen] = useState(false);
+  const [cnicScanLoading, setCnicScanLoading] = useState(false);
+  const [cnicFrontImageUri, setCnicFrontImageUri] = useState<string | null>(
+    null,
+  );
 
   // Upload step (step 1)
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
@@ -519,12 +525,13 @@ export default function CreateAnimalScreen() {
   const uploadImageToS3 = async (
     imageUri: string,
     s3Key: string,
+    tags = "type=animal-reference-image",
   ): Promise<string> => {
     const bucketName = getBucketName();
     const { signedUrl, fileUrl } = await getUploadSignedUrl(
       bucketName,
       s3Key,
-      "type=animal-reference-image",
+      tags,
     );
     const fileInfo = await FileSystem.getInfoAsync(imageUri);
     if (!fileInfo.exists) throw new Error("File does not exist");
@@ -1248,6 +1255,99 @@ export default function CreateAnimalScreen() {
     [handlePickExistingFarmer],
   );
 
+  const processCnicFrontImage = useCallback(
+    async (imageUri: string) => {
+      setCnicFrontImageUri(imageUri);
+      setCnicScanLoading(true);
+
+      try {
+        const farmerIdForPath = selectedFarmerId ?? 0;
+        const s3Key = `farmers/${farmerIdForPath}/nic_image/cnic-front-${Date.now()}.jpg`;
+        await uploadImageToS3(imageUri, s3Key, "type=farmer-nic-image");
+        const bucketName = getBucketName();
+        const imageS3Uri = `s3://${bucketName}/${s3Key}`;
+
+        const processed = await processStructuredImage({
+          imageS3Url: imageS3Uri,
+          instruction:
+            "Analyze the front side of the Pakistan National Identity Card (CNIC) provided.\n\nExtract the Full Name (in English).\n\nExtract the 13-digit Identity Number using the format XXXXX-XXXXXXX-X.\n\nReturn the data strictly in JSON format. If a value is missing, return null.",
+          expectedSchema: {
+            cnic_front: {
+              full_name: "string",
+              id_number: "string",
+            },
+          },
+        });
+
+        const structured = processed.imageStructured as
+          | {
+              cnic_front?: {
+                full_name?: unknown;
+                id_number?: unknown;
+              };
+            }
+          | null;
+        const fullNameRaw = structured?.cnic_front?.full_name;
+        const idNumberRaw = structured?.cnic_front?.id_number;
+        const extractedName =
+          typeof fullNameRaw === "string" ? fullNameRaw.trim() : "";
+        const extractedId =
+          typeof idNumberRaw === "string" ? idNumberRaw.trim() : "";
+
+        if (extractedName) setFarmerName(extractedName);
+        if (extractedId) setFarmerNicNo(extractedId);
+
+        if (!extractedName && !extractedId) {
+          Alert.alert(
+            "CNIC scanned",
+            "No structured Name or ID Number was extracted. Please enter manually.",
+          );
+        } else {
+          Alert.alert(
+            "CNIC scanned",
+            "Extracted details were added to the form. Please review before saving.",
+          );
+        }
+    } catch (error) {
+      Alert.alert(
+        "CNIC scan failed",
+        error instanceof Error ? error.message : "Failed to process CNIC image.",
+      );
+    } finally {
+      setCnicScanLoading(false);
+    }
+    },
+    [selectedFarmerId],
+  );
+
+  const handleScanCnicFront = useCallback(async () => {
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    await processCnicFrontImage(result.assets[0].uri);
+  }, [requestCameraPermissions, processCnicFrontImage]);
+
+  const handlePickCnicFront = useCallback(async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    await processCnicFrontImage(result.assets[0].uri);
+  }, [requestPermissions, processCnicFrontImage]);
+
   // Step 2: Farmer (after upload) – phone, nic_no, name, address; duplicate = pick existing
   if (step === "farmer") {
     return (
@@ -1267,11 +1367,251 @@ export default function CreateAnimalScreen() {
           >
             {renderHeader("Create New Animal")}
             {renderStepper()}
-            {renderStepHeading(
-              "user",
-              "Owner/Farmer: New or Existing",
-              "Optional. Link to existing or add new.",
-            )}
+            {renderStepHeading("user", "Owner/Farmer Setup")}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => {
+                const next = !nearbySearchOpen;
+                setNearbySearchOpen(next);
+                if (next && nearbyFarmers.length === 0 && !nearbyFarmersLoading) {
+                  fetchNearbyFarmers();
+                }
+              }}
+              style={[
+                styles.smartNearbyToggle,
+                {
+                  backgroundColor: colors.primary + "12",
+                  borderColor: colors.primary + "35",
+                },
+              ]}
+            >
+              <View style={styles.smartNearbyToggleLeft}>
+                <View
+                  style={[
+                    styles.smartNearbyIconWrap,
+                    { backgroundColor: colors.primary + "20" },
+                  ]}
+                >
+                  <FontAwesome name="search" size={14} color={colors.primary} />
+                </View>
+                <View style={styles.smartNearbyToggleTextWrap}>
+                  <Text style={[styles.smartNearbyToggleTitle, { color: colors.text }]}>
+                    Smart Search Nearby Farmers
+                  </Text>
+                  <Text style={[styles.smartNearbyToggleSub, { color: colors.muted }]}>
+                    Tap to find and link existing farmers around your location.
+                  </Text>
+                </View>
+              </View>
+              <FontAwesome
+                name={nearbySearchOpen ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+
+            {nearbySearchOpen ? (
+              <View
+                style={[
+                  styles.smartNearbyCard,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.nearbyRadiusLabel, { color: colors.muted }]}>
+                  Search radius (km)
+                </Text>
+                <View style={styles.nearbyRadiusRow}>
+                  {NEARBY_RADIUS_OPTIONS.map((km) => (
+                    <TouchableOpacity
+                      key={km}
+                      onPress={() => setNearbyRadiusKm(km)}
+                      style={[
+                        styles.nearbyRadiusOption,
+                        {
+                          backgroundColor:
+                            nearbyRadiusKm === km ? colors.primary : colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.nearbyRadiusOptionText,
+                          { color: nearbyRadiusKm === km ? "#fff" : colors.text },
+                        ]}
+                      >
+                        {km}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Button
+                  title={nearbyFarmersLoading ? "Loading…" : "Refresh nearby farmers"}
+                  variant="secondary"
+                  onPress={fetchNearbyFarmers}
+                  style={styles.nearbySearchButton}
+                  disabled={nearbyFarmersLoading}
+                />
+
+                {nearbyFarmers.length > 0 ? (
+                  <View style={styles.farmersMatchListWrap}>
+                    <Text
+                      style={[styles.farmersMatchListLabel, { color: colors.muted }]}
+                    >
+                      Existing farmers found nearby
+                    </Text>
+                    {nearbyFarmers.map((farmer) => (
+                      <TouchableOpacity
+                        key={farmer.farmerId}
+                        onPress={() => handlePickNearbyFarmer(farmer)}
+                        activeOpacity={0.7}
+                        style={[
+                          styles.farmerMatchCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.farmerMatchCardIconWrap,
+                            { backgroundColor: colors.primary + "18" },
+                          ]}
+                        >
+                          <FontAwesome name="user" size={18} color={colors.primary} />
+                        </View>
+                        <View style={styles.farmerMatchCardContent}>
+                          <View style={styles.farmerMatchCardNameRow}>
+                            <Text
+                              style={[styles.farmerMatchCardName, { color: colors.text }]}
+                              numberOfLines={1}
+                            >
+                              {farmer.fullName}
+                            </Text>
+                            {farmer.distanceKm != null ? (
+                              <View
+                                style={[
+                                  styles.distanceBadge,
+                                  {
+                                    backgroundColor: colors.primary + "18",
+                                    borderColor: colors.primary + "40",
+                                  },
+                                ]}
+                              >
+                                <FontAwesome
+                                  name="map-marker"
+                                  size={10}
+                                  color={colors.primary}
+                                  style={styles.distanceBadgeIcon}
+                                />
+                                <Text
+                                  style={[
+                                    styles.distanceBadgeText,
+                                    { color: colors.primary },
+                                  ]}
+                                >
+                                  {formatDistance(farmer.distanceKm)}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text
+                            style={[styles.farmerMatchCardMeta, { color: colors.muted }]}
+                          >
+                            {formatPhoneDisplay(
+                              normalizePhone(farmer.phoneNumber) ?? farmer.phoneNumber,
+                            )}
+                          </Text>
+                          {farmer.villageName ? (
+                            <Text
+                              style={[
+                                styles.farmerMatchCardMeta,
+                                { color: colors.muted },
+                              ]}
+                            >
+                              {farmer.villageName}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : !nearbyFarmersLoading ? (
+                  <Text
+                    style={[styles.smartNearbyEmptyText, { color: colors.muted }]}
+                  >
+                    No nearby farmers found for this radius yet.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            <Card
+              style={StyleSheet.flatten([
+                styles.smartNearbyCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ])}
+            >
+              <View style={styles.cnicSectionHeader}>
+                <View
+                  style={[
+                    styles.smartNearbyIconWrap,
+                    { backgroundColor: colors.primary + "20" },
+                  ]}
+                >
+                  <FontAwesome name="id-card" size={14} color={colors.primary} />
+                </View>
+                <View style={styles.smartNearbyToggleTextWrap}>
+                  <Text style={[styles.smartNearbyToggleTitle, { color: colors.text }]}>
+                    Scan CNIC Front
+                  </Text>
+                  <Text style={[styles.smartNearbyToggleSub, { color: colors.muted }]}>
+                    Capture card photo to auto-fill Full Name and NIC number.
+                  </Text>
+                </View>
+              </View>
+              <Button
+                title={
+                  cnicScanLoading
+                    ? "Scanning CNIC…"
+                    : cnicFrontImageUri
+                      ? "Retake CNIC photo"
+                      : "Take CNIC photo"
+                }
+                variant="secondary"
+                onPress={handleScanCnicFront}
+                disabled={cnicScanLoading}
+              />
+              <Button
+                title="Pick CNIC image (test)"
+                variant="secondary"
+                onPress={handlePickCnicFront}
+                style={styles.cnicPickButton}
+                disabled={cnicScanLoading}
+              />
+              {cnicScanLoading ? (
+                <View
+                  style={[
+                    styles.farmerCheckHint,
+                    {
+                      backgroundColor: colors.border + "25",
+                      borderColor: colors.border + "50",
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text
+                    style={[styles.farmerCheckHintText, { color: colors.muted }]}
+                  >
+                    Uploading and extracting CNIC details…
+                  </Text>
+                </View>
+              ) : null}
+              {cnicFrontImageUri ? (
+                <Image source={{ uri: cnicFrontImageUri }} style={styles.cnicPreview} />
+              ) : null}
+            </Card>
             <Card
               style={StyleSheet.flatten([
                 styles.cardElevated,
@@ -1443,163 +1783,6 @@ export default function CreateAnimalScreen() {
                 colors={colors}
                 icon="user"
               />
-              <View
-                style={[
-                  styles.addressLabelWrap,
-                  { borderTopColor: colors.border },
-                ]}
-              >
-                <FontAwesome
-                  name="map-marker"
-                  size={14}
-                  color={colors.primary}
-                  style={styles.addressLabelIcon}
-                />
-                <Text style={[styles.addressLabel, { color: colors.muted }]}>
-                  Display Near by Farmers
-                </Text>
-              </View>
-              <Text style={[styles.nearbyRadiusLabel, { color: colors.muted }]}>
-                Radius (km)
-              </Text>
-              <View style={styles.nearbyRadiusRow}>
-                {NEARBY_RADIUS_OPTIONS.map((km) => (
-                  <TouchableOpacity
-                    key={km}
-                    onPress={() => setNearbyRadiusKm(km)}
-                    style={[
-                      styles.nearbyRadiusOption,
-                      {
-                        backgroundColor:
-                          nearbyRadiusKm === km
-                            ? colors.primary
-                            : colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.nearbyRadiusOptionText,
-                        {
-                          color: nearbyRadiusKm === km ? "#fff" : colors.text,
-                        },
-                      ]}
-                    >
-                      {km}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Button
-                title={
-                  nearbyFarmersLoading ? "Loading…" : "Show nearby farmers"
-                }
-                variant="secondary"
-                onPress={fetchNearbyFarmers}
-                style={styles.nearbySearchButton}
-                disabled={nearbyFarmersLoading}
-              />
-              {nearbyFarmers.length > 0 ? (
-                <View style={styles.farmersMatchListWrap}>
-                  <Text
-                    style={[
-                      styles.farmersMatchListLabel,
-                      { color: colors.muted },
-                    ]}
-                  >
-                    Tap a farmer to select and continue
-                  </Text>
-                  {nearbyFarmers.map((farmer) => (
-                    <TouchableOpacity
-                      key={farmer.farmerId}
-                      onPress={() => handlePickNearbyFarmer(farmer)}
-                      activeOpacity={0.7}
-                      style={[
-                        styles.farmerMatchCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.farmerMatchCardIconWrap,
-                          { backgroundColor: colors.primary + "18" },
-                        ]}
-                      >
-                        <FontAwesome
-                          name="user"
-                          size={18}
-                          color={colors.primary}
-                        />
-                      </View>
-                      <View style={styles.farmerMatchCardContent}>
-                        <View style={styles.farmerMatchCardNameRow}>
-                          <Text
-                            style={[
-                              styles.farmerMatchCardName,
-                              { color: colors.text },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {farmer.fullName}
-                          </Text>
-                          {farmer.distanceKm != null ? (
-                            <View
-                              style={[
-                                styles.distanceBadge,
-                                {
-                                  backgroundColor: colors.primary + "18",
-                                  borderColor: colors.primary + "40",
-                                },
-                              ]}
-                            >
-                              <FontAwesome
-                                name="map-marker"
-                                size={10}
-                                color={colors.primary}
-                                style={styles.distanceBadgeIcon}
-                              />
-                              <Text
-                                style={[
-                                  styles.distanceBadgeText,
-                                  { color: colors.primary },
-                                ]}
-                              >
-                                {formatDistance(farmer.distanceKm)}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <Text
-                          style={[
-                            styles.farmerMatchCardMeta,
-                            { color: colors.muted },
-                          ]}
-                        >
-                          {formatPhoneDisplay(
-                            normalizePhone(farmer.phoneNumber) ??
-                              farmer.phoneNumber,
-                          )}
-                        </Text>
-                        {farmer.villageName ? (
-                          <Text
-                            style={[
-                              styles.farmerMatchCardMeta,
-                              { color: colors.muted },
-                            ]}
-                          >
-                            {farmer.villageName}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
               <View
                 style={[
                   styles.addressLabelWrap,
@@ -2774,10 +2957,55 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   useFarmerButtonText: { fontSize: 14, color: "#fff", fontWeight: "700" },
+  smartNearbyToggle: {
+    marginTop: 4,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  smartNearbyToggleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minWidth: 0,
+  },
+  smartNearbyIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  smartNearbyToggleTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  smartNearbyToggleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  smartNearbyToggleSub: {
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  smartNearbyCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
   nearbyRadiusLabel: {
     fontSize: 13,
     fontWeight: "600",
-    marginTop: 12,
     marginBottom: 8,
   },
   nearbyRadiusRow: {
@@ -2801,6 +3029,27 @@ const styles = StyleSheet.create({
   },
   nearbySearchButton: {
     marginBottom: 16,
+  },
+  smartNearbyEmptyText: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  cnicSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  cnicPickButton: {
+    marginTop: 10,
+  },
+  cnicPreview: {
+    width: "100%",
+    height: 170,
+    marginTop: 12,
+    borderRadius: 12,
+    resizeMode: "cover",
   },
   addressLabelWrap: {
     flexDirection: "row",

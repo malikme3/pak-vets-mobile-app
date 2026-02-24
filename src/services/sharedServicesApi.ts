@@ -125,6 +125,37 @@ export interface ProcessStructuredTranscriptionApiResponse {
   };
 }
 
+export interface ProcessStructuredImageRequest {
+  imageS3Url: string;
+  instruction: string;
+  expectedSchema: Record<string, unknown>;
+}
+
+export interface StructuredImageResponse {
+  imageStructured: Record<string, unknown> | null;
+  status: "SUCCESS" | "FAILED";
+}
+
+export interface ProcessStructuredImageApiResponse {
+  success: boolean;
+  data?: {
+    imageStructured?: Record<string, unknown> | null;
+    imageTextStructured?: Record<string, unknown> | null;
+    structuredData?: Record<string, unknown> | null;
+    result?: Record<string, unknown> | null;
+    status?: "SUCCESS" | "FAILED";
+  };
+  error?: {
+    code?: string;
+    message?: string;
+    details?: Record<string, unknown>;
+  };
+  meta?: {
+    requestId?: string;
+    timestamp?: string;
+  };
+}
+
 /** Reverse geocode response (GET /geocode/reverse). address may include village, town, road when backend supports them. */
 export interface ReverseGeocodeAddress {
   city?: string;
@@ -420,5 +451,134 @@ export async function processStructuredTranscription(
     }
 
     throw error;
+  }
+}
+
+/**
+ * Process structured image extraction with AI parsing.
+ */
+export async function processStructuredImage(
+  request: ProcessStructuredImageRequest,
+): Promise<StructuredImageResponse> {
+  const derivedHttpsUrl = request.imageS3Url.startsWith("s3://")
+    ? (() => {
+        const withoutPrefix = request.imageS3Url.replace(/^s3:\/\//, "");
+        const slashIndex = withoutPrefix.indexOf("/");
+        if (slashIndex <= 0) return request.imageS3Url;
+        const bucket = withoutPrefix.slice(0, slashIndex);
+        const key = withoutPrefix.slice(slashIndex + 1);
+        return `https://${bucket}.s3.amazonaws.com/${key}`;
+      })()
+    : request.imageS3Url;
+
+  const endpoint = `${getSharedServicesApiUrl()}/image/process-structured`;
+  const candidateBodies: Array<Record<string, unknown>> = [
+    {
+      imageS3Url: request.imageS3Url,
+      imageUrl: derivedHttpsUrl,
+      instruction: request.instruction,
+      schema: request.expectedSchema,
+    },
+    {
+      imageS3Url: request.imageS3Url,
+      imageUrl: derivedHttpsUrl,
+      instruction: request.instruction,
+      instructions: request.instruction,
+      expectedSchema: request.expectedSchema,
+      schema: request.expectedSchema,
+    },
+    {
+      imageS3Url: derivedHttpsUrl,
+      imageUrl: derivedHttpsUrl,
+      instruction: request.instruction,
+      instructions: request.instruction,
+      expectedSchema: request.expectedSchema,
+      schema: request.expectedSchema,
+    },
+  ];
+
+  try {
+    devLog(
+      "[SharedServicesAPI] Requesting structured image processing - API URL:",
+      endpoint,
+    );
+    let lastError: unknown = null;
+    for (let i = 0; i < candidateBodies.length; i++) {
+      const requestBody = candidateBodies[i];
+      try {
+        devLog(
+          `[SharedServicesAPI] Structured image payload attempt ${i + 1}:`,
+          JSON.stringify(requestBody, null, 2),
+        );
+
+        const response = await axios.post<ProcessStructuredImageApiResponse>(
+          endpoint,
+          requestBody,
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+
+        if (!response.data.success) {
+          throw new Error(
+            response.data.error?.message ?? "Structured image request failed",
+          );
+        }
+
+        const responseData = response.data.data;
+        if (!responseData) {
+          throw new Error("Structured image response missing data");
+        }
+
+        const imageStructured =
+          responseData.imageTextStructured ??
+          responseData.imageStructured ??
+          responseData.structuredData ??
+          responseData.result ??
+          null;
+
+        return {
+          imageStructured,
+          status: responseData.status ?? "SUCCESS",
+        };
+      } catch (attemptError) {
+        lastError = attemptError;
+        if (
+          !axios.isAxiosError(attemptError) ||
+          attemptError.response?.status !== 400
+        ) {
+          throw attemptError;
+        }
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Structured image request failed");
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const responseData = error.response?.data as
+        | { error?: { message?: string }; message?: string }
+        | string
+        | undefined;
+      const responseMessage =
+        typeof responseData === "string"
+          ? responseData
+          : responseData?.error?.message || responseData?.message;
+      devError("[SharedServicesAPI] Error processing structured image:", {
+        error: error.message,
+        imageS3Url: request.imageS3Url,
+        status: error.response?.status,
+        responseData,
+      });
+      throw new Error(
+        responseMessage || error.message || "Structured image request failed",
+      );
+    } else {
+      devError("[SharedServicesAPI] Error processing structured image:", {
+        error: error instanceof Error ? error.message : String(error),
+        imageS3Url: request.imageS3Url,
+      });
+      throw error;
+    }
   }
 }

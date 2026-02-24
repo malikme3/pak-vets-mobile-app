@@ -6,9 +6,9 @@ import {
   Alert,
   ImageBackground,
   TextInput,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
@@ -44,31 +44,55 @@ export default function LoginScreen() {
     googleAndroidClientId?: string;
   }) || {};
 
+  const googleWebClientId = googleConfig.googleWebClientId || "";
+  const googleExpoClientId = googleConfig.googleExpoClientId || "";
+  const googleIosClientId = googleConfig.googleIosClientId || "";
+  const googleAndroidClientId = googleConfig.googleAndroidClientId || "";
+
   const isFirebaseConfigured =
     Boolean(firebaseConfig.apiKey) &&
     Boolean(firebaseConfig.projectId) &&
     Boolean(firebaseConfig.appId);
 
-  const googleClientId =
-    googleConfig.googleExpoClientId ||
-    googleConfig.googleWebClientId ||
-    googleConfig.googleIosClientId ||
-    googleConfig.googleAndroidClientId ||
-    "";
+  const hasGoogleClientId = Boolean(
+    Platform.select({
+      ios: googleIosClientId,
+      android: googleAndroidClientId,
+      web: googleWebClientId,
+      default: googleExpoClientId,
+    }),
+  );
 
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+  const googleAuthClientConfig = Platform.select({
+    ios: { iosClientId: googleIosClientId || undefined },
+    android: { androidClientId: googleAndroidClientId || undefined },
+    web: {
+      webClientId: googleWebClientId || undefined,
+      clientId: googleExpoClientId || googleWebClientId || undefined,
+    },
+    default: { clientId: googleExpoClientId || undefined },
+  });
+
+  const nativeGoogleClientId = Platform.select({
+    ios: googleIosClientId,
+    android: googleAndroidClientId,
+    default: "",
+  });
+  const nativeGoogleRedirectUri = nativeGoogleClientId
+    ? `com.googleusercontent.apps.${nativeGoogleClientId.replace(
+        ".apps.googleusercontent.com",
+        "",
+      )}:/oauthredirect`
+    : undefined;
 
   const [googleRequest, googleResponse, googlePromptAsync] =
     Google.useAuthRequest(
       {
-        expoClientId: googleClientId,
-        webClientId: googleClientId,
-        responseType: AuthSession.ResponseType.IdToken,
+        ...googleAuthClientConfig,
         scopes: ["openid", "profile", "email"],
-        prompt: "select_account",
-        redirectUri,
+        selectAccount: true,
       },
-      { useProxy: true },
+      nativeGoogleRedirectUri ? { native: nativeGoogleRedirectUri } : undefined,
     );
 
   useEffect(() => {
@@ -115,9 +139,39 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleLogin = () => {
+    if (!isFirebaseConfigured) {
+      Alert.alert("Firebase not configured", "Check app.json settings.");
+      return;
+    }
+    if (!hasGoogleClientId) {
+      const missingClientIdLabel = Platform.select({
+        ios: "googleIosClientId",
+        android: "googleAndroidClientId",
+        web: "googleWebClientId",
+        default: "googleExpoClientId",
+      });
+      Alert.alert(
+        "Google login not configured",
+        `Missing ${missingClientIdLabel} in app.json expo.extra.`,
+      );
+      return;
+    }
+    googlePromptAsync();
+  };
+
   useEffect(() => {
     const runGoogleLogin = async () => {
-      if (!googleResponse || googleResponse.type !== "success") return;
+      if (!googleResponse) return;
+      if (googleResponse.type === "error") {
+        const authError = googleResponse.error;
+        Alert.alert(
+          "Google login failed",
+          authError?.message || authError?.code || "Authorization error.",
+        );
+        return;
+      }
+      if (googleResponse.type !== "success") return;
       const idToken =
         googleResponse.authentication?.idToken ||
         (googleResponse.params as { id_token?: string })?.id_token;
@@ -209,10 +263,10 @@ export default function LoginScreen() {
         />
         <Button
           title="Continue with Google"
-          onPress={() => googlePromptAsync({ useProxy: true })}
+          onPress={handleGoogleLogin}
           variant="secondary"
           style={styles.secondaryButton}
-          disabled={!googleRequest || !googleClientId || !isFirebaseConfigured}
+          disabled={!googleRequest || !hasGoogleClientId || !isFirebaseConfigured}
         />
       </View>
     </SafeAreaView>

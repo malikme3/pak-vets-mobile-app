@@ -2,12 +2,16 @@
   "expo": {
     "name": "pak-vets-mobile-app",
     "slug": "pak-vets-mobile-app",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "pak-vets",
+    "scheme": [
+      "pak-vets",
+      "com.googleusercontent.apps.723134103138-ppv0s10lo0n3l5mr137n9i8f9sktvvp7",
+      "com.googleusercontent.apps.723134103138-6ak38jl31in2drmstc4khel6si56su08"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,10 +19,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "2"
+      "buildNumber": "3",
+      "bundleIdentifier": "com.pakvets.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -34,17 +42,20 @@
       "eas": {
         "projectId": "4cb5d1a3-7f31-4911-9101-a6097aeda41a"
       },
-      "firebaseApiKey": "AIzaSyAv3-EsoJdRgk_cm7OmgmB1W0",
+      "firebaseApiKey": "AIzaSyAv3-EsoJdRgk_cm7OmgmB1W0Lp8ZRI4nE",
       "firebaseAuthDomain": "pak-vets-auth.firebaseapp.com",
       "firebaseProjectId": "pak-vets-auth",
-      "firebaseAppId": "1:723134103138:web:1ff6062dd25a92532",
-      "firebaseMessagingSenderId": "723134103000",
+      "firebaseAppId": "1:723134103138:web:1ff6062dd25a9253235b3b",
+      "firebaseMessagingSenderId": "723134103138",
       "firebaseStorageBucket": "pak-vets-auth.firebasestorage.app",
       "googleWebClientId": "723134103138-mp7ogcna5nq015oq2cf0q328fdk9rss4.apps.googleusercontent.com",
       "googleExpoClientId": "",
-      "googleIosClientId": "",
-      "googleAndroidClientId": ""
+      "googleIosClientId": "723134103138-ppv0s10lo0n3l5mr137n9i8f9sktvvp7.apps.googleusercontent.com",
+      "googleAndroidClientId": "723134103138-6ak38jl31in2drmstc4khel6si56su08.apps.googleusercontent.com"
     },
-    "plugins": ["expo-font", "@react-native-community/datetimepicker"]
+    "plugins": [
+      "expo-font",
+      "@react-native-community/datetimepicker"
+    ]
   }
 }
