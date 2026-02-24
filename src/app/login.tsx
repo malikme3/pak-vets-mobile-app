@@ -117,7 +117,7 @@ export default function LoginScreen() {
       return;
     }
     if (!isFirebaseConfigured) {
-      Alert.alert("Firebase not configured", "Check app.json settings.");
+      Alert.alert("Firebase not configured", "Check app config/env settings.");
       return;
     }
     setSubmitting(true);
@@ -141,7 +141,7 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = () => {
     if (!isFirebaseConfigured) {
-      Alert.alert("Firebase not configured", "Check app.json settings.");
+      Alert.alert("Firebase not configured", "Check app config/env settings.");
       return;
     }
     if (!hasGoogleClientId) {
@@ -153,7 +153,7 @@ export default function LoginScreen() {
       });
       Alert.alert(
         "Google login not configured",
-        `Missing ${missingClientIdLabel} in app.json expo.extra.`,
+        `Missing ${missingClientIdLabel} in app config expo.extra.`,
       );
       return;
     }
@@ -220,7 +220,7 @@ export default function LoginScreen() {
       <View style={styles.card}>
         {!isFirebaseConfigured ? (
           <Text style={[styles.configHint, { color: colors.muted }]}>
-            Firebase is not configured. Add keys in app.json extra.
+            Firebase is not configured. Add keys in app config env/extra.
           </Text>
         ) : null}
         <TextInput

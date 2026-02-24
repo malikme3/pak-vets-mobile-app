@@ -53,6 +53,7 @@ npm install
 - `EXPO_PUBLIC_API_URL` (default dev API in code)
 - `EXPO_PUBLIC_SHARED_SERVICES_API_URL` (optional explicit shared-services URL)
 - `EXPO_PUBLIC_STAGE` (fallback stage when URL cannot be inferred)
+- `FIREBASE_API_KEY` (required for Firebase auth; loaded via `app.config.js`)
 
 API pagination currently follows backend `limit`/`offset` query params (for endpoints that support pagination).
 
