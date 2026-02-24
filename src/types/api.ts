@@ -372,7 +372,22 @@ export interface MatchAnimalImageResponse {
   candidates: MatchCandidate[];
 }
 
-export type AnimalImageType = "FACE" | "EAR" | "BODY";
+export type AnimalImageType =
+  | "FACE"
+  | "EAR"
+  | "BODY"
+  | "LAB_REPORT"
+  | "VACINATION"
+  | "EXRAY";
+
+export interface CreateAnimalImageRequest {
+  imageType: AnimalImageType;
+  s3Key: string;
+  s3Url: string;
+  captureDate?: string;
+  notes?: string;
+  source?: string;
+}
 
 export interface AnimalImage {
   animalImageId: number;

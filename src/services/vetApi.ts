@@ -31,6 +31,7 @@ import type {
   MatchAnimalImageRequest,
   MatchAnimalImageResponse,
   AnimalImage,
+  CreateAnimalImageRequest,
 } from "../types/api";
 
 // Doctors API
@@ -284,6 +285,16 @@ export const animalApi = {
     const response = await apiClient.instance.get<
       ApiSuccessResponse<AnimalImage[]>
     >(`/animals/${animalId}/images`);
+    return response.data.data;
+  },
+
+  createAnimalImage: async (
+    animalId: number,
+    request: CreateAnimalImageRequest,
+  ): Promise<AnimalImage> => {
+    const response = await apiClient.instance.post<
+      ApiSuccessResponse<AnimalImage>
+    >(`/animals/${animalId}/images`, request);
     return response.data.data;
   },
 };

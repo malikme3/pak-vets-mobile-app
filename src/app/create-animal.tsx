@@ -19,6 +19,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Location from "expo-location";
 import { useTheme } from "../theme/useTheme";
@@ -57,6 +58,15 @@ type VoiceRecording = {
 
 type Step = "farmer" | "upload" | "complaint" | "attributes";
 type ImageType = "face" | "ear" | "body";
+type DiseaseEvidenceType = "LAB_REPORT" | "VACINATION" | "EXRAY";
+
+interface SelectedDiseaseEvidence {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  imageType: DiseaseEvidenceType;
+  source: "gallery" | "camera" | "file";
+}
 
 const STEPS: { key: Step; label: string; icon: string }[] = [
   { key: "upload", label: "Upload Images", icon: "camera" },
@@ -275,6 +285,13 @@ export default function CreateAnimalScreen() {
   const [chiefComplaintSound, setChiefComplaintSound] =
     useState<Audio.Sound | null>(null);
   const [isPlayingChiefComplaint, setIsPlayingChiefComplaint] = useState(false);
+  const [selectedDiseaseEvidenceType, setSelectedDiseaseEvidenceType] =
+    useState<DiseaseEvidenceType>("LAB_REPORT");
+  const [diseaseEvidenceFiles, setDiseaseEvidenceFiles] = useState<
+    SelectedDiseaseEvidence[]
+  >([]);
+  const [uploadingDiseaseEvidence, setUploadingDiseaseEvidence] =
+    useState(false);
 
   useEffect(() => {
     return () => {
@@ -555,6 +572,191 @@ export default function CreateAnimalScreen() {
     return fileUrl;
   };
 
+  const uploadFileToS3 = useCallback(
+    async (
+      fileUri: string,
+      s3Key: string,
+      contentType: string,
+      tags: string,
+    ): Promise<string> => {
+      const bucketName = getBucketName();
+      const { signedUrl, fileUrl } = await getUploadSignedUrl(
+        bucketName,
+        s3Key,
+        tags,
+      );
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (!fileInfo.exists) throw new Error("File does not exist");
+      const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binaryString = atob(fileBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const response = await fetch(signedUrl, {
+        method: "PUT",
+        body: bytes,
+        headers: { "Content-Type": contentType },
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        throw new Error(`S3 upload failed: ${errorText || response.statusText}`);
+      }
+      return fileUrl;
+    },
+    [],
+  );
+
+  const sanitizeFileName = useCallback((fileName: string) => {
+    return fileName
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9._-]/g, "");
+  }, []);
+
+  const inferContentType = useCallback(
+    (fileName: string, fallback?: string) => {
+      if (fallback?.trim()) return fallback;
+      const lower = fileName.toLowerCase();
+      if (lower.endsWith(".pdf")) return "application/pdf";
+      if (lower.endsWith(".png")) return "image/png";
+      if (lower.endsWith(".webp")) return "image/webp";
+      if (lower.endsWith(".heic") || lower.endsWith(".heif"))
+        return "image/heic";
+      return "image/jpeg";
+    },
+    [],
+  );
+
+  const addDiseaseEvidence = useCallback(
+    (entry: SelectedDiseaseEvidence) => {
+      setDiseaseEvidenceFiles((prev) => [...prev, entry]);
+    },
+    [],
+  );
+
+  const pickDiseaseEvidenceFromGallery = useCallback(async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ?? `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addDiseaseEvidence({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+      imageType: selectedDiseaseEvidenceType,
+      source: "gallery",
+    });
+  }, [
+    addDiseaseEvidence,
+    requestPermissions,
+    sanitizeFileName,
+    selectedDiseaseEvidenceType,
+  ]);
+
+  const captureDiseaseEvidenceFromCamera = useCallback(async () => {
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ?? `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addDiseaseEvidence({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+      imageType: selectedDiseaseEvidenceType,
+      source: "camera",
+    });
+  }, [
+    addDiseaseEvidence,
+    requestCameraPermissions,
+    sanitizeFileName,
+    selectedDiseaseEvidenceType,
+  ]);
+
+  const pickDiseaseEvidenceFile = useCallback(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["image/*", "application/pdf"],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    addDiseaseEvidence({
+      uri: asset.uri,
+      name: sanitizeFileName(asset.name || `file-${Date.now()}`),
+      mimeType: asset.mimeType ?? undefined,
+      imageType: selectedDiseaseEvidenceType,
+      source: "file",
+    });
+  }, [addDiseaseEvidence, sanitizeFileName, selectedDiseaseEvidenceType]);
+
+  const removeDiseaseEvidence = useCallback((index: number) => {
+    setDiseaseEvidenceFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const buildDiseaseEvidenceS3Key = useCallback(
+    (animalId: number, imageType: DiseaseEvidenceType, fileName: string) => {
+      const safeName = sanitizeFileName(fileName || `evidence-${Date.now()}.jpg`);
+      return `animal-disease-files/${animalId}/${imageType.toLowerCase()}/${Date.now()}-${safeName}`;
+    },
+    [sanitizeFileName],
+  );
+
+  const uploadDiseaseEvidenceForAnimal = useCallback(
+    async (animalId: number) => {
+      if (!diseaseEvidenceFiles.length) return;
+      setUploadingDiseaseEvidence(true);
+      try {
+        for (const evidence of diseaseEvidenceFiles) {
+          const s3Key = buildDiseaseEvidenceS3Key(
+            animalId,
+            evidence.imageType,
+            evidence.name,
+          );
+          const contentType = inferContentType(evidence.name, evidence.mimeType);
+          const s3Url = await uploadFileToS3(
+            evidence.uri,
+            s3Key,
+            contentType,
+            "type=animal-disease-evidence",
+          );
+          await animalApi.createAnimalImage(animalId, {
+            imageType: evidence.imageType,
+            s3Key,
+            s3Url,
+            notes: evidence.name,
+            source: "MOBILE_UPLOAD",
+          });
+        }
+      } finally {
+        setUploadingDiseaseEvidence(false);
+      }
+    },
+    [
+      buildDiseaseEvidenceS3Key,
+      diseaseEvidenceFiles,
+      inferContentType,
+      uploadFileToS3,
+    ],
+  );
+
   // S3 key: create-animal-images/{doctorId}/{speciesSlug}/lat-{lat}_lng-{lng}_animalId-{animalId}_timestamp-{timestamp}_{face|ear|body}.jpg
   // Use one timestamp for all 3 so backend can find face/ear/body under same pathPrefix and run AI analyze.
   const buildImageS3Key = useCallback(
@@ -771,6 +973,7 @@ export default function CreateAnimalScreen() {
         const created = await createAnimalMutation.mutateAsync(request);
         animalIdToUse = created.animalId;
       }
+      await uploadDiseaseEvidenceForAnimal(animalIdToUse);
       if (didNavigateFromAttributesRef.current) return;
 
       const toPath = (p: string) => (p.startsWith("/") ? p : `/${p}`);
@@ -832,7 +1035,7 @@ export default function CreateAnimalScreen() {
     chiefComplaint,
     buildAnimalRequest,
     createAnimalMutation,
-    uploadedUrls,
+    uploadDiseaseEvidenceForAnimal,
     returnTo,
     router,
     doctor,
@@ -2215,6 +2418,124 @@ export default function CreateAnimalScreen() {
                 </View>
               </View>
             </Card>
+            <Card style={styles.complaintInputCard}>
+              <Text style={[styles.complaintLabel, { color: colors.text }]}>
+                Disease Evidence (optional)
+              </Text>
+              <Text
+                style={[styles.attributesBlockHint, { color: colors.muted }]}
+              >
+                Upload related images/files and classify by report type.
+              </Text>
+              <View style={styles.radioRow}>
+                {(
+                  [
+                    ["LAB_REPORT", "Lab Report"],
+                    ["EXRAY", "ExRay"],
+                    ["VACINATION", "Vacination"],
+                  ] as const
+                ).map(([value, label]) => {
+                  const selected = selectedDiseaseEvidenceType === value;
+                  return (
+                    <TouchableOpacity
+                      key={value}
+                      activeOpacity={0.7}
+                      onPress={() => setSelectedDiseaseEvidenceType(value)}
+                      style={[
+                        styles.radioChip,
+                        {
+                          borderColor: selected
+                            ? colors.primary
+                            : colors.border,
+                          backgroundColor: selected
+                            ? `${colors.primary}22`
+                            : colors.surface,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.radioDot,
+                          {
+                            borderColor: selected
+                              ? colors.primary
+                              : colors.muted,
+                            backgroundColor: selected
+                              ? colors.primary
+                              : "transparent",
+                          },
+                        ]}
+                      />
+                      <Text style={[styles.radioText, { color: colors.text }]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.buttonRow}>
+                <Button
+                  title="Choose Image"
+                  onPress={pickDiseaseEvidenceFromGallery}
+                  variant="secondary"
+                  style={styles.selectButton}
+                />
+                <Button
+                  title="Take Photo"
+                  onPress={captureDiseaseEvidenceFromCamera}
+                  variant="secondary"
+                  style={styles.selectButton}
+                />
+              </View>
+              <Button
+                title="Pick File"
+                onPress={pickDiseaseEvidenceFile}
+                variant="secondary"
+                style={styles.primaryButton}
+              />
+
+              {diseaseEvidenceFiles.length > 0 ? (
+                <View style={styles.evidenceList}>
+                  {diseaseEvidenceFiles.map((evidence, index) => (
+                    <View
+                      key={`${evidence.uri}-${index}`}
+                      style={[
+                        styles.evidenceItem,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.surface,
+                        },
+                      ]}
+                    >
+                      <View style={styles.evidenceItemBody}>
+                        <Text
+                          style={[styles.evidenceType, { color: colors.primary }]}
+                        >
+                          {evidence.imageType}
+                        </Text>
+                        <Text
+                          style={[styles.evidenceName, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
+                          {evidence.name}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => removeDiseaseEvidence(index)}
+                        style={styles.playbackIconButton}
+                      >
+                        <FontAwesome
+                          name="times"
+                          size={12}
+                          color={colors.muted}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </Card>
             <Button
               title="Next"
               onPress={() => setStep("attributes")}
@@ -2564,6 +2885,8 @@ export default function CreateAnimalScreen() {
               title={
                 createAnimalMutation.isPending
                   ? "Creating..."
+                  : uploadingDiseaseEvidence
+                    ? "Uploading evidence..."
                   : creatingCase
                     ? "Creating case..."
                     : "Save & continue"
@@ -2574,9 +2897,14 @@ export default function CreateAnimalScreen() {
               disabled={
                 !species.trim() ||
                 createAnimalMutation.isPending ||
+                uploadingDiseaseEvidence ||
                 creatingCase
               }
-              loading={createAnimalMutation.isPending || creatingCase}
+              loading={
+                createAnimalMutation.isPending ||
+                uploadingDiseaseEvidence ||
+                creatingCase
+              }
             />
           </ScrollView>
         </SafeAreaView>
@@ -3159,5 +3487,56 @@ const styles = StyleSheet.create({
     bottom: 8,
     right: 8,
     zIndex: 10,
+  },
+  radioRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  radioChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 8,
+  },
+  radioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  radioText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  evidenceList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  evidenceItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  evidenceItemBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  evidenceType: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  evidenceName: {
+    fontSize: 13,
   },
 });

@@ -1,6 +1,6 @@
-import Constants from "expo-constants";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getAppExtra } from "./appConfig";
 
 type FirebaseConfig = {
   apiKey: string;
@@ -11,16 +11,11 @@ type FirebaseConfig = {
   storageBucket?: string;
 };
 
-const extra = Constants.expoConfig?.extra as
-  | {
-      firebaseApiKey?: string;
-      firebaseAuthDomain?: string;
-      firebaseProjectId?: string;
-      firebaseAppId?: string;
-      firebaseMessagingSenderId?: string;
-      firebaseStorageBucket?: string;
-    }
-  | undefined;
+function isLikelyFirebaseApiKey(value: string): boolean {
+  return /^AIza[0-9A-Za-z_-]{20,}$/.test(value);
+}
+
+const extra = getAppExtra();
 
 const firebaseConfig: FirebaseConfig = {
   apiKey: extra?.firebaseApiKey ?? "",
@@ -31,8 +26,47 @@ const firebaseConfig: FirebaseConfig = {
   storageBucket: extra?.firebaseStorageBucket ?? undefined,
 };
 
+let hasLoggedConfigStatus = false;
+
+function logFirebaseConfigStatus(): void {
+  if (hasLoggedConfigStatus || !__DEV__) return;
+  hasLoggedConfigStatus = true;
+
+  const status = {
+    firebaseApiKey: Boolean(firebaseConfig.apiKey),
+    firebaseApiKeyLooksValid: isLikelyFirebaseApiKey(firebaseConfig.apiKey),
+    firebaseProjectId: Boolean(firebaseConfig.projectId),
+    firebaseAppId: Boolean(firebaseConfig.appId),
+    firebaseAuthDomain: Boolean(firebaseConfig.authDomain),
+    firebaseMessagingSenderId: Boolean(firebaseConfig.messagingSenderId),
+    firebaseStorageBucket: Boolean(firebaseConfig.storageBucket),
+  };
+
+  const missingRequired = Object.entries({
+    FIREBASE_API_KEY: status.firebaseApiKey && status.firebaseApiKeyLooksValid,
+    FIREBASE_PROJECT_ID: status.firebaseProjectId,
+    FIREBASE_APP_ID: status.firebaseAppId,
+  })
+    .filter(([, present]) => !present)
+    .map(([key]) => key);
+
+  console.log("[Firebase Config]", {
+    ...status,
+    missingRequired,
+  });
+}
+
 export function getFirebaseConfig(): FirebaseConfig {
+  logFirebaseConfigStatus();
   return firebaseConfig;
+}
+
+export function hasValidFirebaseConfig(): boolean {
+  return (
+    isLikelyFirebaseApiKey(firebaseConfig.apiKey) &&
+    Boolean(firebaseConfig.projectId) &&
+    Boolean(firebaseConfig.appId)
+  );
 }
 
 export function getFirebaseApp() {

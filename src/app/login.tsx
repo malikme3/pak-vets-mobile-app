@@ -22,37 +22,47 @@ import { useTheme } from "../theme/useTheme";
 import { useAuthStore } from "../store/authStore";
 import { useRouter } from "expo-router";
 import { authApi } from "../services/authApi";
-import { getFirebaseAuth, getFirebaseConfig } from "../services/firebase";
-import Constants from "expo-constants";
+import {
+  getFirebaseAuth,
+  getFirebaseConfig,
+  hasValidFirebaseConfig,
+} from "../services/firebase";
+import { getAppExtra } from "../services/appConfig";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
+  const defaultEmail = __DEV__ ? "zulifqar.ahmad@hotmail.com" : "";
+  const defaultPassword = __DEV__ ? "admin123" : "";
   const router = useRouter();
   const { colors } = useTheme();
   const { status, setSessionToken } = useAuthStore();
   const isAuthed = status === "signedIn";
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState(defaultPassword);
   const [submitting, setSubmitting] = useState(false);
 
   const firebaseConfig = getFirebaseConfig();
-  const googleConfig = (Constants.expoConfig?.extra as {
-    googleWebClientId?: string;
-    googleExpoClientId?: string;
-    googleIosClientId?: string;
-    googleAndroidClientId?: string;
-  }) || {};
+  const googleConfig = getAppExtra();
 
   const googleWebClientId = googleConfig.googleWebClientId || "";
   const googleExpoClientId = googleConfig.googleExpoClientId || "";
   const googleIosClientId = googleConfig.googleIosClientId || "";
   const googleAndroidClientId = googleConfig.googleAndroidClientId || "";
 
-  const isFirebaseConfigured =
-    Boolean(firebaseConfig.apiKey) &&
-    Boolean(firebaseConfig.projectId) &&
-    Boolean(firebaseConfig.appId);
+  const isFirebaseConfigured = hasValidFirebaseConfig();
+  const apiKeyLooksValid = /^AIza[0-9A-Za-z_-]{20,}$/.test(
+    (firebaseConfig.apiKey || "").trim().replace(/^['"]|['"]$/g, ""),
+  );
+  const missingFirebaseKeys = [
+    !firebaseConfig.apiKey
+      ? "firebaseApiKey/FIREBASE_API_KEY"
+      : !apiKeyLooksValid
+        ? "firebaseApiKey/FIREBASE_API_KEY (invalid format)"
+        : null,
+    !firebaseConfig.projectId ? "firebaseProjectId/FIREBASE_PROJECT_ID" : null,
+    !firebaseConfig.appId ? "firebaseAppId/FIREBASE_APP_ID" : null,
+  ].filter(Boolean) as string[];
 
   const hasGoogleClientId = Boolean(
     Platform.select({
@@ -117,7 +127,10 @@ export default function LoginScreen() {
       return;
     }
     if (!isFirebaseConfigured) {
-      Alert.alert("Firebase not configured", "Check app config/env settings.");
+      Alert.alert(
+        "Firebase not configured",
+        `Missing: ${missingFirebaseKeys.join(", ")}`,
+      );
       return;
     }
     setSubmitting(true);
@@ -259,7 +272,7 @@ export default function LoginScreen() {
           onPress={handleEmailLogin}
           variant="primary"
           style={styles.primaryButton}
-          disabled={!isFirebaseConfigured || submitting}
+          disabled={submitting}
         />
         <Button
           title="Continue with Google"
