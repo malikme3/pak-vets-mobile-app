@@ -215,6 +215,10 @@ export default function SelectAnimalScreen() {
   const [nearbyAnimals, setNearbyAnimals] = useState<Animal[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
 
+  const [findByImageExpanded, setFindByImageExpanded] = useState(false);
+  const [findByOwnerExpanded, setFindByOwnerExpanded] = useState(false);
+  const [findByTagExpanded, setFindByTagExpanded] = useState(false);
+
   // Owner search query (phone with prefix, NIC and name as-is)
   const ownerQuery =
     ownerInputValue.trim() === ""
@@ -645,12 +649,12 @@ export default function SelectAnimalScreen() {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      edges={["top"]}
+      edges={["top", "bottom"]}
     >
       <StatusBar style={isDark ? "light" : "dark"} />
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, styles.contentWithStickyFooter]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -785,7 +789,11 @@ export default function SelectAnimalScreen() {
 
         {/* Find by image */}
         <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setFindByImageExpanded((v) => !v)}
+            activeOpacity={0.7}
+          >
             <View
               style={[
                 styles.sectionIconWrap,
@@ -802,7 +810,14 @@ export default function SelectAnimalScreen() {
                 Face, ear, or body photo
               </Text>
             </View>
-          </View>
+            <FontAwesome
+              name={findByImageExpanded ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={colors.muted}
+            />
+          </TouchableOpacity>
+          {findByImageExpanded && (
+            <>
           <SegmentedControl
             options={[
               { label: "Face", value: "FACE" },
@@ -921,11 +936,17 @@ export default function SelectAnimalScreen() {
               )}
             </View>
           )}
+            </>
+          )}
         </Card>
 
         {/* Find by Owner */}
         <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setFindByOwnerExpanded((v) => !v)}
+            activeOpacity={0.7}
+          >
             <View
               style={[
                 styles.sectionIconWrap,
@@ -942,7 +963,14 @@ export default function SelectAnimalScreen() {
                 Owner phone, NIC #, or name
               </Text>
             </View>
-          </View>
+            <FontAwesome
+              name={findByOwnerExpanded ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={colors.muted}
+            />
+          </TouchableOpacity>
+          {findByOwnerExpanded && (
+            <>
           <SegmentedControl
             options={[
               { label: "Phone", value: "farmer_phone" },
@@ -986,11 +1014,17 @@ export default function SelectAnimalScreen() {
               placeholderTextColor={colors.muted}
             />
           </View>
+            </>
+          )}
         </Card>
 
         {/* Find by Tag */}
         <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setFindByTagExpanded((v) => !v)}
+            activeOpacity={0.7}
+          >
             <View
               style={[
                 styles.sectionIconWrap,
@@ -1007,8 +1041,14 @@ export default function SelectAnimalScreen() {
                 Animal tag ID
               </Text>
             </View>
-          </View>
-          <View
+            <FontAwesome
+              name={findByTagExpanded ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={colors.muted}
+            />
+          </TouchableOpacity>
+          {findByTagExpanded && (
+            <View
             style={[
               styles.searchInputRow,
               {
@@ -1032,6 +1072,7 @@ export default function SelectAnimalScreen() {
               placeholderTextColor={colors.muted}
             />
           </View>
+          )}
         </Card>
 
         {isLoading && (
@@ -1073,18 +1114,28 @@ export default function SelectAnimalScreen() {
           </View>
         )}
 
-        <View style={styles.footer}>
-          <Text style={[styles.footerLabel, { color: colors.muted }]}>
-            Animal not in list?
-          </Text>
-          <Button
-            title="Create new animal"
-            onPress={handleCreateAnimal}
-            variant="secondary"
-            style={styles.footerButton}
-          />
-        </View>
       </ScrollView>
+
+      <View
+        style={[
+          styles.footer,
+          styles.footerSticky,
+          {
+            backgroundColor: colors.background,
+            borderTopColor: colors.border,
+          },
+        ]}
+      >
+        <Text style={[styles.footerLabel, { color: colors.muted }]}>
+          Animal not in list?
+        </Text>
+        <Button
+          title="Create new animal"
+          onPress={handleCreateAnimal}
+          variant="secondary"
+          style={styles.footerButton}
+        />
+      </View>
 
       <Modal
         visible={createAnimalModalVisible}
@@ -1199,6 +1250,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 32,
   },
+  contentWithStickyFooter: { paddingBottom: 100 },
   header: {
     marginBottom: 24,
   },
@@ -1377,9 +1429,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   footer: {
-    marginTop: 24,
     paddingTop: 8,
     alignItems: "center",
+  },
+  footerSticky: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
   },
   footerLabel: {
     fontSize: 14,

@@ -383,10 +383,13 @@ export const caseDiagnosisApi = {
 
   suggestDiagnoses: async (
     complaint: string,
+    caseId?: number,
   ): Promise<DiagnosisSuggestion[]> => {
+    const body: { complaint: string; caseId?: number } = { complaint };
+    if (caseId != null && caseId > 0) body.caseId = caseId;
     const response = await apiClient.instance.post<
       ApiSuccessResponse<DiagnosisSuggestion[]>
-    >("/case-diagnoses/suggest", { complaint });
+    >("/case-diagnoses/suggest", body);
     return response.data.data;
   },
 

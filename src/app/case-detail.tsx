@@ -255,7 +255,7 @@ export default function CaseDetailScreen() {
     let cancelled = false;
     setSuggestionsLoading(true);
     caseDiagnosisApi
-      .suggestDiagnoses(chiefComplaint.trim())
+      .suggestDiagnoses(chiefComplaint.trim(), caseId)
       .then((data) => {
         if (!cancelled) setSuggestedDiagnoses(data || []);
       })
@@ -268,7 +268,7 @@ export default function CaseDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [suggestionsRequestedByUser, caseData?.caseId, chiefComplaint]);
+  }, [suggestionsRequestedByUser, caseId, chiefComplaint]);
 
   // Refetch diagnoses, treatments, notes, and media when screen comes into focus (e.g., after adding)
   useFocusEffect(
