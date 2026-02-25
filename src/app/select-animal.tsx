@@ -124,11 +124,7 @@ function NearbyAnimalRow({
       activeOpacity={0.7}
     >
       <View style={nearbyAnimalRowStyles.avatarContainer}>
-        <SpeciesIcon
-          species={animal.species}
-          size={40}
-          resizeMode="cover"
-        />
+        <SpeciesIcon species={animal.species} size={40} resizeMode="cover" />
       </View>
       <View style={nearbyAnimalRowStyles.content}>
         {title ? (
@@ -256,18 +252,18 @@ export default function SelectAnimalScreen() {
       ? []
       : (ownerSearchPages?.pages.flatMap((page) => page.items) || []).filter(
           (animal) => {
-          const q = ownerQuery.toLowerCase();
-          switch (ownerFilter) {
-            case "farmer_phone":
-              return animal.farmer?.phoneNumber?.includes(ownerQuery);
-            case "farmer_nic":
-              return animal.farmer?.nicNo?.toLowerCase().includes(q);
-            case "farmer_name":
-              return animal.farmer?.fullName?.toLowerCase().includes(q);
-            default:
-              return false;
-          }
-        },
+            const q = ownerQuery.toLowerCase();
+            switch (ownerFilter) {
+              case "farmer_phone":
+                return animal.farmer?.phoneNumber?.includes(ownerQuery);
+              case "farmer_nic":
+                return animal.farmer?.nicNo?.toLowerCase().includes(q);
+              case "farmer_name":
+                return animal.farmer?.fullName?.toLowerCase().includes(q);
+              default:
+                return false;
+            }
+          },
         );
 
   // Tag results: filter by tagId
@@ -276,7 +272,7 @@ export default function SelectAnimalScreen() {
       ? []
       : (tagSearchPages?.pages.flatMap((page) => page.items) || []).filter(
           (animal) =>
-          animal.tagId?.toLowerCase().includes(tagQuery.toLowerCase()),
+            animal.tagId?.toLowerCase().includes(tagQuery.toLowerCase()),
         );
 
   // Combined results, dedupe by animalId

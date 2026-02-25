@@ -378,7 +378,7 @@ export type AnimalImageType =
   | "BODY"
   | "LAB_REPORT"
   | "VACINATION"
-  | "EXRAY";
+  | "X_RAY";
 
 export interface CreateAnimalImageRequest {
   imageType: AnimalImageType;

@@ -39,7 +39,8 @@ export function SegmentedControl({
                 isLast && styles.segmentLast,
                 isSelected && { backgroundColor: colors.primary },
                 !isSelected && { backgroundColor: colors.surface },
-                pressed && !isSelected && { backgroundColor: `${colors.primary}12` },
+                pressed &&
+                  !isSelected && { backgroundColor: `${colors.primary}12` },
               ]}
               onPress={() => onValueChange(option.value)}
             >

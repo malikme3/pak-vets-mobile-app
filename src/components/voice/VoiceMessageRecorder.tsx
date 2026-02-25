@@ -291,10 +291,7 @@ export function VoiceMessageRecorder({
         console.warn(
           "[VoiceRecorder] Empty transcription - audio may be silent or too short",
         );
-        Alert.alert(
-          copy.voiceNoSpeechTitle,
-          copy.voiceNoSpeechMessage,
-        );
+        Alert.alert(copy.voiceNoSpeechTitle, copy.voiceNoSpeechMessage);
         await resetRecording();
         return;
       }

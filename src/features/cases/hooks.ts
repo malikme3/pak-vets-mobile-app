@@ -11,8 +11,10 @@ export const caseKeys = {
   all: ["case"] as const,
   detail: (id: number) => [...caseKeys.all, id] as const,
   listRoot: () => [...caseKeys.all, "list"] as const,
-  byAnimal: (animalId: number) => [...caseKeys.listRoot(), "animal", animalId] as const,
-  byDoctor: (doctorId: number) => [...caseKeys.listRoot(), "doctor", doctorId] as const,
+  byAnimal: (animalId: number) =>
+    [...caseKeys.listRoot(), "animal", animalId] as const,
+  byDoctor: (doctorId: number) =>
+    [...caseKeys.listRoot(), "doctor", doctorId] as const,
   allList: () => [...caseKeys.listRoot(), "all"] as const,
 };
 

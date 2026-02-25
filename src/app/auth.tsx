@@ -6,7 +6,9 @@ import { useTheme } from "../theme/useTheme";
 export default function AuthCallbackScreen() {
   const { colors } = useTheme();
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <StatusBar style="auto" />
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />

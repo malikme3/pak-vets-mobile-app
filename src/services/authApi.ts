@@ -8,7 +8,9 @@ type LoginResponse = {
 };
 
 export const authApi = {
-  loginWithFirebase: async (firebaseIdToken: string): Promise<LoginResponse> => {
+  loginWithFirebase: async (
+    firebaseIdToken: string,
+  ): Promise<LoginResponse> => {
     const response = await apiClient.instance.post<{ data: LoginResponse }>(
       "/auth/login",
       {},
@@ -21,9 +23,7 @@ export const authApi = {
     return response.data.data;
   },
   me: async (): Promise<Doctor> => {
-    const response = await apiClient.instance.get<{ data: Doctor }>(
-      "/auth/me",
-    );
+    const response = await apiClient.instance.get<{ data: Doctor }>("/auth/me");
     return response.data.data;
   },
 };

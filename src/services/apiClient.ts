@@ -87,6 +87,12 @@ class ApiClient {
         if (error.response?.status === 401) {
           useAuthStore.getState().clear();
         }
+        if (
+          error.response?.status === 404 &&
+          error.config?.url?.includes("/auth/me")
+        ) {
+          useAuthStore.getState().clear();
+        }
         return Promise.reject(this.normalizeError(error));
       },
     );

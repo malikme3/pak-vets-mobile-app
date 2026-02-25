@@ -212,7 +212,9 @@ export default function LoginScreen() {
   }, [googleResponse]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.surface }]}
+    >
       <StatusBar style="auto" />
       <ImageBackground
         source={require("../../assets/species-icons/classic/hero-banner-cow.png")}
@@ -279,7 +281,9 @@ export default function LoginScreen() {
           onPress={handleGoogleLogin}
           variant="secondary"
           style={styles.secondaryButton}
-          disabled={!googleRequest || !hasGoogleClientId || !isFirebaseConfigured}
+          disabled={
+            !googleRequest || !hasGoogleClientId || !isFirebaseConfigured
+          }
         />
       </View>
     </SafeAreaView>

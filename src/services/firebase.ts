@@ -71,7 +71,11 @@ export function hasValidFirebaseConfig(): boolean {
 
 export function getFirebaseApp() {
   if (getApps().length > 0) return getApp();
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
+  if (
+    !firebaseConfig.apiKey ||
+    !firebaseConfig.projectId ||
+    !firebaseConfig.appId
+  ) {
     throw new Error("Firebase is not configured. Check app config extra/env.");
   }
   return initializeApp(firebaseConfig);

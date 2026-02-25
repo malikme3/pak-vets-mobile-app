@@ -74,7 +74,8 @@ export function useTheme() {
       nearbyActionTitle: "Find Nearby Cases",
       nearbyActionLoadingTitle: "Searching for cases near you...",
       openCasesTitle: "Open Cases",
-      openCasesCaption: "Tap a case to open it and add diagnoses or treatments.",
+      openCasesCaption:
+        "Tap a case to open it and add diagnoses or treatments.",
       nearbyTitle: "Nearby Cases",
       nearbyHint:
         "Animals with cases within {{radius}} km of your location. Tap one to view or start a visit.",

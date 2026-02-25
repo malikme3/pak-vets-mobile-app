@@ -57,11 +57,19 @@ export function useSearchAnimals(query: string) {
   });
 }
 
-export function useSearchAnimalsPaginated(query: string, pageSize: number = 20) {
+export function useSearchAnimalsPaginated(
+  query: string,
+  pageSize: number = 20,
+) {
   const normalizedQuery = query.trim();
 
   return useInfiniteQuery<PaginatedData<Animal>, Error>({
-    queryKey: ["animal", "search-paginated", normalizedQuery, pageSize] as const,
+    queryKey: [
+      "animal",
+      "search-paginated",
+      normalizedQuery,
+      pageSize,
+    ] as const,
     enabled: normalizedQuery.length >= 2,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>

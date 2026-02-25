@@ -401,16 +401,13 @@ export async function processStructuredTranscription(
 
     const structuredData = responseData.audioTranscriptStructured;
 
-    devLog(
-      "[SharedServicesAPI] Structured transcription response received:",
-      {
-        status: responseData.status,
-        hasRawText: !!responseData.audioTranscriptRaw,
-        hasEnrichedText: !!responseData.audioTranscriptEnriched,
-        hasStructuredData: !!structuredData,
-        structuredFields: structuredData ? Object.keys(structuredData) : null,
-      },
-    );
+    devLog("[SharedServicesAPI] Structured transcription response received:", {
+      status: responseData.status,
+      hasRawText: !!responseData.audioTranscriptRaw,
+      hasEnrichedText: !!responseData.audioTranscriptEnriched,
+      hasStructuredData: !!structuredData,
+      structuredFields: structuredData ? Object.keys(structuredData) : null,
+    });
 
     // Ensure audioTranscriptStructured is never undefined - use null instead
     return {
@@ -420,14 +417,11 @@ export async function processStructuredTranscription(
       status: responseData.status,
     };
   } catch (error) {
-    devError(
-      "[SharedServicesAPI] Error processing structured transcription:",
-      {
-        error: error instanceof Error ? error.message : String(error),
-        audioS3Url: request.audioS3Url,
-        fullError: error,
-      },
-    );
+    devError("[SharedServicesAPI] Error processing structured transcription:", {
+      error: error instanceof Error ? error.message : String(error),
+      audioS3Url: request.audioS3Url,
+      fullError: error,
+    });
 
     if (axios.isAxiosError(error)) {
       const axiosError = error;

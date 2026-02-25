@@ -14,7 +14,11 @@ export function useStepFlow<T extends string>({
   onExitFirst,
 }: UseStepFlowOptions<T>) {
   const currentIndex = useMemo(
-    () => Math.max(0, steps.findIndex((s) => s === currentStep)),
+    () =>
+      Math.max(
+        0,
+        steps.findIndex((s) => s === currentStep),
+      ),
     [currentStep, steps],
   );
   const totalSteps = steps.length;
