@@ -279,6 +279,9 @@ export default function CreateAnimalScreen() {
   const [longitude, setLongitude] = useState("");
   const [locationLoading, setLocationLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [imageSectionsExpanded, setImageSectionsExpanded] = useState<
+    Record<ImageType, boolean>
+  >({ face: false, ear: false, body: false });
   const [uploadedUrls, setUploadedUrls] = useState<{
     faceImageUrl: string;
     earImageUrl: string;
@@ -2541,62 +2544,105 @@ export default function CreateAnimalScreen() {
             { fontSize: 14, lineHeight: 18 },
           )} */}
 
-            {(["face", "ear", "body"] as const).map((type) => (
-              <Card
-                key={type}
-                style={StyleSheet.flatten([
-                  styles.cardElevated,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ])}
-              >
-                <View style={styles.imageLabelRow}>
-                  <FontAwesome
-                    name="camera"
-                    size={16}
-                    color={colors.primary}
-                    style={styles.imageLabelIcon}
-                  />
-                  <Text style={[styles.imageLabel, { color: colors.text }]}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)} Image *
-                  </Text>
-                </View>
-                {selectedImages.find((img) => img.type === type) ? (
-                  <View style={styles.imageContainer}>
-                    <Image
-                      source={{
-                        uri: selectedImages.find((img) => img.type === type)
-                          ?.uri,
-                      }}
-                      style={styles.image}
-                    />
-                    <Button
-                      title="Change"
-                      onPress={() => pickImage(type)}
-                      variant="secondary"
-                      style={styles.changeButton}
-                    />
-                  </View>
-                ) : (
-                  <View style={styles.buttonRow}>
-                    <Button
-                      title="Choose Images"
-                      onPress={() => pickImage(type)}
-                      variant="secondary"
-                      style={styles.selectButton}
-                    />
-                    <Button
-                      title="Take Photo"
-                      onPress={() => takePhoto(type)}
-                      variant="secondary"
-                      style={styles.selectButton}
-                    />
-                  </View>
-                )}
-              </Card>
-            ))}
+            {(["face", "ear", "body"] as const).map((type) => {
+              const img = selectedImages.find((i) => i.type === type);
+              const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+              const isExpanded = imageSectionsExpanded[type];
+              const toggleExpanded = () =>
+                setImageSectionsExpanded((prev) => ({
+                  ...prev,
+                  [type]: !prev[type],
+                }));
+
+              return (
+                <Card
+                  key={type}
+                  style={StyleSheet.flatten([
+                    styles.cardElevated,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ])}
+                >
+                  {img ? (
+                    <>
+                      <TouchableOpacity
+                        style={styles.imageLabelRow}
+                        onPress={toggleExpanded}
+                        activeOpacity={0.7}
+                      >
+                        <FontAwesome
+                          name="camera"
+                          size={16}
+                          color={colors.primary}
+                          style={styles.imageLabelIcon}
+                        />
+                        <Text
+                          style={[styles.imageLabel, { color: colors.text }]}
+                        >
+                          {typeLabel} Image ✓
+                        </Text>
+                        <Image
+                          source={{ uri: img.uri }}
+                          style={styles.imageSectionThumb}
+                        />
+                        <FontAwesome
+                          name={isExpanded ? "chevron-up" : "chevron-down"}
+                          size={14}
+                          color={colors.muted}
+                          style={styles.imageSectionChevron}
+                        />
+                      </TouchableOpacity>
+                      {isExpanded && (
+                        <View style={styles.imageContainer}>
+                          <Image
+                            source={{ uri: img.uri }}
+                            style={styles.image}
+                          />
+                          <Button
+                            title="Change"
+                            onPress={() => pickImage(type)}
+                            variant="secondary"
+                            style={styles.changeButton}
+                          />
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.imageLabelRow}>
+                        <FontAwesome
+                          name="camera"
+                          size={16}
+                          color={colors.primary}
+                          style={styles.imageLabelIcon}
+                        />
+                        <Text
+                          style={[styles.imageLabel, { color: colors.text }]}
+                        >
+                          {typeLabel} Image *
+                        </Text>
+                      </View>
+                      <View style={styles.buttonRow}>
+                        <Button
+                          title="Choose Images"
+                          onPress={() => pickImage(type)}
+                          variant="secondary"
+                          style={styles.selectButton}
+                        />
+                        <Button
+                          title="Take Photo"
+                          onPress={() => takePhoto(type)}
+                          variant="secondary"
+                          style={styles.selectButton}
+                        />
+                      </View>
+                    </>
+                  )}
+                </Card>
+              );
+            })}
 
             <Button
               title="Next"
@@ -3548,7 +3594,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   imageLabelIcon: { marginRight: 10 },
-  imageLabel: { fontSize: 16, fontWeight: "600" },
+  imageLabel: { fontSize: 16, fontWeight: "600", flex: 1 },
+  imageSectionThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    marginRight: 10,
+    resizeMode: "cover",
+  },
+  imageSectionChevron: { marginLeft: 4 },
   buttonRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   selectButton: { flex: 1 },
   imageContainer: { marginTop: 8 },
