@@ -58,7 +58,7 @@ export default function CreateCaseScreen() {
         });
         if (cancelled) return;
         didNavigateRef.current = true;
-        router.replace(`/case-detail?caseId=${caseData.caseId}`);
+        router.replace(`/case-detail?caseId=${caseData.caseId}&fromCreate=1`);
       } catch {
         if (cancelled) return;
         createStartedRef.current = false;

@@ -1281,7 +1281,7 @@ export default function CreateAnimalScreen() {
         allowExitRef.current = true;
         setCreatingCase(true);
         try {
-          router.push(`/case-detail?caseId=${caseIdToUse}`);
+          router.push(`/case-detail?caseId=${caseIdToUse}&fromCreate=1`);
         } finally {
           setCreatingCase(false);
         }

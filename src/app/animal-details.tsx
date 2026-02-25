@@ -94,7 +94,7 @@ export default function AnimalDetailsScreen() {
         chiefComplaint: undefined,
         status: "COMPLETED",
       });
-      router.replace(`/case-detail?caseId=${caseData.caseId}`);
+      router.replace(`/case-detail?caseId=${caseData.caseId}&fromCreate=1`);
     } catch (err) {
       Alert.alert(
         "Error",

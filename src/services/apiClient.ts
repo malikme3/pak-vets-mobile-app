@@ -62,10 +62,10 @@ class ApiClient {
       },
     );
 
-    // Response interceptor: log full response as JSON (no [Object] collapse)
+    // Response interceptor: skip logging GET to reduce console noise
     this.client.interceptors.response.use(
       (response) => {
-        if (__DEV__) {
+        if (__DEV__ && response.config.method?.toUpperCase() !== "GET") {
           console.log(
             `[API] RESPONSE ${response.config.method?.toUpperCase()} ${response.config.url} ${response.status}`,
             "\n" + JSON.stringify(response.data, null, 2),

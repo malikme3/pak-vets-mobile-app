@@ -383,7 +383,7 @@ export default function SelectAnimalScreen() {
             chiefComplaint: undefined,
             status: "COMPLETED",
           });
-          router.replace(`/case-detail?caseId=${caseData.caseId}`);
+          router.replace(`/case-detail?caseId=${caseData.caseId}&fromCreate=1`);
         } catch (err) {
           creatingCaseRef.current = false;
           Alert.alert(

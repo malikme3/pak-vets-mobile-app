@@ -11,6 +11,9 @@ import {
   Image,
   ImageBackground,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -31,9 +34,11 @@ import {
 } from "../features/treatments/hooks";
 import { useCaseNotes } from "../features/notes/hooks";
 import { useMediaFilesByCase } from "../features/media/hooks";
+import { CollapsibleSection } from "../components/ui/CollapsibleSection";
 import {
   getBucketName,
   getDownloadSignedUrl,
+  getUploadSignedUrl,
 } from "../services/sharedServicesApi";
 import { caseDiagnosisApi, caseTreatmentApi } from "../services/vetApi";
 import { SpeciesIcon } from "../components/SpeciesIcon";
@@ -178,6 +183,22 @@ function MediaThumbnail({
   );
 }
 
+// Disease Evidence types (matches create-animal)
+type DiseaseEvidenceType = "LAB_REPORT" | "VACINATION" | "X_RAY";
+interface SelectedDiseaseEvidence {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  imageType: DiseaseEvidenceType;
+  source: "gallery" | "camera" | "file";
+}
+
+interface SelectedClinicalSignsFile {
+  uri: string;
+  name: string;
+  mimeType?: string;
+}
+
 // Accordion sections - Diagnoses expanded by default; Animal collapsed
 type AccordionKey = "animal" | "diagnoses" | "treatments" | "notes" | "media";
 const DEFAULT_EXPANDED: AccordionKey[] = ["diagnoses"];
@@ -188,6 +209,7 @@ export default function CaseDetailScreen() {
   const { colors, variant } = useTheme();
 
   const caseId = params.caseId ? Number(params.caseId) : undefined;
+  const fromCreate = params.fromCreate === "1" || params.fromCreate === "true";
   const [expanded, setExpanded] = useState<Record<AccordionKey, boolean>>(
     () =>
       Object.fromEntries(
@@ -236,6 +258,375 @@ export default function CaseDetailScreen() {
     refetch: refetchMedia,
   } = useMediaFilesByCase(caseId || 0);
   const updateCaseMutation = useUpdateCase();
+
+  // Disease Evidence (lab reports, x-rays, vaccination) - shown when animal linked
+  const [selectedDiseaseEvidenceType, setSelectedDiseaseEvidenceType] =
+    useState<DiseaseEvidenceType>("LAB_REPORT");
+  const [diseaseEvidenceFiles, setDiseaseEvidenceFiles] = useState<
+    SelectedDiseaseEvidence[]
+  >([]);
+  const [uploadingDiseaseEvidence, setUploadingDiseaseEvidence] =
+    useState(false);
+  const [diseaseEvidenceExpanded, setDiseaseEvidenceExpanded] = useState(false);
+
+  const [clinicalSignsFiles, setClinicalSignsFiles] = useState<
+    SelectedClinicalSignsFile[]
+  >([]);
+  const [uploadingClinicalSigns, setUploadingClinicalSigns] = useState(false);
+  const [clinicalSignsExpanded, setClinicalSignsExpanded] = useState(false);
+
+  const sanitizeFileName = useCallback((fileName: string) => {
+    return fileName
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9._-]/g, "");
+  }, []);
+
+  const inferContentType = useCallback(
+    (fileName: string, fallback?: string) => {
+      if (fallback?.trim()) return fallback;
+      const lower = fileName.toLowerCase();
+      if (lower.endsWith(".pdf")) return "application/pdf";
+      if (lower.endsWith(".png")) return "image/png";
+      if (lower.endsWith(".webp")) return "image/webp";
+      if (lower.endsWith(".heic") || lower.endsWith(".heif"))
+        return "image/heic";
+      return "image/jpeg";
+    },
+    [],
+  );
+
+  const uploadFileToS3 = useCallback(
+    async (
+      fileUri: string,
+      s3Key: string,
+      contentType: string,
+      tagValue?: string,
+    ) => {
+      const tags = tagValue ? `type=${tagValue}` : undefined;
+      const bucketName = getBucketName();
+      const { signedUrl } = await getUploadSignedUrl(bucketName, s3Key, tags);
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (!fileInfo.exists) throw new Error("File does not exist");
+      const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binaryString = atob(fileBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const response = await fetch(signedUrl, {
+        method: "PUT",
+        body: bytes,
+        headers: { "Content-Type": contentType },
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        throw new Error(`S3 upload failed: ${errorText || response.statusText}`);
+      }
+    },
+    [],
+  );
+
+  const buildDiseaseEvidenceS3Key = useCallback(
+    (
+      doctorId: number,
+      animalId: number,
+      caseId: number,
+      imageType: DiseaseEvidenceType,
+      fileName: string,
+    ) => {
+      const safeName = sanitizeFileName(
+        fileName || `evidence-${Date.now()}.jpg`,
+      );
+      const timestamp = Date.now();
+      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_caseId-${caseId}_${imageType.toLowerCase()}_${timestamp}_${safeName}`;
+    },
+    [sanitizeFileName],
+  );
+
+  const buildClinicalSignsS3Key = useCallback(
+    (doctorId: number, animalId: number, caseId: number, fileName: string) => {
+      const safeName = sanitizeFileName(
+        fileName || `clinical-sign-${Date.now()}.jpg`,
+      );
+      const timestamp = Date.now();
+      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_caseId-${caseId}_clinical_signs_${timestamp}_${safeName}`;
+    },
+    [sanitizeFileName],
+  );
+
+  const addDiseaseEvidence = useCallback((entry: SelectedDiseaseEvidence) => {
+    setDiseaseEvidenceFiles((prev) => [...prev, entry]);
+  }, []);
+
+  const requestPermissions = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "We need gallery access.");
+      return false;
+    }
+    return true;
+  }, []);
+
+  const requestCameraPermissions = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "We need camera access.");
+      return false;
+    }
+    return true;
+  }, []);
+
+  const pickDiseaseEvidenceFromGallery = useCallback(async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ??
+      `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addDiseaseEvidence({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+      imageType: selectedDiseaseEvidenceType,
+      source: "gallery",
+    });
+  }, [
+    addDiseaseEvidence,
+    requestPermissions,
+    sanitizeFileName,
+    selectedDiseaseEvidenceType,
+  ]);
+
+  const captureDiseaseEvidenceFromCamera = useCallback(async () => {
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ??
+      `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addDiseaseEvidence({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+      imageType: selectedDiseaseEvidenceType,
+      source: "camera",
+    });
+  }, [
+    addDiseaseEvidence,
+    requestCameraPermissions,
+    sanitizeFileName,
+    selectedDiseaseEvidenceType,
+  ]);
+
+  const pickDiseaseEvidenceFile = useCallback(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["image/*", "application/pdf"],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    addDiseaseEvidence({
+      uri: asset.uri,
+      name: sanitizeFileName(asset.name || `file-${Date.now()}`),
+      mimeType: asset.mimeType ?? undefined,
+      imageType: selectedDiseaseEvidenceType,
+      source: "file",
+    });
+  }, [addDiseaseEvidence, sanitizeFileName, selectedDiseaseEvidenceType]);
+
+  const removeDiseaseEvidence = useCallback((index: number) => {
+    setDiseaseEvidenceFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addClinicalSigns = useCallback((entry: SelectedClinicalSignsFile) => {
+    setClinicalSignsFiles((prev) => [...prev, entry]);
+  }, []);
+
+  const pickClinicalSignsFromGallery = useCallback(async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ??
+      `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addClinicalSigns({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+    });
+  }, [addClinicalSigns, requestPermissions, sanitizeFileName]);
+
+  const captureClinicalSignsFromCamera = useCallback(async () => {
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ??
+      `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addClinicalSigns({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+    });
+  }, [addClinicalSigns, requestCameraPermissions, sanitizeFileName]);
+
+  const pickClinicalSignsFile = useCallback(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["image/*"],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    addClinicalSigns({
+      uri: asset.uri,
+      name: sanitizeFileName(asset.name || `file-${Date.now()}`),
+      mimeType: asset.mimeType ?? undefined,
+    });
+  }, [addClinicalSigns, sanitizeFileName]);
+
+  const removeClinicalSigns = useCallback((index: number) => {
+    setClinicalSignsFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleSubmitReportImages = useCallback(async () => {
+    if (!diseaseEvidenceFiles.length) {
+      Alert.alert("No files", "Add report images first.");
+      return;
+    }
+    const vid = caseData?.caseId;
+    const animalId = caseData?.animalId;
+    const doctorId = caseData?.doctorId;
+    if (vid == null || animalId == null || doctorId == null) {
+      Alert.alert(
+        "Not available",
+        "Case and animal must be linked to upload report images.",
+      );
+      return;
+    }
+    setUploadingDiseaseEvidence(true);
+    try {
+      for (const evidence of diseaseEvidenceFiles) {
+        const s3Key = buildDiseaseEvidenceS3Key(
+          doctorId,
+          animalId,
+          vid,
+          evidence.imageType,
+          evidence.name,
+        );
+        const contentType = inferContentType(
+          evidence.name,
+          evidence.mimeType,
+        );
+        await uploadFileToS3(
+          evidence.uri,
+          s3Key,
+          contentType,
+          "animal-disease-evidence",
+        );
+      }
+      setDiseaseEvidenceFiles([]);
+      setDiseaseEvidenceExpanded(false);
+      Alert.alert("Submitted", "Report images have been uploaded.");
+    } catch (err) {
+      Alert.alert(
+        "Upload failed",
+        err instanceof Error ? err.message : "Failed to upload report images.",
+      );
+    } finally {
+      setUploadingDiseaseEvidence(false);
+    }
+  }, [
+    caseData?.caseId,
+    caseData?.animalId,
+    caseData?.doctorId,
+    diseaseEvidenceFiles,
+    buildDiseaseEvidenceS3Key,
+    inferContentType,
+    uploadFileToS3,
+  ]);
+
+  const handleSubmitClinicalSigns = useCallback(async () => {
+    if (!clinicalSignsFiles.length) {
+      Alert.alert("No files", "Add clinical sign images first.");
+      return;
+    }
+    const vid = caseData?.caseId;
+    const animalId = caseData?.animalId;
+    const doctorId = caseData?.doctorId;
+    if (vid == null || animalId == null || doctorId == null) {
+      Alert.alert(
+        "Not available",
+        "Case and animal must be linked to upload clinical signs.",
+      );
+      return;
+    }
+    setUploadingClinicalSigns(true);
+    try {
+      for (const file of clinicalSignsFiles) {
+        const s3Key = buildClinicalSignsS3Key(
+          doctorId,
+          animalId,
+          vid,
+          file.name,
+        );
+        const contentType = inferContentType(file.name, file.mimeType);
+        await uploadFileToS3(
+          file.uri,
+          s3Key,
+          contentType,
+          "clinical-signs",
+        );
+      }
+      setClinicalSignsFiles([]);
+      setClinicalSignsExpanded(false);
+      Alert.alert("Submitted", "Clinical sign images have been uploaded.");
+    } catch (err) {
+      Alert.alert(
+        "Upload failed",
+        err instanceof Error
+          ? err.message
+          : "Failed to upload clinical sign images.",
+      );
+    } finally {
+      setUploadingClinicalSigns(false);
+    }
+  }, [
+    caseData?.caseId,
+    caseData?.animalId,
+    caseData?.doctorId,
+    clinicalSignsFiles,
+    buildClinicalSignsS3Key,
+    inferContentType,
+    uploadFileToS3,
+  ]);
 
   // Editable chief complaint (manual edit only); sync from case when loaded
   const [chiefComplaint, setChiefComplaint] = useState("");
@@ -677,6 +1068,246 @@ export default function CaseDetailScreen() {
             />
           </View>
         </ImageBackground>
+
+        {/* Disease Evidence (optional) - before Diagnoses, only when animal linked. Hide when from create flow (user already filled in create-animal). */}
+        {caseData?.animalId != null && !fromCreate && (
+          <CollapsibleSection
+            title="Disease Evidence (optional)"
+            subtitle="Upload related images/files and classify by report type."
+            icon="file"
+            expanded={diseaseEvidenceExpanded}
+            onToggle={() => setDiseaseEvidenceExpanded((v) => !v)}
+            hasContent={diseaseEvidenceFiles.length > 0}
+            thumbnailUri={
+              diseaseEvidenceFiles[0]?.source !== "file"
+                ? diseaseEvidenceFiles[0]?.uri
+                : undefined
+            }
+            style={styles.diseaseEvidenceCard}
+          >
+            <View style={styles.radioRow}>
+              {(
+                [
+                  ["LAB_REPORT", "Lab Report"],
+                  ["X_RAY", "X-ray"],
+                  ["VACINATION", "Vacination"],
+                ] as const
+              ).map(([value, label]) => {
+                const selected = selectedDiseaseEvidenceType === value;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      setSelectedDiseaseEvidenceType(value as DiseaseEvidenceType)
+                    }
+                    style={[
+                      styles.radioChip,
+                      {
+                        borderColor: selected
+                          ? colors.primary
+                          : colors.border,
+                        backgroundColor: selected
+                          ? `${colors.primary}22`
+                          : colors.surface,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.radioDot,
+                        {
+                          borderColor: selected
+                            ? colors.primary
+                            : colors.muted,
+                          backgroundColor: selected
+                            ? colors.primary
+                            : "transparent",
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.radioText, { color: colors.text }]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={styles.buttonRow}>
+              <Button
+                title="Choose Image"
+                onPress={pickDiseaseEvidenceFromGallery}
+                variant="secondary"
+                style={styles.selectButton}
+              />
+              <Button
+                title="Take Photo"
+                onPress={captureDiseaseEvidenceFromCamera}
+                variant="secondary"
+                style={styles.selectButton}
+              />
+            </View>
+            <Button
+              title="Pick File"
+              onPress={pickDiseaseEvidenceFile}
+              variant="secondary"
+              style={styles.primaryButton}
+            />
+            {diseaseEvidenceFiles.length > 0 ? (
+              <>
+                <View style={styles.evidenceList}>
+                  {diseaseEvidenceFiles.map((evidence, index) => (
+                    <View
+                      key={`${evidence.uri}-${index}`}
+                      style={[
+                        styles.evidenceItem,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.surface,
+                        },
+                      ]}
+                    >
+                      <View style={styles.evidenceItemBody}>
+                        <Text
+                          style={[
+                            styles.evidenceType,
+                            { color: colors.primary },
+                          ]}
+                        >
+                          {evidence.imageType}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.evidenceName,
+                            { color: colors.text },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {evidence.name}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => removeDiseaseEvidence(index)}
+                        style={styles.playbackIconButton}
+                      >
+                        <FontAwesome
+                          name="times"
+                          size={12}
+                          color={colors.muted}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+                <Button
+                  title={
+                    uploadingDiseaseEvidence
+                      ? "Uploading report images…"
+                      : "Submit report images"
+                  }
+                  variant="primary"
+                  onPress={handleSubmitReportImages}
+                  style={styles.submitFilesButton}
+                  disabled={uploadingDiseaseEvidence}
+                />
+              </>
+            ) : null}
+          </CollapsibleSection>
+        )}
+
+        {/* Clinical Signs (optional) - before Diagnoses, only when animal linked. Hide when from create flow (user already filled in create-animal). */}
+        {caseData?.animalId != null && !fromCreate && (
+          <CollapsibleSection
+            title="Clinical Signs (optional)"
+            subtitle="Add photos or images of clinical signs (e.g. lesions, swelling, discharge). Stored under your account."
+            icon="image"
+            expanded={clinicalSignsExpanded}
+            onToggle={() => setClinicalSignsExpanded((v) => !v)}
+            hasContent={clinicalSignsFiles.length > 0}
+            thumbnailUri={clinicalSignsFiles[0]?.uri}
+            style={styles.diseaseEvidenceCard}
+          >
+            <View style={styles.buttonRow}>
+              <Button
+                title="Choose Image"
+                onPress={pickClinicalSignsFromGallery}
+                variant="secondary"
+                style={styles.selectButton}
+              />
+              <Button
+                title="Take Photo"
+                onPress={captureClinicalSignsFromCamera}
+                variant="secondary"
+                style={styles.selectButton}
+              />
+            </View>
+            <Button
+              title="Pick File"
+              onPress={pickClinicalSignsFile}
+              variant="secondary"
+              style={styles.primaryButton}
+            />
+            {clinicalSignsFiles.length > 0 ? (
+              <>
+                <View style={styles.evidenceList}>
+                  {clinicalSignsFiles.map((file, index) => (
+                    <View
+                      key={`${file.uri}-${index}`}
+                      style={[
+                        styles.evidenceItem,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.surface,
+                        },
+                      ]}
+                    >
+                      <View style={styles.evidenceItemBody}>
+                        <Text
+                          style={[
+                            styles.evidenceType,
+                            { color: colors.primary },
+                          ]}
+                        >
+                          Clinical sign
+                        </Text>
+                        <Text
+                          style={[
+                            styles.evidenceName,
+                            { color: colors.text },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {file.name}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => removeClinicalSigns(index)}
+                        style={styles.playbackIconButton}
+                      >
+                        <FontAwesome
+                          name="times"
+                          size={12}
+                          color={colors.muted}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+                <Button
+                  title={
+                    uploadingClinicalSigns
+                      ? "Uploading clinical signs…"
+                      : "Submit clinical sign images"
+                  }
+                  variant="primary"
+                  onPress={handleSubmitClinicalSigns}
+                  style={styles.submitFilesButton}
+                  disabled={uploadingClinicalSigns}
+                />
+              </>
+            ) : null}
+          </CollapsibleSection>
+        )}
 
         {/* 1. Diagnoses (with AI suggestions inline) */}
         <AccordionSection
@@ -2087,6 +2718,74 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: "center",
   },
+  diseaseEvidenceCard: {
+    marginBottom: 16,
+    padding: 0,
+    overflow: "hidden",
+  },
+  radioRow: {
+    flexDirection: "row",
+    marginTop: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  radioChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 8,
+  },
+  radioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  radioText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  selectButton: { flex: 1 },
+  primaryButton: { marginTop: 8, minHeight: 48 },
+  evidenceList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  evidenceItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  evidenceItemBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  evidenceType: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  evidenceName: {
+    fontSize: 13,
+  },
+  playbackIconButton: {
+    padding: 4,
+  },
+  submitFilesButton: { marginTop: 14, minHeight: 48 },
 });
 
 // Diagnosis Item Component with Audio Playback
