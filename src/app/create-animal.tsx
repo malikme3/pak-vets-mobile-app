@@ -24,6 +24,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Location from "expo-location";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
+import { CollapsibleSection } from "../components/ui/CollapsibleSection";
 import { Button } from "../components/ui/Button";
 import { useCreateAnimal } from "../features/animals/hooks";
 import { useCurrentDoctor } from "../features/doctors/hooks";
@@ -272,6 +273,7 @@ export default function CreateAnimalScreen() {
   const [cnicFrontImageUri, setCnicFrontImageUri] = useState<string | null>(
     null,
   );
+  const [cnicSectionExpanded, setCnicSectionExpanded] = useState(false);
 
   // Upload step (step 1)
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
@@ -306,6 +308,8 @@ export default function CreateAnimalScreen() {
     SelectedClinicalSignsFile[]
   >([]);
   const [uploadingClinicalSigns, setUploadingClinicalSigns] = useState(false);
+  const [diseaseEvidenceExpanded, setDiseaseEvidenceExpanded] = useState(false);
+  const [clinicalSignsExpanded, setClinicalSignsExpanded] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -652,6 +656,7 @@ export default function CreateAnimalScreen() {
 
   const addDiseaseEvidence = useCallback((entry: SelectedDiseaseEvidence) => {
     setDiseaseEvidenceFiles((prev) => [...prev, entry]);
+    setDiseaseEvidenceExpanded(false);
   }, []);
 
   const pickDiseaseEvidenceFromGallery = useCallback(async () => {
@@ -730,6 +735,7 @@ export default function CreateAnimalScreen() {
 
   const addClinicalSigns = useCallback((entry: SelectedClinicalSignsFile) => {
     setClinicalSignsFiles((prev) => [...prev, entry]);
+    setClinicalSignsExpanded(false);
   }, []);
 
   const pickClinicalSignsFromGallery = useCallback(async () => {
@@ -1738,6 +1744,7 @@ export default function CreateAnimalScreen() {
   const processCnicFrontImage = useCallback(
     async (imageUri: string) => {
       setCnicFrontImageUri(imageUri);
+      setCnicSectionExpanded(false);
       setCnicScanLoading(true);
 
       try {
@@ -2075,7 +2082,11 @@ export default function CreateAnimalScreen() {
                 { backgroundColor: colors.surface, borderColor: colors.border },
               ])}
             >
-              <View style={styles.cnicSectionHeader}>
+              <TouchableOpacity
+                style={styles.cnicSectionHeader}
+                onPress={() => setCnicSectionExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
                 <View
                   style={[
                     styles.smartNearbyIconWrap,
@@ -2095,7 +2106,7 @@ export default function CreateAnimalScreen() {
                       { color: colors.text },
                     ]}
                   >
-                    Scan CNIC Front
+                    Scan CNIC Front{cnicFrontImageUri ? " ✓" : ""}
                   </Text>
                   <Text
                     style={[
@@ -2106,53 +2117,69 @@ export default function CreateAnimalScreen() {
                     Capture card photo to auto-fill Full Name and NIC number.
                   </Text>
                 </View>
-              </View>
-              <Button
-                title={
-                  cnicScanLoading
-                    ? "Scanning CNIC…"
-                    : cnicFrontImageUri
-                      ? "Retake CNIC photo"
-                      : "Take CNIC photo"
-                }
-                variant="secondary"
-                onPress={handleScanCnicFront}
-                disabled={cnicScanLoading}
-              />
-              <Button
-                title="Pick CNIC image (test)"
-                variant="secondary"
-                onPress={handlePickCnicFront}
-                style={styles.cnicPickButton}
-                disabled={cnicScanLoading}
-              />
-              {cnicScanLoading ? (
-                <View
-                  style={[
-                    styles.farmerCheckHint,
-                    {
-                      backgroundColor: colors.border + "25",
-                      borderColor: colors.border + "50",
-                    },
-                  ]}
-                >
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text
-                    style={[
-                      styles.farmerCheckHintText,
-                      { color: colors.muted },
-                    ]}
-                  >
-                    Uploading and extracting CNIC details…
-                  </Text>
-                </View>
-              ) : null}
-              {cnicFrontImageUri ? (
-                <Image
-                  source={{ uri: cnicFrontImageUri }}
-                  style={styles.cnicPreview}
+                {cnicFrontImageUri ? (
+                  <Image
+                    source={{ uri: cnicFrontImageUri }}
+                    style={styles.imageSectionThumb}
+                  />
+                ) : null}
+                <FontAwesome
+                  name={cnicSectionExpanded ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={colors.muted}
+                  style={styles.imageSectionChevron}
                 />
-              ) : null}
+              </TouchableOpacity>
+              {cnicSectionExpanded && (
+                <>
+                  <Button
+                    title={
+                      cnicScanLoading
+                        ? "Scanning CNIC…"
+                        : cnicFrontImageUri
+                          ? "Retake CNIC photo"
+                          : "Take CNIC photo"
+                    }
+                    variant="secondary"
+                    onPress={handleScanCnicFront}
+                    disabled={cnicScanLoading}
+                  />
+                  <Button
+                    title="Pick CNIC image (test)"
+                    variant="secondary"
+                    onPress={handlePickCnicFront}
+                    style={styles.cnicPickButton}
+                    disabled={cnicScanLoading}
+                  />
+                  {cnicScanLoading ? (
+                    <View
+                      style={[
+                        styles.farmerCheckHint,
+                        {
+                          backgroundColor: colors.border + "25",
+                          borderColor: colors.border + "50",
+                        },
+                      ]}
+                    >
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text
+                        style={[
+                          styles.farmerCheckHintText,
+                          { color: colors.muted },
+                        ]}
+                      >
+                        Uploading and extracting CNIC details…
+                      </Text>
+                    </View>
+                  ) : null}
+                  {cnicFrontImageUri ? (
+                    <Image
+                      source={{ uri: cnicFrontImageUri }}
+                      style={styles.cnicPreview}
+                    />
+                  ) : null}
+                </>
+              )}
             </Card>
             <Card
               style={StyleSheet.flatten([
@@ -2800,15 +2827,20 @@ export default function CreateAnimalScreen() {
                 </View>
               </View>
             </Card>
-            <Card style={styles.complaintInputCard}>
-              <Text style={[styles.complaintLabel, { color: colors.text }]}>
-                Disease Evidence (optional)
-              </Text>
-              <Text
-                style={[styles.attributesBlockHint, { color: colors.muted }]}
-              >
-                Upload related images/files and classify by report type.
-              </Text>
+            <CollapsibleSection
+              title="Disease Evidence (optional)"
+              subtitle="Upload related images/files and classify by report type."
+              icon="file"
+              expanded={diseaseEvidenceExpanded}
+              onToggle={() => setDiseaseEvidenceExpanded((v) => !v)}
+              hasContent={diseaseEvidenceFiles.length > 0}
+              thumbnailUri={
+                diseaseEvidenceFiles[0]?.source !== "file"
+                  ? diseaseEvidenceFiles[0]?.uri
+                  : undefined
+              }
+              style={styles.complaintInputCard}
+            >
               <View style={styles.radioRow}>
                 {(
                   [
@@ -2855,7 +2887,6 @@ export default function CreateAnimalScreen() {
                   );
                 })}
               </View>
-
               <View style={styles.buttonRow}>
                 <Button
                   title="Choose Image"
@@ -2876,7 +2907,6 @@ export default function CreateAnimalScreen() {
                 variant="secondary"
                 style={styles.primaryButton}
               />
-
               {diseaseEvidenceFiles.length > 0 ? (
                 <>
                   <View style={styles.evidenceList}>
@@ -2936,17 +2966,17 @@ export default function CreateAnimalScreen() {
                   />
                 </>
               ) : null}
-            </Card>
-            <Card style={styles.complaintInputCard}>
-              <Text style={[styles.complaintLabel, { color: colors.text }]}>
-                Clinical Signs (optional)
-              </Text>
-              <Text
-                style={[styles.attributesBlockHint, { color: colors.muted }]}
-              >
-                Add photos or images of clinical signs (e.g. lesions, swelling,
-                discharge). Stored under your account.
-              </Text>
+            </CollapsibleSection>
+            <CollapsibleSection
+              title="Clinical Signs (optional)"
+              subtitle="Add photos or images of clinical signs (e.g. lesions, swelling, discharge). Stored under your account."
+              icon="image"
+              expanded={clinicalSignsExpanded}
+              onToggle={() => setClinicalSignsExpanded((v) => !v)}
+              hasContent={clinicalSignsFiles.length > 0}
+              thumbnailUri={clinicalSignsFiles[0]?.uri}
+              style={styles.complaintInputCard}
+            >
               <View style={styles.buttonRow}>
                 <Button
                   title="Choose Image"
@@ -3026,7 +3056,7 @@ export default function CreateAnimalScreen() {
                   />
                 </>
               ) : null}
-            </Card>
+            </CollapsibleSection>
             <Button
               title="Next"
               onPress={() => setStep("attributes")}
@@ -3992,14 +4022,15 @@ const styles = StyleSheet.create({
   },
   radioRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
     marginTop: 8,
     marginBottom: 12,
+    gap: 8,
   },
   radioChip: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 999,
