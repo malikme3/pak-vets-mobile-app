@@ -28,6 +28,10 @@ export default function RootLayout() {
                 name="auth"
                 options={{ title: "Signing In", headerShown: false }}
               />
+              <Stack.Screen
+                name="expo-auth-session"
+                options={{ title: "Signing In", headerShown: false }}
+              />
               <Stack.Screen name="index" options={{ title: "Home" }} />
               <Stack.Screen
                 name="animal-details"

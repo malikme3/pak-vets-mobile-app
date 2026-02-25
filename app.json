@@ -2,12 +2,13 @@
   "expo": {
     "name": "Pak Vets",
     "slug": "pak-vets-mobile-app",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": [
+      "pak-vets-mobile-app",
       "pak-vets",
       "com.googleusercontent.apps.723134103138-ppv0s10lo0n3l5mr137n9i8f9sktvvp7",
       "com.googleusercontent.apps.723134103138-6ak38jl31in2drmstc4khel6si56su08"
@@ -19,14 +20,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3",
+      "buildNumber": "5",
       "bundleIdentifier": "com.pakvets.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
