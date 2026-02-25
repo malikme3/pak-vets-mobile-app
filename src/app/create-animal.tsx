@@ -58,7 +58,7 @@ type VoiceRecording = {
 
 type Step = "farmer" | "upload" | "complaint" | "attributes";
 type ImageType = "face" | "ear" | "body";
-type DiseaseEvidenceType = "LAB_REPORT" | "VACINATION" | "EXRAY";
+type DiseaseEvidenceType = "LAB_REPORT" | "VACINATION" | "X_RAY";
 
 interface SelectedDiseaseEvidence {
   uri: string;
@@ -66,6 +66,12 @@ interface SelectedDiseaseEvidence {
   mimeType?: string;
   imageType: DiseaseEvidenceType;
   source: "gallery" | "camera" | "file";
+}
+
+interface SelectedClinicalSignsFile {
+  uri: string;
+  name: string;
+  mimeType?: string;
 }
 
 const STEPS: { key: Step; label: string; icon: string }[] = [
@@ -292,6 +298,10 @@ export default function CreateAnimalScreen() {
   >([]);
   const [uploadingDiseaseEvidence, setUploadingDiseaseEvidence] =
     useState(false);
+  const [clinicalSignsFiles, setClinicalSignsFiles] = useState<
+    SelectedClinicalSignsFile[]
+  >([]);
+  const [uploadingClinicalSigns, setUploadingClinicalSigns] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -602,8 +612,12 @@ export default function CreateAnimalScreen() {
         headers: { "Content-Type": contentType },
       });
       if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText);
-        throw new Error(`S3 upload failed: ${errorText || response.statusText}`);
+        const errorText = await response
+          .text()
+          .catch(() => response.statusText);
+        throw new Error(
+          `S3 upload failed: ${errorText || response.statusText}`,
+        );
       }
       return fileUrl;
     },
@@ -632,12 +646,9 @@ export default function CreateAnimalScreen() {
     [],
   );
 
-  const addDiseaseEvidence = useCallback(
-    (entry: SelectedDiseaseEvidence) => {
-      setDiseaseEvidenceFiles((prev) => [...prev, entry]);
-    },
-    [],
-  );
+  const addDiseaseEvidence = useCallback((entry: SelectedDiseaseEvidence) => {
+    setDiseaseEvidenceFiles((prev) => [...prev, entry]);
+  }, []);
 
   const pickDiseaseEvidenceFromGallery = useCallback(async () => {
     const hasPermission = await requestPermissions();
@@ -650,7 +661,8 @@ export default function CreateAnimalScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const derivedName =
-      asset.fileName ?? `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+      asset.fileName ??
+      `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
     addDiseaseEvidence({
       uri: asset.uri,
       name: sanitizeFileName(derivedName),
@@ -675,7 +687,8 @@ export default function CreateAnimalScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const derivedName =
-      asset.fileName ?? `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+      asset.fileName ??
+      `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
     addDiseaseEvidence({
       uri: asset.uri,
       name: sanitizeFileName(derivedName),
@@ -711,51 +724,236 @@ export default function CreateAnimalScreen() {
     setDiseaseEvidenceFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const addClinicalSigns = useCallback((entry: SelectedClinicalSignsFile) => {
+    setClinicalSignsFiles((prev) => [...prev, entry]);
+  }, []);
+
+  const pickClinicalSignsFromGallery = useCallback(async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ??
+      `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addClinicalSigns({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+    });
+  }, [addClinicalSigns, requestPermissions, sanitizeFileName]);
+
+  const captureClinicalSignsFromCamera = useCallback(async () => {
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const derivedName =
+      asset.fileName ??
+      `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+    addClinicalSigns({
+      uri: asset.uri,
+      name: sanitizeFileName(derivedName),
+      mimeType: asset.mimeType ?? "image/jpeg",
+    });
+  }, [addClinicalSigns, requestCameraPermissions, sanitizeFileName]);
+
+  const pickClinicalSignsFile = useCallback(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["image/*"],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    addClinicalSigns({
+      uri: asset.uri,
+      name: sanitizeFileName(asset.name || `file-${Date.now()}`),
+      mimeType: asset.mimeType ?? undefined,
+    });
+  }, [addClinicalSigns, sanitizeFileName]);
+
+  const removeClinicalSigns = useCallback((index: number) => {
+    setClinicalSignsFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const buildDiseaseEvidenceS3Key = useCallback(
-    (animalId: number, imageType: DiseaseEvidenceType, fileName: string) => {
-      const safeName = sanitizeFileName(fileName || `evidence-${Date.now()}.jpg`);
-      return `animal-disease-files/${animalId}/${imageType.toLowerCase()}/${Date.now()}-${safeName}`;
+    (
+      doctorId: number,
+      animalId: number,
+      imageType: DiseaseEvidenceType,
+      fileName: string,
+    ) => {
+      const safeName = sanitizeFileName(
+        fileName || `evidence-${Date.now()}.jpg`,
+      );
+      const timestamp = Date.now();
+      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_${imageType.toLowerCase()}_${timestamp}_${safeName}`;
     },
     [sanitizeFileName],
   );
 
   const uploadDiseaseEvidenceForAnimal = useCallback(
-    async (animalId: number) => {
-      if (!diseaseEvidenceFiles.length) return;
+    async (
+      animalId: number,
+      files: SelectedDiseaseEvidence[],
+      doctorId?: number | null,
+    ) => {
+      if (!files.length) return;
       setUploadingDiseaseEvidence(true);
       try {
-        for (const evidence of diseaseEvidenceFiles) {
+        const docId = doctorId ?? doctor?.doctorId ?? 0;
+        for (const evidence of files) {
           const s3Key = buildDiseaseEvidenceS3Key(
+            docId,
             animalId,
             evidence.imageType,
             evidence.name,
           );
-          const contentType = inferContentType(evidence.name, evidence.mimeType);
-          const s3Url = await uploadFileToS3(
+          const contentType = inferContentType(
+            evidence.name,
+            evidence.mimeType,
+          );
+          await uploadFileToS3(
             evidence.uri,
             s3Key,
             contentType,
             "type=animal-disease-evidence",
           );
-          await animalApi.createAnimalImage(animalId, {
-            imageType: evidence.imageType,
-            s3Key,
-            s3Url,
-            notes: evidence.name,
-            source: "MOBILE_UPLOAD",
-          });
         }
+      } catch (err) {
+        if (__DEV__)
+          console.error("[CreateAnimal] Disease evidence upload failed:", err);
+        throw new Error(
+          err instanceof Error
+            ? err.message
+            : "Failed to upload disease evidence to S3",
+        );
       } finally {
         setUploadingDiseaseEvidence(false);
       }
     },
     [
       buildDiseaseEvidenceS3Key,
-      diseaseEvidenceFiles,
+      doctor?.doctorId,
       inferContentType,
       uploadFileToS3,
     ],
   );
+
+  const buildClinicalSignsS3Key = useCallback(
+    (doctorId: number, animalId: number, fileName: string) => {
+      const safeName = sanitizeFileName(
+        fileName || `clinical-sign-${Date.now()}.jpg`,
+      );
+      const timestamp = Date.now();
+      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_clinical_signs_${timestamp}_${safeName}`;
+    },
+    [sanitizeFileName],
+  );
+
+  const uploadClinicalSignsForDoctor = useCallback(
+    async (
+      doctorId: number,
+      animalId: number,
+      files: SelectedClinicalSignsFile[],
+    ) => {
+      if (!files.length) return;
+      setUploadingClinicalSigns(true);
+      try {
+        for (const file of files) {
+          const s3Key = buildClinicalSignsS3Key(doctorId, animalId, file.name);
+          const contentType = inferContentType(file.name, file.mimeType);
+          await uploadFileToS3(
+            file.uri,
+            s3Key,
+            contentType,
+            "type=clinical-signs",
+          );
+        }
+      } catch (err) {
+        if (__DEV__)
+          console.error("[CreateAnimal] Clinical signs upload failed:", err);
+        throw new Error(
+          err instanceof Error
+            ? err.message
+            : "Failed to upload clinical signs to S3",
+        );
+      } finally {
+        setUploadingClinicalSigns(false);
+      }
+    },
+    [buildClinicalSignsS3Key, inferContentType, uploadFileToS3],
+  );
+
+  const handleSubmitClinicalSigns = useCallback(async () => {
+    if (!clinicalSignsFiles.length) {
+      Alert.alert("No files", "Add clinical sign images first.");
+      return;
+    }
+    if (!doctor?.doctorId) {
+      Alert.alert("Not available", "Sign in to submit clinical signs.");
+      return;
+    }
+    const animalId = existingAnimalIdRef.current;
+    if (animalId == null) {
+      Alert.alert(
+        "Save animal first",
+        "Go to the Details step and save the animal, or open an existing animal. Lab report, x-ray, and clinical signs are all linked to the same animal.",
+      );
+      return;
+    }
+    try {
+      await uploadClinicalSignsForDoctor(
+        doctor.doctorId,
+        animalId,
+        clinicalSignsFiles,
+      );
+      setClinicalSignsFiles([]);
+      Alert.alert("Submitted", "Clinical sign images have been uploaded.");
+    } catch (err) {
+      Alert.alert(
+        "Upload failed",
+        err instanceof Error
+          ? err.message
+          : "Failed to upload clinical sign images.",
+      );
+    }
+  }, [doctor?.doctorId, clinicalSignsFiles, uploadClinicalSignsForDoctor]);
+
+  const handleSubmitReportImages = useCallback(async () => {
+    if (!diseaseEvidenceFiles.length) {
+      Alert.alert("No files", "Add report images first.");
+      return;
+    }
+    const animalId = existingAnimalIdRef.current;
+    if (animalId == null) {
+      Alert.alert(
+        "Save animal first",
+        "Go to the Details step and save the animal; report images will be uploaded then. Or open an existing animal and return here to submit report images now.",
+      );
+      return;
+    }
+    try {
+      await uploadDiseaseEvidenceForAnimal(animalId, diseaseEvidenceFiles);
+      setDiseaseEvidenceFiles([]);
+      Alert.alert("Submitted", "Report images have been uploaded.");
+    } catch (err) {
+      Alert.alert(
+        "Upload failed",
+        err instanceof Error ? err.message : "Failed to upload report images.",
+      );
+    }
+  }, [diseaseEvidenceFiles, uploadDiseaseEvidenceForAnimal]);
 
   // S3 key: create-animal-images/{doctorId}/{speciesSlug}/lat-{lat}_lng-{lng}_animalId-{animalId}_timestamp-{timestamp}_{face|ear|body}.jpg
   // Use one timestamp for all 3 so backend can find face/ear/body under same pathPrefix and run AI analyze.
@@ -973,7 +1171,14 @@ export default function CreateAnimalScreen() {
         const created = await createAnimalMutation.mutateAsync(request);
         animalIdToUse = created.animalId;
       }
-      await uploadDiseaseEvidenceForAnimal(animalIdToUse);
+      await uploadDiseaseEvidenceForAnimal(animalIdToUse, diseaseEvidenceFiles);
+      if (doctor?.doctorId != null && clinicalSignsFiles.length > 0) {
+        await uploadClinicalSignsForDoctor(
+          doctor.doctorId,
+          animalIdToUse,
+          clinicalSignsFiles,
+        );
+      }
       if (didNavigateFromAttributesRef.current) return;
 
       const toPath = (p: string) => (p.startsWith("/") ? p : `/${p}`);
@@ -1036,9 +1241,12 @@ export default function CreateAnimalScreen() {
     buildAnimalRequest,
     createAnimalMutation,
     uploadDiseaseEvidenceForAnimal,
+    uploadClinicalSignsForDoctor,
+    diseaseEvidenceFiles,
+    clinicalSignsFiles,
+    doctor,
     returnTo,
     router,
-    doctor,
     createCaseMutation,
   ]);
 
@@ -1482,14 +1690,12 @@ export default function CreateAnimalScreen() {
           },
         });
 
-        const structured = processed.imageStructured as
-          | {
-              cnic_front?: {
-                full_name?: unknown;
-                id_number?: unknown;
-              };
-            }
-          | null;
+        const structured = processed.imageStructured as {
+          cnic_front?: {
+            full_name?: unknown;
+            id_number?: unknown;
+          };
+        } | null;
         const fullNameRaw = structured?.cnic_front?.full_name;
         const idNumberRaw = structured?.cnic_front?.id_number;
         const extractedName =
@@ -1511,14 +1717,16 @@ export default function CreateAnimalScreen() {
             "Extracted details were added to the form. Please review before saving.",
           );
         }
-    } catch (error) {
-      Alert.alert(
-        "CNIC scan failed",
-        error instanceof Error ? error.message : "Failed to process CNIC image.",
-      );
-    } finally {
-      setCnicScanLoading(false);
-    }
+      } catch (error) {
+        Alert.alert(
+          "CNIC scan failed",
+          error instanceof Error
+            ? error.message
+            : "Failed to process CNIC image.",
+        );
+      } finally {
+        setCnicScanLoading(false);
+      }
     },
     [selectedFarmerId],
   );
@@ -1576,7 +1784,11 @@ export default function CreateAnimalScreen() {
               onPress={() => {
                 const next = !nearbySearchOpen;
                 setNearbySearchOpen(next);
-                if (next && nearbyFarmers.length === 0 && !nearbyFarmersLoading) {
+                if (
+                  next &&
+                  nearbyFarmers.length === 0 &&
+                  !nearbyFarmersLoading
+                ) {
                   fetchNearbyFarmers();
                 }
               }}
@@ -1598,10 +1810,20 @@ export default function CreateAnimalScreen() {
                   <FontAwesome name="search" size={14} color={colors.primary} />
                 </View>
                 <View style={styles.smartNearbyToggleTextWrap}>
-                  <Text style={[styles.smartNearbyToggleTitle, { color: colors.text }]}>
+                  <Text
+                    style={[
+                      styles.smartNearbyToggleTitle,
+                      { color: colors.text },
+                    ]}
+                  >
                     Smart Search Nearby Farmers
                   </Text>
-                  <Text style={[styles.smartNearbyToggleSub, { color: colors.muted }]}>
+                  <Text
+                    style={[
+                      styles.smartNearbyToggleSub,
+                      { color: colors.muted },
+                    ]}
+                  >
                     Tap to find and link existing farmers around your location.
                   </Text>
                 </View>
@@ -1617,10 +1839,15 @@ export default function CreateAnimalScreen() {
               <View
                 style={[
                   styles.smartNearbyCard,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
                 ]}
               >
-                <Text style={[styles.nearbyRadiusLabel, { color: colors.muted }]}>
+                <Text
+                  style={[styles.nearbyRadiusLabel, { color: colors.muted }]}
+                >
                   Search radius (km)
                 </Text>
                 <View style={styles.nearbyRadiusRow}>
@@ -1632,7 +1859,9 @@ export default function CreateAnimalScreen() {
                         styles.nearbyRadiusOption,
                         {
                           backgroundColor:
-                            nearbyRadiusKm === km ? colors.primary : colors.surface,
+                            nearbyRadiusKm === km
+                              ? colors.primary
+                              : colors.surface,
                           borderColor: colors.border,
                         },
                       ]}
@@ -1641,7 +1870,9 @@ export default function CreateAnimalScreen() {
                       <Text
                         style={[
                           styles.nearbyRadiusOptionText,
-                          { color: nearbyRadiusKm === km ? "#fff" : colors.text },
+                          {
+                            color: nearbyRadiusKm === km ? "#fff" : colors.text,
+                          },
                         ]}
                       >
                         {km}
@@ -1650,7 +1881,9 @@ export default function CreateAnimalScreen() {
                   ))}
                 </View>
                 <Button
-                  title={nearbyFarmersLoading ? "Loading…" : "Refresh nearby farmers"}
+                  title={
+                    nearbyFarmersLoading ? "Loading…" : "Refresh nearby farmers"
+                  }
                   variant="secondary"
                   onPress={fetchNearbyFarmers}
                   style={styles.nearbySearchButton}
@@ -1660,7 +1893,10 @@ export default function CreateAnimalScreen() {
                 {nearbyFarmers.length > 0 ? (
                   <View style={styles.farmersMatchListWrap}>
                     <Text
-                      style={[styles.farmersMatchListLabel, { color: colors.muted }]}
+                      style={[
+                        styles.farmersMatchListLabel,
+                        { color: colors.muted },
+                      ]}
                     >
                       Existing farmers found nearby
                     </Text>
@@ -1683,12 +1919,19 @@ export default function CreateAnimalScreen() {
                             { backgroundColor: colors.primary + "18" },
                           ]}
                         >
-                          <FontAwesome name="user" size={18} color={colors.primary} />
+                          <FontAwesome
+                            name="user"
+                            size={18}
+                            color={colors.primary}
+                          />
                         </View>
                         <View style={styles.farmerMatchCardContent}>
                           <View style={styles.farmerMatchCardNameRow}>
                             <Text
-                              style={[styles.farmerMatchCardName, { color: colors.text }]}
+                              style={[
+                                styles.farmerMatchCardName,
+                                { color: colors.text },
+                              ]}
                               numberOfLines={1}
                             >
                               {farmer.fullName}
@@ -1721,10 +1964,14 @@ export default function CreateAnimalScreen() {
                             ) : null}
                           </View>
                           <Text
-                            style={[styles.farmerMatchCardMeta, { color: colors.muted }]}
+                            style={[
+                              styles.farmerMatchCardMeta,
+                              { color: colors.muted },
+                            ]}
                           >
                             {formatPhoneDisplay(
-                              normalizePhone(farmer.phoneNumber) ?? farmer.phoneNumber,
+                              normalizePhone(farmer.phoneNumber) ??
+                                farmer.phoneNumber,
                             )}
                           </Text>
                           {farmer.villageName ? (
@@ -1743,7 +1990,10 @@ export default function CreateAnimalScreen() {
                   </View>
                 ) : !nearbyFarmersLoading ? (
                   <Text
-                    style={[styles.smartNearbyEmptyText, { color: colors.muted }]}
+                    style={[
+                      styles.smartNearbyEmptyText,
+                      { color: colors.muted },
+                    ]}
                   >
                     No nearby farmers found for this radius yet.
                   </Text>
@@ -1763,13 +2013,27 @@ export default function CreateAnimalScreen() {
                     { backgroundColor: colors.primary + "20" },
                   ]}
                 >
-                  <FontAwesome name="id-card" size={14} color={colors.primary} />
+                  <FontAwesome
+                    name="id-card"
+                    size={14}
+                    color={colors.primary}
+                  />
                 </View>
                 <View style={styles.smartNearbyToggleTextWrap}>
-                  <Text style={[styles.smartNearbyToggleTitle, { color: colors.text }]}>
+                  <Text
+                    style={[
+                      styles.smartNearbyToggleTitle,
+                      { color: colors.text },
+                    ]}
+                  >
                     Scan CNIC Front
                   </Text>
-                  <Text style={[styles.smartNearbyToggleSub, { color: colors.muted }]}>
+                  <Text
+                    style={[
+                      styles.smartNearbyToggleSub,
+                      { color: colors.muted },
+                    ]}
+                  >
                     Capture card photo to auto-fill Full Name and NIC number.
                   </Text>
                 </View>
@@ -1805,14 +2069,20 @@ export default function CreateAnimalScreen() {
                 >
                   <ActivityIndicator size="small" color={colors.primary} />
                   <Text
-                    style={[styles.farmerCheckHintText, { color: colors.muted }]}
+                    style={[
+                      styles.farmerCheckHintText,
+                      { color: colors.muted },
+                    ]}
                   >
                     Uploading and extracting CNIC details…
                   </Text>
                 </View>
               ) : null}
               {cnicFrontImageUri ? (
-                <Image source={{ uri: cnicFrontImageUri }} style={styles.cnicPreview} />
+                <Image
+                  source={{ uri: cnicFrontImageUri }}
+                  style={styles.cnicPreview}
+                />
               ) : null}
             </Card>
             <Card
@@ -2431,7 +2701,7 @@ export default function CreateAnimalScreen() {
                 {(
                   [
                     ["LAB_REPORT", "Lab Report"],
-                    ["EXRAY", "ExRay"],
+                    ["X_RAY", "X-ray"],
                     ["VACINATION", "Vacination"],
                   ] as const
                 ).map(([value, label]) => {
@@ -2496,44 +2766,153 @@ export default function CreateAnimalScreen() {
               />
 
               {diseaseEvidenceFiles.length > 0 ? (
-                <View style={styles.evidenceList}>
-                  {diseaseEvidenceFiles.map((evidence, index) => (
-                    <View
-                      key={`${evidence.uri}-${index}`}
-                      style={[
-                        styles.evidenceItem,
-                        {
-                          borderColor: colors.border,
-                          backgroundColor: colors.surface,
-                        },
-                      ]}
-                    >
-                      <View style={styles.evidenceItemBody}>
-                        <Text
-                          style={[styles.evidenceType, { color: colors.primary }]}
-                        >
-                          {evidence.imageType}
-                        </Text>
-                        <Text
-                          style={[styles.evidenceName, { color: colors.text }]}
-                          numberOfLines={1}
-                        >
-                          {evidence.name}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => removeDiseaseEvidence(index)}
-                        style={styles.playbackIconButton}
+                <>
+                  <View style={styles.evidenceList}>
+                    {diseaseEvidenceFiles.map((evidence, index) => (
+                      <View
+                        key={`${evidence.uri}-${index}`}
+                        style={[
+                          styles.evidenceItem,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.surface,
+                          },
+                        ]}
                       >
-                        <FontAwesome
-                          name="times"
-                          size={12}
-                          color={colors.muted}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
+                        <View style={styles.evidenceItemBody}>
+                          <Text
+                            style={[
+                              styles.evidenceType,
+                              { color: colors.primary },
+                            ]}
+                          >
+                            {evidence.imageType}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.evidenceName,
+                              { color: colors.text },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {evidence.name}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => removeDiseaseEvidence(index)}
+                          style={styles.playbackIconButton}
+                        >
+                          <FontAwesome
+                            name="times"
+                            size={12}
+                            color={colors.muted}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                  <Button
+                    title={
+                      uploadingDiseaseEvidence
+                        ? "Uploading report images…"
+                        : "Submit report images"
+                    }
+                    variant="primary"
+                    onPress={handleSubmitReportImages}
+                    style={styles.submitFilesButton}
+                    disabled={uploadingDiseaseEvidence}
+                  />
+                </>
+              ) : null}
+            </Card>
+            <Card style={styles.complaintInputCard}>
+              <Text style={[styles.complaintLabel, { color: colors.text }]}>
+                Clinical Signs (optional)
+              </Text>
+              <Text
+                style={[styles.attributesBlockHint, { color: colors.muted }]}
+              >
+                Add photos or images of clinical signs (e.g. lesions, swelling,
+                discharge). Stored under your account.
+              </Text>
+              <View style={styles.buttonRow}>
+                <Button
+                  title="Choose Image"
+                  onPress={pickClinicalSignsFromGallery}
+                  variant="secondary"
+                  style={styles.selectButton}
+                />
+                <Button
+                  title="Take Photo"
+                  onPress={captureClinicalSignsFromCamera}
+                  variant="secondary"
+                  style={styles.selectButton}
+                />
+              </View>
+              <Button
+                title="Pick File"
+                onPress={pickClinicalSignsFile}
+                variant="secondary"
+                style={styles.primaryButton}
+              />
+              {clinicalSignsFiles.length > 0 ? (
+                <>
+                  <View style={styles.evidenceList}>
+                    {clinicalSignsFiles.map((file, index) => (
+                      <View
+                        key={`${file.uri}-${index}`}
+                        style={[
+                          styles.evidenceItem,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.surface,
+                          },
+                        ]}
+                      >
+                        <View style={styles.evidenceItemBody}>
+                          <Text
+                            style={[
+                              styles.evidenceType,
+                              { color: colors.primary },
+                            ]}
+                          >
+                            Clinical sign
+                          </Text>
+                          <Text
+                            style={[
+                              styles.evidenceName,
+                              { color: colors.text },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => removeClinicalSigns(index)}
+                          style={styles.playbackIconButton}
+                        >
+                          <FontAwesome
+                            name="times"
+                            size={12}
+                            color={colors.muted}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                  <Button
+                    title={
+                      uploadingClinicalSigns
+                        ? "Uploading clinical signs…"
+                        : "Submit clinical sign images"
+                    }
+                    variant="primary"
+                    onPress={handleSubmitClinicalSigns}
+                    style={styles.submitFilesButton}
+                    disabled={uploadingClinicalSigns}
+                  />
+                </>
               ) : null}
             </Card>
             <Button
@@ -2885,11 +3264,11 @@ export default function CreateAnimalScreen() {
               title={
                 createAnimalMutation.isPending
                   ? "Creating..."
-                  : uploadingDiseaseEvidence
-                    ? "Uploading evidence..."
-                  : creatingCase
-                    ? "Creating case..."
-                    : "Save & continue"
+                  : uploadingDiseaseEvidence || uploadingClinicalSigns
+                    ? "Uploading..."
+                    : creatingCase
+                      ? "Creating case..."
+                      : "Save & continue"
               }
               onPress={deferPress(handleNextFromAttributes)}
               variant="primary"
@@ -2898,11 +3277,13 @@ export default function CreateAnimalScreen() {
                 !species.trim() ||
                 createAnimalMutation.isPending ||
                 uploadingDiseaseEvidence ||
+                uploadingClinicalSigns ||
                 creatingCase
               }
               loading={
                 createAnimalMutation.isPending ||
                 uploadingDiseaseEvidence ||
+                uploadingClinicalSigns ||
                 creatingCase
               }
             />
@@ -3125,6 +3506,7 @@ const styles = StyleSheet.create({
   progressBar: { height: "100%", borderRadius: 4 },
   progressText: { fontSize: 12, textAlign: "right" },
   primaryButton: { marginTop: 24, minHeight: 52 },
+  submitFilesButton: { marginTop: 14, minHeight: 48 },
   pickerButtonText: { fontSize: 15, flex: 1 },
   pickerChevron: { marginLeft: 8 },
   statusModalOverlay: {

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "pak-vets-mobile-app",
+    "name": "Pak Vets",
     "slug": "pak-vets-mobile-app",
     "version": "1.0.2",
     "orientation": "portrait",
@@ -52,9 +52,6 @@
       "googleIosClientId": "723134103138-ppv0s10lo0n3l5mr137n9i8f9sktvvp7.apps.googleusercontent.com",
       "googleAndroidClientId": "723134103138-6ak38jl31in2drmstc4khel6si56su08.apps.googleusercontent.com"
     },
-    "plugins": [
-      "expo-font",
-      "@react-native-community/datetimepicker"
-    ]
+    "plugins": ["expo-font", "@react-native-community/datetimepicker"]
   }
 }
