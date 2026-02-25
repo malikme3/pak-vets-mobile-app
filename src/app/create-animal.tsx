@@ -259,6 +259,7 @@ export default function CreateAnimalScreen() {
   );
   const didNavigateFromAttributesRef = useRef(false);
   const existingAnimalIdRef = useRef<number | null>(null);
+  const existingCaseIdRef = useRef<number | null>(null);
   const allowExitRef = useRef(false);
 
   // Nearby farmers (farmer step): radius in km, default 0.25; options 0.25, 0.5, 1, 2
@@ -786,10 +787,33 @@ export default function CreateAnimalScreen() {
     setClinicalSignsFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  /** Create case if not already created; returns caseId for S3 upload path. */
+  const ensureCaseForUpload = useCallback(
+    async (animalId: number): Promise<number> => {
+      if (existingCaseIdRef.current != null) {
+        return existingCaseIdRef.current;
+      }
+      if (!doctor?.doctorId) {
+        throw new Error("Sign in to create case for upload");
+      }
+      const caseData = await createCaseMutation.mutateAsync({
+        animalId,
+        doctorId: doctor.doctorId,
+        caseDatetime: new Date().toISOString(),
+        chiefComplaint: chiefComplaint.trim() || undefined,
+        status: "IN_PROGRESS",
+      });
+      existingCaseIdRef.current = caseData.caseId;
+      return caseData.caseId;
+    },
+    [doctor?.doctorId, chiefComplaint, createCaseMutation],
+  );
+
   const buildDiseaseEvidenceS3Key = useCallback(
     (
       doctorId: number,
       animalId: number,
+      caseId: number,
       imageType: DiseaseEvidenceType,
       fileName: string,
     ) => {
@@ -797,7 +821,7 @@ export default function CreateAnimalScreen() {
         fileName || `evidence-${Date.now()}.jpg`,
       );
       const timestamp = Date.now();
-      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_${imageType.toLowerCase()}_${timestamp}_${safeName}`;
+      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_caseId-${caseId}_${imageType.toLowerCase()}_${timestamp}_${safeName}`;
     },
     [sanitizeFileName],
   );
@@ -805,6 +829,7 @@ export default function CreateAnimalScreen() {
   const uploadDiseaseEvidenceForAnimal = useCallback(
     async (
       animalId: number,
+      caseId: number,
       files: SelectedDiseaseEvidence[],
       doctorId?: number | null,
     ) => {
@@ -816,6 +841,7 @@ export default function CreateAnimalScreen() {
           const s3Key = buildDiseaseEvidenceS3Key(
             docId,
             animalId,
+            caseId,
             evidence.imageType,
             evidence.name,
           );
@@ -851,12 +877,12 @@ export default function CreateAnimalScreen() {
   );
 
   const buildClinicalSignsS3Key = useCallback(
-    (doctorId: number, animalId: number, fileName: string) => {
+    (doctorId: number, animalId: number, caseId: number, fileName: string) => {
       const safeName = sanitizeFileName(
         fileName || `clinical-sign-${Date.now()}.jpg`,
       );
       const timestamp = Date.now();
-      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_clinical_signs_${timestamp}_${safeName}`;
+      return `animal-disease-files/doctorId-${doctorId}_animalId-${animalId}_caseId-${caseId}_clinical_signs_${timestamp}_${safeName}`;
     },
     [sanitizeFileName],
   );
@@ -865,13 +891,19 @@ export default function CreateAnimalScreen() {
     async (
       doctorId: number,
       animalId: number,
+      caseId: number,
       files: SelectedClinicalSignsFile[],
     ) => {
       if (!files.length) return;
       setUploadingClinicalSigns(true);
       try {
         for (const file of files) {
-          const s3Key = buildClinicalSignsS3Key(doctorId, animalId, file.name);
+          const s3Key = buildClinicalSignsS3Key(
+            doctorId,
+            animalId,
+            caseId,
+            file.name,
+          );
           const contentType = inferContentType(file.name, file.mimeType);
           await uploadFileToS3(
             file.uri,
@@ -913,9 +945,11 @@ export default function CreateAnimalScreen() {
       return;
     }
     try {
+      const caseId = await ensureCaseForUpload(animalId);
       await uploadClinicalSignsForDoctor(
         doctor.doctorId,
         animalId,
+        caseId,
         clinicalSignsFiles,
       );
       setClinicalSignsFiles([]);
@@ -928,11 +962,20 @@ export default function CreateAnimalScreen() {
           : "Failed to upload clinical sign images.",
       );
     }
-  }, [doctor?.doctorId, clinicalSignsFiles, uploadClinicalSignsForDoctor]);
+  }, [
+    doctor?.doctorId,
+    clinicalSignsFiles,
+    ensureCaseForUpload,
+    uploadClinicalSignsForDoctor,
+  ]);
 
   const handleSubmitReportImages = useCallback(async () => {
     if (!diseaseEvidenceFiles.length) {
       Alert.alert("No files", "Add report images first.");
+      return;
+    }
+    if (!doctor?.doctorId) {
+      Alert.alert("Not available", "Sign in to submit report images.");
       return;
     }
     const animalId = existingAnimalIdRef.current;
@@ -944,7 +987,12 @@ export default function CreateAnimalScreen() {
       return;
     }
     try {
-      await uploadDiseaseEvidenceForAnimal(animalId, diseaseEvidenceFiles);
+      const caseId = await ensureCaseForUpload(animalId);
+      await uploadDiseaseEvidenceForAnimal(
+        animalId,
+        caseId,
+        diseaseEvidenceFiles,
+      );
       setDiseaseEvidenceFiles([]);
       Alert.alert("Submitted", "Report images have been uploaded.");
     } catch (err) {
@@ -953,7 +1001,12 @@ export default function CreateAnimalScreen() {
         err instanceof Error ? err.message : "Failed to upload report images.",
       );
     }
-  }, [diseaseEvidenceFiles, uploadDiseaseEvidenceForAnimal]);
+  }, [
+    doctor?.doctorId,
+    diseaseEvidenceFiles,
+    ensureCaseForUpload,
+    uploadDiseaseEvidenceForAnimal,
+  ]);
 
   // S3 key: create-animal-images/{doctorId}/{speciesSlug}/lat-{lat}_lng-{lng}_animalId-{animalId}_timestamp-{timestamp}_{face|ear|body}.jpg
   // Use one timestamp for all 3 so backend can find face/ear/body under same pathPrefix and run AI analyze.
@@ -1171,42 +1224,55 @@ export default function CreateAnimalScreen() {
         const created = await createAnimalMutation.mutateAsync(request);
         animalIdToUse = created.animalId;
       }
-      await uploadDiseaseEvidenceForAnimal(animalIdToUse, diseaseEvidenceFiles);
-      if (doctor?.doctorId != null && clinicalSignsFiles.length > 0) {
-        await uploadClinicalSignsForDoctor(
-          doctor.doctorId,
-          animalIdToUse,
-          clinicalSignsFiles,
-        );
-      }
-      if (didNavigateFromAttributesRef.current) return;
 
       const toPath = (p: string) => (p.startsWith("/") ? p : `/${p}`);
       const isReturnToCreateCase =
         typeof returnTo === "string" &&
         returnTo.replace(/^\/+/, "").startsWith("create-case");
 
-      if (isReturnToCreateCase && doctor) {
+      // Create case before upload (case_id required for disease files); reuse if already created from Complaint step
+      let caseIdToUse: number | null = existingCaseIdRef.current;
+      if (
+        caseIdToUse == null &&
+        doctor &&
+        (isReturnToCreateCase ||
+          diseaseEvidenceFiles.length > 0 ||
+          clinicalSignsFiles.length > 0)
+      ) {
+        const caseData = await createCaseMutation.mutateAsync({
+          animalId: animalIdToUse,
+          doctorId: doctor.doctorId,
+          caseDatetime: new Date().toISOString(),
+          chiefComplaint: chiefComplaint.trim() || undefined,
+          status: "IN_PROGRESS",
+        });
+        caseIdToUse = caseData.caseId;
+        existingCaseIdRef.current = caseData.caseId;
+      }
+
+      if (caseIdToUse != null) {
+        await uploadDiseaseEvidenceForAnimal(
+          animalIdToUse,
+          caseIdToUse,
+          diseaseEvidenceFiles,
+        );
+        if (clinicalSignsFiles.length > 0) {
+          await uploadClinicalSignsForDoctor(
+            doctor!.doctorId,
+            animalIdToUse,
+            caseIdToUse,
+            clinicalSignsFiles,
+          );
+        }
+      }
+      if (didNavigateFromAttributesRef.current) return;
+
+      if (isReturnToCreateCase && doctor && caseIdToUse != null) {
         didNavigateFromAttributesRef.current = true;
         allowExitRef.current = true;
         setCreatingCase(true);
         try {
-          const caseData = await createCaseMutation.mutateAsync({
-            animalId: animalIdToUse,
-            doctorId: doctor.doctorId,
-            caseDatetime: new Date().toISOString(),
-            chiefComplaint: chiefComplaint.trim() || undefined,
-            status: "IN_PROGRESS",
-          });
-          router.push(`/case-detail?caseId=${caseData.caseId}`);
-        } catch (caseErr) {
-          didNavigateFromAttributesRef.current = false;
-          Alert.alert(
-            "Case not created",
-            caseErr instanceof Error
-              ? caseErr.message
-              : "Failed to create case. Animal was saved.",
-          );
+          router.push(`/case-detail?caseId=${caseIdToUse}`);
         } finally {
           setCreatingCase(false);
         }
