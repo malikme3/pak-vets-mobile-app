@@ -21,6 +21,7 @@ import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 import * as Location from "expo-location";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
@@ -568,7 +569,7 @@ export default function CreateAnimalScreen() {
       s3Key,
       tags,
     );
-    const fileInfo = await FileSystem.getInfoAsync(imageUri);
+    const fileInfo = await new File(imageUri).info();
     if (!fileInfo.exists) throw new Error("File does not exist");
     const fileBase64 = await FileSystem.readAsStringAsync(imageUri, {
       encoding: FileSystem.EncodingType.Base64,
@@ -603,7 +604,7 @@ export default function CreateAnimalScreen() {
         s3Key,
         tags,
       );
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      const fileInfo = await new File(fileUri).info();
       if (!fileInfo.exists) throw new Error("File does not exist");
       const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
         encoding: FileSystem.EncodingType.Base64,

@@ -13,6 +13,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -92,7 +93,7 @@ export default function AddMediaScreen() {
     presignedUrl: string,
     fileUri: string,
   ): Promise<void> => {
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    const fileInfo = await new File(fileUri).info();
     if (!fileInfo.exists) {
       throw new Error("File does not exist");
     }

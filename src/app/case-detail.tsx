@@ -14,6 +14,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -307,7 +308,7 @@ export default function CaseDetailScreen() {
       const tags = tagValue ? `type=${tagValue}` : undefined;
       const bucketName = getBucketName();
       const { signedUrl } = await getUploadSignedUrl(bucketName, s3Key, tags);
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      const fileInfo = await new File(fileUri).info();
       if (!fileInfo.exists) throw new Error("File does not exist");
       const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
         encoding: FileSystem.EncodingType.Base64,

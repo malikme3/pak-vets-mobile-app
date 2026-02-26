@@ -17,6 +17,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 import * as Location from "expo-location";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
@@ -514,7 +515,7 @@ export default function SelectAnimalScreen() {
       s3Key,
       "type=match-query",
     );
-    const fileInfo = await FileSystem.getInfoAsync(imageUri);
+    const fileInfo = await new File(imageUri).info();
     if (!fileInfo.exists) throw new Error("File does not exist");
     const uploadResult = await FileSystem.uploadAsync(signedUrl, imageUri, {
       httpMethod: "PUT",
