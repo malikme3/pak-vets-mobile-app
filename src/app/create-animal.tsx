@@ -3063,6 +3063,7 @@ export default function CreateAnimalScreen() {
               onPress={() => setStep("attributes")}
               variant="primary"
               style={styles.primaryButton}
+              disabled={chiefComplaint.trim().length === 0}
             />
           </ScrollView>
         </SafeAreaView>

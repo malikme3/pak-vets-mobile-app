@@ -204,7 +204,7 @@ export default function AddMediaScreen() {
       setUploadProgress(100);
 
       // Navigate back to case detail
-      router.replace(`/case-detail?caseId=${caseId}`);
+      router.replace(`/case-detail?caseId=&fromCreate=0`);
     } catch (error) {
       console.error("Upload error:", error);
       Alert.alert(

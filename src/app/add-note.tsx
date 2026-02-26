@@ -170,7 +170,7 @@ export default function AddNoteScreen() {
       }
 
       // Navigate back to case detail
-      router.replace(`/case-detail?caseId=${caseId}`);
+      router.replace(`/case-detail?caseId=&fromCreate=0`);
     } catch (error) {
       Alert.alert(
         "Error",

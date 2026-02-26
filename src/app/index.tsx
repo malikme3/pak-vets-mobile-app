@@ -235,7 +235,7 @@ export default function DashboardScreen() {
 
   const handleCasePress = useCallback(
     (caseId: number) => {
-      router.push(`/case-detail?caseId=${caseId}`);
+      router.push(`/case-detail?caseId=${caseId}&fromCreate=0`);
     },
     [router],
   );

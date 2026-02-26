@@ -33,6 +33,12 @@ export interface CollapsibleSectionProps {
   style?: StyleProp<ViewStyle>;
   /** Use Card wrapper (default true) */
   withCard?: boolean;
+  /** Optional compact header action button rendered before chevron */
+  headerAction?: {
+    icon: keyof typeof FontAwesome.glyphMap;
+    onPress: () => void;
+    accessibilityLabel?: string;
+  };
 }
 
 /**
@@ -50,6 +56,7 @@ export function CollapsibleSection({
   children,
   style,
   withCard = true,
+  headerAction,
 }: CollapsibleSectionProps) {
   const { colors } = useTheme();
 
@@ -90,6 +97,24 @@ export function CollapsibleSection({
           style={styles.thumb}
           resizeMode="cover"
         />
+      ) : null}
+      {headerAction ? (
+        <TouchableOpacity
+          onPress={(e) => {
+            e.stopPropagation();
+            headerAction.onPress();
+          }}
+          style={styles.headerAction}
+          accessibilityRole="button"
+          accessibilityLabel={headerAction.accessibilityLabel}
+          hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}
+        >
+          <FontAwesome
+            name={headerAction.icon}
+            size={12}
+            color={colors.muted}
+          />
+        </TouchableOpacity>
       ) : null}
       <FontAwesome
         name={expanded ? "chevron-up" : "chevron-down"}
@@ -174,6 +199,13 @@ const styles = StyleSheet.create({
   },
   chevron: {
     marginLeft: 4,
+  },
+  headerAction: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
     paddingHorizontal: 16,

@@ -21,8 +21,7 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { ListRow } from "../components/ui/ListRow";
 import { useAnimal, useAnimalImages } from "../features/animals/hooks";
-import { useCurrentDoctor } from "../features/doctors/hooks";
-import { useCasesByAnimal, useCreateCase } from "../features/cases/hooks";
+import { useCasesByAnimal } from "../features/cases/hooks";
 import type { Case } from "../types/api";
 
 const capitalizeFirst = (s: string) =>
@@ -48,8 +47,6 @@ export default function AnimalDetailsScreen() {
   const { data: cases = [], isLoading: casesLoading } = useCasesByAnimal(
     animalId || 0,
   );
-  const { data: doctor } = useCurrentDoctor();
-  const createCaseMutation = useCreateCase();
 
   useFocusEffect(
     useCallback(() => {
@@ -76,32 +73,20 @@ export default function AnimalDetailsScreen() {
       <ListRow
         title="Case"
         subtitle={subtitle}
-        onPress={() => router.push(`/case-detail?caseId=${item.caseId}`)}
+        onPress={() =>
+          router.push(`/case-detail?caseId=${item.caseId}&fromCreate=0`)
+        }
       />
     );
   };
 
   const handleCreateCase = useCallback(async () => {
-    if (!animalId || !doctor) {
+    if (!animalId) {
       Alert.alert("Error", "Unable to create case. Please try again.");
       return;
     }
-    try {
-      const caseData = await createCaseMutation.mutateAsync({
-        animalId,
-        doctorId: doctor.doctorId,
-        caseDatetime: new Date().toISOString(),
-        chiefComplaint: undefined,
-        status: "COMPLETED",
-      });
-      router.replace(`/case-detail?caseId=${caseData.caseId}&fromCreate=1`);
-    } catch (err) {
-      Alert.alert(
-        "Error",
-        err instanceof Error ? err.message : "Failed to create case",
-      );
-    }
-  }, [animalId, doctor, createCaseMutation, router]);
+    router.replace(`/create-case?animalId=${animalId}&intakeFirst=1`);
+  }, [animalId, router]);
 
   const handleDialPhone = useCallback(async (phoneNumber: string) => {
     const sanitized = phoneNumber.replace(/[^\d+]/g, "");
@@ -387,11 +372,9 @@ export default function AnimalDetailsScreen() {
 
         {/* Create Case CTA */}
         <Button
-          title={createCaseMutation.isPending ? "Creating…" : "Create New Case"}
+          title="Create New Case"
           onPress={handleCreateCase}
           variant="primary"
-          disabled={createCaseMutation.isPending}
-          loading={createCaseMutation.isPending}
           style={styles.createCaseButton}
         />
 

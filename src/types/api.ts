@@ -44,26 +44,48 @@ export interface Doctor {
   doctorId: number;
   fullName: string;
   phone: string;
+  doctorType?: string;
   email?: string;
   status: "ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED";
   firebaseUid?: string;
-  locationName?: string;
+  cityName?: string;
+  tehName?: string;
+  districtName?: string;
+  latitude?: number;
+  longitude?: number;
+  profileUrl?: string;
+  profileAvatarUrl?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CreateDoctorRequest {
   fullName: string;
   phone: string;
+  doctorType?: string;
   email?: string;
-  locationName?: string;
+  cityName?: string;
+  tehName?: string;
+  districtName?: string;
+  latitude?: number;
+  longitude?: number;
+  profileUrl?: string;
+  profileAvatarUrl?: string;
 }
 
 export interface UpdateDoctorRequest {
   fullName?: string;
   phone?: string;
+  doctorType?: string;
   email?: string;
   status?: "ACTIVE" | "INACTIVE" | "PENDING" | "SUSPENDED";
-  locationName?: string;
+  cityName?: string;
+  tehName?: string;
+  districtName?: string;
+  latitude?: number;
+  longitude?: number;
+  profileUrl?: string;
+  profileAvatarUrl?: string;
 }
 
 export interface FarmerInfo {
@@ -396,6 +418,38 @@ export interface AnimalImage {
   s3Key: string;
   s3Url: string;
   captureDate?: string;
+  notes?: string;
+  source?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AnimalDiseaseFileImageType =
+  | "LAB_REPORT"
+  | "VACINATION"
+  | "X_RAY"
+  | "CLINICAL_SIGNS";
+
+export type AnimalDiseaseFileAnalysisStatus =
+  | "PENDING"
+  | "SUCCESS"
+  | "FAILED"
+  | "UNSUPPORTED"
+  | "INVALID"
+  | "NOT_READABLE";
+
+export interface AnimalDiseaseFile {
+  animalDiseaseFileId: number;
+  caseId: number;
+  animalId: number;
+  doctorId?: number;
+  imageType: AnimalDiseaseFileImageType;
+  s3Key: string;
+  s3Url: string;
+  originalFileName?: string;
+  mimeType?: string;
+  aiAnalysis?: string;
+  aiAnalysisStatus?: AnimalDiseaseFileAnalysisStatus;
   notes?: string;
   source?: string;
   createdAt: string;

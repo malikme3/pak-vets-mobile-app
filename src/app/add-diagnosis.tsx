@@ -196,7 +196,7 @@ export default function AddDiagnosisScreen() {
       }
 
       // Navigate back to case detail - use replace to ensure fresh data load
-      router.replace(`/case-detail?caseId=${caseId}`);
+      router.replace(`/case-detail?caseId=${caseId}&fromCreate=0`);
     } catch (error) {
       Alert.alert(
         "Error",

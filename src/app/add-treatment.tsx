@@ -531,7 +531,7 @@ export default function AddTreatmentScreen() {
       }
 
       // Navigate back to case detail
-      router.replace(`/case-detail?caseId=${caseId}`);
+      router.replace(`/case-detail?caseId=&fromCreate=0`);
     } catch (error) {
       Alert.alert(
         "Error",

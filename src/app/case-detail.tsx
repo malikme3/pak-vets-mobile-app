@@ -10,6 +10,7 @@ import {
   Alert,
   Image,
   ImageBackground,
+  Modal,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -41,7 +42,11 @@ import {
   getDownloadSignedUrl,
   getUploadSignedUrl,
 } from "../services/sharedServicesApi";
-import { caseDiagnosisApi, caseTreatmentApi } from "../services/vetApi";
+import {
+  animalDiseaseFileApi,
+  caseDiagnosisApi,
+  caseTreatmentApi,
+} from "../services/vetApi";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import { getSpeciesHeroBannerSource } from "../utils/speciesImage";
 import type {
@@ -49,6 +54,7 @@ import type {
   CaseTreatment,
   CaseNote,
   MediaFile,
+  AnimalDiseaseFile,
   DiagnosisSuggestion,
   TreatmentSuggestion,
 } from "../types/api";
@@ -200,6 +206,8 @@ interface SelectedClinicalSignsFile {
   mimeType?: string;
 }
 
+type EvidenceViewerTab = "LAB_REPORT" | "CLINICAL_SIGNS";
+
 // Accordion sections - Diagnoses expanded by default; Animal collapsed
 type AccordionKey = "animal" | "diagnoses" | "treatments" | "notes" | "media";
 const DEFAULT_EXPANDED: AccordionKey[] = ["diagnoses"];
@@ -211,6 +219,8 @@ export default function CaseDetailScreen() {
 
   const caseId = params.caseId ? Number(params.caseId) : undefined;
   const fromCreate = params.fromCreate === "1" || params.fromCreate === "true";
+  const intakeFirst =
+    params.intakeFirst === "1" || params.intakeFirst === "true";
   const [expanded, setExpanded] = useState<Record<AccordionKey, boolean>>(
     () =>
       Object.fromEntries(
@@ -275,6 +285,17 @@ export default function CaseDetailScreen() {
   >([]);
   const [uploadingClinicalSigns, setUploadingClinicalSigns] = useState(false);
   const [clinicalSignsExpanded, setClinicalSignsExpanded] = useState(false);
+  const [evidenceViewerVisible, setEvidenceViewerVisible] = useState(false);
+  const [evidenceViewerTab, setEvidenceViewerTab] =
+    useState<EvidenceViewerTab>("LAB_REPORT");
+  const [animalDiseaseFiles, setAnimalDiseaseFiles] = useState<
+    AnimalDiseaseFile[]
+  >([]);
+  const [animalDiseaseFilesLoading, setAnimalDiseaseFilesLoading] =
+    useState(false);
+  const [animalDiseaseFilesError, setAnimalDiseaseFilesError] = useState<
+    string | null
+  >(null);
 
   const sanitizeFileName = useCallback((fileName: string) => {
     return fileName
@@ -516,6 +537,34 @@ export default function CaseDetailScreen() {
   const removeClinicalSigns = useCallback((index: number) => {
     setClinicalSignsFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const fetchAnimalDiseaseFiles = useCallback(async () => {
+    if (!caseData?.caseId) return;
+    setAnimalDiseaseFilesLoading(true);
+    setAnimalDiseaseFilesError(null);
+    try {
+      const files = await animalDiseaseFileApi.getFilesByCase(caseData.caseId);
+      setAnimalDiseaseFiles(files);
+    } catch (error) {
+      setAnimalDiseaseFiles([]);
+      setAnimalDiseaseFilesError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load disease evidence files.",
+      );
+    } finally {
+      setAnimalDiseaseFilesLoading(false);
+    }
+  }, [caseData?.caseId]);
+
+  const openEvidenceViewer = useCallback(
+    async (tab: EvidenceViewerTab) => {
+      setEvidenceViewerTab(tab);
+      setEvidenceViewerVisible(true);
+      await fetchAnimalDiseaseFiles();
+    },
+    [fetchAnimalDiseaseFiles],
+  );
 
   const handleSubmitReportImages = useCallback(async () => {
     if (!diseaseEvidenceFiles.length) {
@@ -826,6 +875,13 @@ export default function CaseDetailScreen() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  const labReportFiles = animalDiseaseFiles.filter(
+    (file) => file.imageType === "LAB_REPORT",
+  );
+  const clinicalSignAnalysisFiles = animalDiseaseFiles.filter(
+    (file) => file.imageType === "CLINICAL_SIGNS",
+  );
+
   // Add Treatment: suggest from diagnoses (saved or AI), then navigate with first suggestion to pre-fill
   const [treatmentSuggestionsLoading, setTreatmentSuggestionsLoading] =
     useState(false);
@@ -1078,6 +1134,13 @@ export default function CaseDetailScreen() {
             icon="file"
             expanded={diseaseEvidenceExpanded}
             onToggle={() => setDiseaseEvidenceExpanded((v) => !v)}
+            headerAction={{
+              icon: "expand",
+              onPress: () => {
+                openEvidenceViewer("LAB_REPORT");
+              },
+              accessibilityLabel: "View disease evidence files and AI analysis",
+            }}
             hasContent={diseaseEvidenceFiles.length > 0}
             thumbnailUri={
               diseaseEvidenceFiles[0]?.source !== "file"
@@ -1224,6 +1287,13 @@ export default function CaseDetailScreen() {
             icon="image"
             expanded={clinicalSignsExpanded}
             onToggle={() => setClinicalSignsExpanded((v) => !v)}
+            headerAction={{
+              icon: "expand",
+              onPress: () => {
+                openEvidenceViewer("CLINICAL_SIGNS");
+              },
+              accessibilityLabel: "View clinical signs files and AI analysis",
+            }}
             hasContent={clinicalSignsFiles.length > 0}
             thumbnailUri={clinicalSignsFiles[0]?.uri}
             style={styles.diseaseEvidenceCard}
@@ -1310,6 +1380,115 @@ export default function CaseDetailScreen() {
           </CollapsibleSection>
         )}
 
+        <Modal
+          visible={evidenceViewerVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setEvidenceViewerVisible(false)}
+        >
+          <View style={styles.analysisModalOverlay}>
+            <View
+              style={[
+                styles.analysisModalCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <View style={styles.analysisModalHeader}>
+                <Text style={[styles.analysisModalTitle, { color: colors.text }]}>
+                  Evidence AI Analysis
+                </Text>
+                <TouchableOpacity onPress={() => setEvidenceViewerVisible(false)}>
+                  <FontAwesome name="times" size={16} color={colors.muted} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.analysisTabRow}>
+                {(
+                  [
+                    ["LAB_REPORT", "Disease Evidence", labReportFiles.length],
+                    [
+                      "CLINICAL_SIGNS",
+                      "Clinical Signs",
+                      clinicalSignAnalysisFiles.length,
+                    ],
+                  ] as const
+                ).map(([tab, label, count]) => {
+                  const selected = evidenceViewerTab === tab;
+                  return (
+                    <TouchableOpacity
+                      key={tab}
+                      style={[
+                        styles.analysisTab,
+                        {
+                          borderColor: selected ? colors.primary : colors.border,
+                          backgroundColor: selected
+                            ? `${colors.primary}20`
+                            : colors.background,
+                        },
+                      ]}
+                      onPress={() => setEvidenceViewerTab(tab)}
+                    >
+                      <Text
+                        style={[
+                          styles.analysisTabText,
+                          { color: selected ? colors.primary : colors.text },
+                        ]}
+                      >
+                        {label} ({count})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <ScrollView style={styles.analysisList}>
+                {animalDiseaseFilesLoading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : animalDiseaseFilesError ? (
+                  <Text style={[styles.analysisErrorText, { color: colors.danger }]}>
+                    {animalDiseaseFilesError}
+                  </Text>
+                ) : (
+                  (evidenceViewerTab === "LAB_REPORT"
+                    ? labReportFiles
+                    : clinicalSignAnalysisFiles
+                  ).map((file) => (
+                    <View
+                      key={file.animalDiseaseFileId}
+                      style={[
+                        styles.analysisItem,
+                        { borderColor: colors.border, backgroundColor: colors.background },
+                      ]}
+                    >
+                      <Text style={[styles.analysisFileName, { color: colors.text }]}>
+                        {file.originalFileName || file.s3Key.split("/").pop() || "File"}
+                      </Text>
+                      <Text style={[styles.analysisMetaText, { color: colors.muted }]}>
+                        Status: {file.aiAnalysisStatus || "PENDING"} •{" "}
+                        {new Date(file.createdAt).toLocaleDateString("en-US")}
+                      </Text>
+                      <Text style={[styles.analysisBodyText, { color: colors.text }]}>
+                        {file.aiAnalysis?.trim() || "AI analysis not available yet."}
+                      </Text>
+                    </View>
+                  ))
+                )}
+                {!animalDiseaseFilesLoading &&
+                !animalDiseaseFilesError &&
+                (evidenceViewerTab === "LAB_REPORT"
+                  ? labReportFiles.length === 0
+                  : clinicalSignAnalysisFiles.length === 0) ? (
+                  <Text style={[styles.analysisEmptyText, { color: colors.muted }]}>
+                    No files found for this section.
+                  </Text>
+                ) : null}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {!intakeFirst && (
+          <>
         {/* 1. Diagnoses (with AI suggestions inline) */}
         <AccordionSection
           title="Diagnoses"
@@ -1971,6 +2150,20 @@ export default function CaseDetailScreen() {
           disabled={!caseId || updateCaseMutation.isPending}
           loading={updateCaseMutation.isPending}
         />
+          </>
+        )}
+        {intakeFirst && (
+          <Button
+            title="Next: Case details"
+            onPress={() => {
+              if (!caseId) return;
+              router.replace(`/case-detail?caseId=${caseId}&fromCreate=1`);
+            }}
+            variant="primary"
+            style={styles.saveButton}
+            disabled={!caseId}
+          />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -2785,6 +2978,78 @@ const styles = StyleSheet.create({
   },
   playbackIconButton: {
     padding: 4,
+  },
+  analysisModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  analysisModalCard: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    maxHeight: "82%",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
+  },
+  analysisModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  analysisModalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  analysisTabRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  analysisTab: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  analysisTabText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  analysisList: {
+    flexGrow: 0,
+  },
+  analysisItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  analysisFileName: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  analysisMetaText: {
+    fontSize: 11,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  analysisBodyText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  analysisErrorText: {
+    fontSize: 13,
+  },
+  analysisEmptyText: {
+    fontSize: 13,
+    textAlign: "center",
+    paddingVertical: 14,
   },
   submitFilesButton: { marginTop: 14, minHeight: 48 },
 });

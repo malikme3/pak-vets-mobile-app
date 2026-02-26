@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -30,7 +30,6 @@ import {
   useAnimalImages,
 } from "../features/animals/hooks";
 import { useCurrentDoctor } from "../features/doctors/hooks";
-import { useCreateCase } from "../features/cases/hooks";
 import { animalApi } from "../services/vetApi";
 import {
   getUploadSignedUrl,
@@ -79,6 +78,14 @@ function radiusToKm(value: number, unit: NearbyRadiusUnit): number {
 }
 const MATCH_BY_IMAGE_ERROR_FALLBACK =
   "Could not find animal by image. Try again.";
+
+function cleanOptionalText(value?: string | null) {
+  const text = value?.trim();
+  if (!text) return "";
+  const lower = text.toLowerCase();
+  if (lower === "null" || lower === "undefined") return "";
+  return text;
+}
 
 function getMatchErrorMessage(err: unknown): string {
   if (
@@ -130,7 +137,9 @@ function NearbyAnimalRow({
   onPress: () => void;
 }) {
   const { colors } = useTheme();
-  const title = [animal.species, animal.breed].filter(Boolean).join(" • ");
+  const title = [cleanOptionalText(animal.species), cleanOptionalText(animal.breed)]
+    .filter(Boolean)
+    .join(" • ");
   const distanceStr =
     animal.distanceKm != null ? formatDistance(animal.distanceKm) : "";
   return (
@@ -201,8 +210,6 @@ export default function SelectAnimalScreen() {
   const returnTo = (params.returnTo as string) || "/create-case";
   const createCaseAfterSelect = params.createCaseAfterSelect === "1";
   const { data: doctor } = useCurrentDoctor();
-  const createCaseMutation = useCreateCase();
-  const creatingCaseRef = useRef(false);
 
   const [ownerInputValue, setOwnerInputValue] = useState("");
   const [ownerFilter, setOwnerFilter] =
@@ -302,12 +309,6 @@ export default function SelectAnimalScreen() {
             animal.tagId?.toLowerCase().includes(tagQuery.toLowerCase()),
         );
 
-  // Combined results, dedupe by animalId
-  const resultsById = new Map<number, Animal>();
-  ownerResults.forEach((a) => resultsById.set(a.animalId, a));
-  tagResults.forEach((a) => resultsById.set(a.animalId, a));
-  const results = Array.from(resultsById.values());
-
   // Format phone as user types: XXXX-XXX-XXXX
   const formatPhoneInput = (text: string) => {
     const digits = text.replace(/\D/g, "").slice(0, 11);
@@ -382,38 +383,22 @@ export default function SelectAnimalScreen() {
     }
   }, [nearbyRadiusValue, nearbyRadiusUnit]);
 
-  const isLoading = ownerSearchLoading || tagSearchLoading;
-  const isLoadingMore = ownerFetchingNextPage || tagFetchingNextPage;
-  const hasMoreResults = Boolean(ownerHasNextPage || tagHasNextPage);
+  const handleLoadMoreOwnerResults = useCallback(async () => {
+    if (ownerHasNextPage) {
+      await fetchOwnerNextPage();
+    }
+  }, [ownerHasNextPage, fetchOwnerNextPage]);
 
-  const handleLoadMoreResults = useCallback(async () => {
-    await Promise.all([
-      ownerHasNextPage ? fetchOwnerNextPage() : Promise.resolve(),
-      tagHasNextPage ? fetchTagNextPage() : Promise.resolve(),
-    ]);
-  }, [ownerHasNextPage, tagHasNextPage, fetchOwnerNextPage, fetchTagNextPage]);
+  const handleLoadMoreTagResults = useCallback(async () => {
+    if (tagHasNextPage) {
+      await fetchTagNextPage();
+    }
+  }, [tagHasNextPage, fetchTagNextPage]);
 
   const handleAnimalSelect = useCallback(
     async (animal: Animal) => {
       if (createCaseAfterSelect && doctor) {
-        if (creatingCaseRef.current) return;
-        creatingCaseRef.current = true;
-        try {
-          const caseData = await createCaseMutation.mutateAsync({
-            animalId: animal.animalId,
-            doctorId: doctor.doctorId,
-            caseDatetime: new Date().toISOString(),
-            chiefComplaint: undefined,
-            status: "COMPLETED",
-          });
-          router.replace(`/case-detail?caseId=${caseData.caseId}&fromCreate=1`);
-        } catch (err) {
-          creatingCaseRef.current = false;
-          Alert.alert(
-            "Error",
-            err instanceof Error ? err.message : "Failed to create case",
-          );
-        }
+        router.replace(`/create-case?animalId=${animal.animalId}&intakeFirst=1`);
         return;
       }
       if (!returnTo || typeof returnTo !== "string") {
@@ -424,7 +409,7 @@ export default function SelectAnimalScreen() {
         params: { animalId: String(animal.animalId) },
       });
     },
-    [createCaseAfterSelect, doctor, createCaseMutation, returnTo, router],
+    [createCaseAfterSelect, doctor, returnTo, router],
   );
 
   // ScrollView button pattern: delay press to avoid cancel (see development-guidelines.md)
@@ -651,8 +636,12 @@ export default function SelectAnimalScreen() {
     setMatchedAnimal(null);
   };
 
-  const formatAnimalTitle = (a: Animal) =>
-    `${a.species}${a.breed ? ` - ${a.breed}` : ""}${a.tagId ? ` (${a.tagId})` : ""}`;
+  const formatAnimalTitle = (a: Animal) => {
+    const species = cleanOptionalText(a.species) || "Animal";
+    const breed = cleanOptionalText(a.breed);
+    const tagId = cleanOptionalText(a.tagId);
+    return `${species}${breed ? ` - ${breed}` : ""}${tagId ? ` (${tagId})` : ""}`;
+  };
   const formatAnimalSubtitle = (a: Animal) => {
     const parts: string[] = [];
     if (a.animalTagline) parts.push(a.animalTagline);
@@ -994,43 +983,82 @@ export default function SelectAnimalScreen() {
           </TouchableOpacity>
           {findByOwnerExpanded && (
             <>
-          <SegmentedControl
-            options={[
-              { label: "Phone", value: "farmer_phone" },
-              { label: "NIC #", value: "farmer_nic" },
-              { label: "Name", value: "farmer_name" },
-            ]}
-            selectedValue={ownerFilter}
-            onValueChange={(value) =>
-              handleOwnerFilterChange(value as OwnerSearchFilter)
-            }
-          />
-          <View
-            style={[
-              styles.searchInputRow,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-              },
-            ]}
-          >
-            <TextInput
-              style={[
-                styles.searchInputField,
-                { color: colors.text },
-              ]}
-              value={ownerInputValue}
-              onChangeText={handleOwnerInputChange}
-              placeholder={
-                ownerFilter === "farmer_phone"
-                  ? "03xx-xxx-xxxx"
-                  : ownerFilter === "farmer_nic"
-                    ? "NIC number"
-                    : "Owner name"
-              }
-              placeholderTextColor={colors.muted}
-            />
-          </View>
+              <SegmentedControl
+                options={[
+                  { label: "Phone", value: "farmer_phone" },
+                  { label: "NIC #", value: "farmer_nic" },
+                  { label: "Name", value: "farmer_name" },
+                ]}
+                selectedValue={ownerFilter}
+                onValueChange={(value) =>
+                  handleOwnerFilterChange(value as OwnerSearchFilter)
+                }
+              />
+              <View
+                style={[
+                  styles.searchInputRow,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              >
+                <TextInput
+                  style={[styles.searchInputField, { color: colors.text }]}
+                  value={ownerInputValue}
+                  onChangeText={handleOwnerInputChange}
+                  placeholder={
+                    ownerFilter === "farmer_phone"
+                      ? "03xx-xxx-xxxx"
+                      : ownerFilter === "farmer_nic"
+                        ? "NIC number"
+                        : "Owner name"
+                  }
+                  placeholderTextColor={colors.muted}
+                />
+              </View>
+              {ownerSearchLoading && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              )}
+              {ownerResults.length > 0 && (
+                <View style={styles.resultsSection}>
+                  <Text style={[styles.resultsTitle, { color: colors.muted }]}>
+                    {ownerResults.length}{" "}
+                    {ownerResults.length === 1 ? "result" : "results"}
+                  </Text>
+                  <Card style={styles.resultsCard}>
+                    <FlatList
+                      data={ownerResults}
+                      renderItem={renderAnimalItem}
+                      keyExtractor={(item) => String(item.animalId)}
+                      scrollEnabled={false}
+                      ItemSeparatorComponent={() => (
+                        <View
+                          style={[
+                            styles.listSeparator,
+                            { backgroundColor: colors.border },
+                          ]}
+                        />
+                      )}
+                    />
+                  </Card>
+                  {ownerHasNextPage && (
+                    <Button
+                      title={
+                        ownerFetchingNextPage
+                          ? "Loading more..."
+                          : "Load more results"
+                      }
+                      onPress={handleLoadMoreOwnerResults}
+                      disabled={ownerFetchingNextPage}
+                      variant="secondary"
+                      style={styles.loadMoreButton}
+                    />
+                  )}
+                </View>
+              )}
             </>
           )}
         </Card>
@@ -1065,71 +1093,76 @@ export default function SelectAnimalScreen() {
             />
           </TouchableOpacity>
           {findByTagExpanded && (
-            <View
-            style={[
-              styles.searchInputRow,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-              },
-            ]}
-          >
-            <Text style={[styles.searchPrefix, { color: colors.muted }]}>
-              tag-
-            </Text>
-            <TextInput
-              style={[
-                styles.searchInputField,
-                { color: colors.text },
-                styles.searchInputWithPrefix,
-              ]}
-              value={tagInputValue}
-              onChangeText={setTagInputValue}
-              placeholder="e.g. 001"
-              placeholderTextColor={colors.muted}
-            />
-          </View>
+            <>
+              <View
+                style={[
+                  styles.searchInputRow,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              >
+                <Text style={[styles.searchPrefix, { color: colors.muted }]}>
+                  tag-
+                </Text>
+                <TextInput
+                  style={[
+                    styles.searchInputField,
+                    { color: colors.text },
+                    styles.searchInputWithPrefix,
+                  ]}
+                  value={tagInputValue}
+                  onChangeText={setTagInputValue}
+                  placeholder="e.g. 001"
+                  placeholderTextColor={colors.muted}
+                />
+              </View>
+              {tagSearchLoading && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              )}
+              {tagResults.length > 0 && (
+                <View style={styles.resultsSection}>
+                  <Text style={[styles.resultsTitle, { color: colors.muted }]}>
+                    {tagResults.length}{" "}
+                    {tagResults.length === 1 ? "result" : "results"}
+                  </Text>
+                  <Card style={styles.resultsCard}>
+                    <FlatList
+                      data={tagResults}
+                      renderItem={renderAnimalItem}
+                      keyExtractor={(item) => String(item.animalId)}
+                      scrollEnabled={false}
+                      ItemSeparatorComponent={() => (
+                        <View
+                          style={[
+                            styles.listSeparator,
+                            { backgroundColor: colors.border },
+                          ]}
+                        />
+                      )}
+                    />
+                  </Card>
+                  {tagHasNextPage && (
+                    <Button
+                      title={
+                        tagFetchingNextPage
+                          ? "Loading more..."
+                          : "Load more results"
+                      }
+                      onPress={handleLoadMoreTagResults}
+                      disabled={tagFetchingNextPage}
+                      variant="secondary"
+                      style={styles.loadMoreButton}
+                    />
+                  )}
+                </View>
+              )}
+            </>
           )}
         </Card>
-
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={colors.primary} />
-          </View>
-        )}
-
-        {results.length > 0 && (
-          <View style={styles.resultsSection}>
-            <Text style={[styles.resultsTitle, { color: colors.muted }]}>
-              {results.length} {results.length === 1 ? "result" : "results"}
-            </Text>
-            <Card style={styles.resultsCard}>
-              <FlatList
-                data={results}
-                renderItem={renderAnimalItem}
-                keyExtractor={(item) => String(item.animalId)}
-                scrollEnabled={false}
-                ItemSeparatorComponent={() => (
-                  <View
-                    style={[
-                      styles.listSeparator,
-                      { backgroundColor: colors.border },
-                    ]}
-                  />
-                )}
-              />
-            </Card>
-            {hasMoreResults && (
-              <Button
-                title={isLoadingMore ? "Loading more..." : "Load more results"}
-                onPress={handleLoadMoreResults}
-                disabled={isLoadingMore}
-                variant="secondary"
-                style={styles.loadMoreButton}
-              />
-            )}
-          </View>
-        )}
 
       </ScrollView>
 
