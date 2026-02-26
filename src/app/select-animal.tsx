@@ -48,6 +48,21 @@ type NearbyRadiusUnit = "ft" | "m" | "km";
 const MATCH_BY_IMAGE_ERROR_TITLE = "Match failed";
 const NEARBY_DEFAULT_RADIUS_FT = 500;
 
+function normalizePhoneForMatch(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0092")) return `0${digits.slice(4)}`;
+  if (digits.startsWith("92")) return `0${digits.slice(2)}`;
+  return digits;
+}
+
+function normalizeNicForMatch(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeNameForMatch(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /** Convert user radius (value + unit) to km for API. */
 function radiusToKm(value: number, unit: NearbyRadiusUnit): number {
   if (!Number.isFinite(value) || value <= 0) return 0.1524; // fallback ~500 ft
@@ -220,13 +235,14 @@ export default function SelectAnimalScreen() {
   const [findByOwnerExpanded, setFindByOwnerExpanded] = useState(false);
   const [findByTagExpanded, setFindByTagExpanded] = useState(false);
 
-  // Owner search query (phone with prefix, NIC and name as-is)
+  const ownerRawQuery = ownerInputValue.trim();
   const ownerQuery =
-    ownerInputValue.trim() === ""
-      ? ""
-      : ownerFilter === "farmer_phone"
-        ? `0092-${ownerInputValue}`
-        : ownerInputValue.trim();
+    ownerFilter === "farmer_phone"
+      ? normalizePhoneForMatch(ownerRawQuery)
+      : ownerFilter === "farmer_nic"
+        ? normalizeNicForMatch(ownerRawQuery)
+        : normalizeNameForMatch(ownerRawQuery);
+  const ownerQueryForApi = ownerQuery.length >= 3 ? ownerQuery : "";
 
   const tagQuery =
     tagInputValue.trim() === "" ? "" : `tag-${tagInputValue.trim()}`;
@@ -237,7 +253,7 @@ export default function SelectAnimalScreen() {
     isFetchingNextPage: ownerFetchingNextPage,
     hasNextPage: ownerHasNextPage,
     fetchNextPage: fetchOwnerNextPage,
-  } = useSearchAnimalsPaginated(ownerQuery, 20);
+  } = useSearchAnimalsPaginated(ownerQueryForApi, 20);
   const {
     data: tagSearchPages,
     isLoading: tagSearchLoading,
@@ -253,18 +269,24 @@ export default function SelectAnimalScreen() {
 
   // Owner results: filter by selected owner field
   const ownerResults =
-    ownerQuery === ""
+    ownerQueryForApi === ""
       ? []
       : (ownerSearchPages?.pages.flatMap((page) => page.items) || []).filter(
           (animal) => {
-            const q = ownerQuery.toLowerCase();
+            const q = ownerQuery;
             switch (ownerFilter) {
               case "farmer_phone":
-                return animal.farmer?.phoneNumber?.includes(ownerQuery);
+                return normalizePhoneForMatch(
+                  animal.farmer?.phoneNumber || "",
+                ).includes(q);
               case "farmer_nic":
-                return animal.farmer?.nicNo?.toLowerCase().includes(q);
+                return normalizeNicForMatch(animal.farmer?.nicNo || "").includes(
+                  q,
+                );
               case "farmer_name":
-                return animal.farmer?.fullName?.toLowerCase().includes(q);
+                return normalizeNameForMatch(
+                  animal.farmer?.fullName || "",
+                ).includes(q);
               default:
                 return false;
             }
@@ -286,12 +308,12 @@ export default function SelectAnimalScreen() {
   tagResults.forEach((a) => resultsById.set(a.animalId, a));
   const results = Array.from(resultsById.values());
 
-  // Format phone as user types: XXXX-XXXX-XXX
+  // Format phone as user types: XXXX-XXX-XXXX
   const formatPhoneInput = (text: string) => {
     const digits = text.replace(/\D/g, "").slice(0, 11);
     if (digits.length <= 4) return digits;
-    if (digits.length <= 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-    return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
+    if (digits.length <= 7) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
   };
 
   const handleOwnerInputChange = useCallback(
@@ -992,22 +1014,16 @@ export default function SelectAnimalScreen() {
               },
             ]}
           >
-            {ownerFilter === "farmer_phone" && (
-              <Text style={[styles.searchPrefix, { color: colors.muted }]}>
-                0092-
-              </Text>
-            )}
             <TextInput
               style={[
                 styles.searchInputField,
                 { color: colors.text },
-                ownerFilter === "farmer_phone" && styles.searchInputWithPrefix,
               ]}
               value={ownerInputValue}
               onChangeText={handleOwnerInputChange}
               placeholder={
                 ownerFilter === "farmer_phone"
-                  ? "333-6831836"
+                  ? "03xx-xxx-xxxx"
                   : ownerFilter === "farmer_nic"
                     ? "NIC number"
                     : "Owner name"

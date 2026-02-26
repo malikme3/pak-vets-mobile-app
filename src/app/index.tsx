@@ -77,6 +77,15 @@ function formatPhone(value: string) {
   return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 11)}`;
 }
 
+function isPlaceholderDoctorName(name?: string | null, email?: string | null) {
+  const normalizedName = name?.trim().toLowerCase() || "";
+  const normalizedEmail = email?.trim().toLowerCase() || "";
+  if (!normalizedName) return true;
+  if (normalizedName === "doctor") return true;
+  if (normalizedEmail && normalizedName === normalizedEmail) return true;
+  return false;
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
   const authStatus = useAuthStore((state) => state.status);
@@ -150,17 +159,24 @@ export default function DashboardScreen() {
 
   const needsProfileUpdate = useMemo(() => {
     if (!doctor) return false;
-    const name = doctor.fullName?.trim().toLowerCase() || "";
-    const email = doctor.email?.trim().toLowerCase() || "";
-    if (!name) return true;
-    if (name === "doctor") return true;
-    if (email && name === email) return true;
-    return false;
+    return isPlaceholderDoctorName(doctor.fullName, doctor.email);
+  }, [doctor]);
+
+  const doctorDisplayName = useMemo(() => {
+    if (!doctor) return "";
+    if (isPlaceholderDoctorName(doctor.fullName, doctor.email)) {
+      return "<Your Name>";
+    }
+    return doctor.fullName?.trim() || "<Your Name>";
   }, [doctor]);
 
   useEffect(() => {
     if (!doctor) return;
-    setProfileName(doctor.fullName ?? "");
+    setProfileName(
+      isPlaceholderDoctorName(doctor.fullName, doctor.email)
+        ? ""
+        : (doctor.fullName ?? ""),
+    );
     setProfileDoctorType(doctor.doctorType ?? "DVM");
     setProfilePhone((doctor.phone ?? "").replace(/\D/g, ""));
     setProfileCity(doctor.cityName ?? "");
@@ -360,7 +376,7 @@ export default function DashboardScreen() {
     }
     const ext = resolveImageExtension(asset.uri, asset.fileName);
     const contentType = resolveImageContentType(ext);
-    const s3Key = `doctor/profile_doctorId-${doctor.doctorId}.${ext}`;
+    const s3Key = `doctors/profile_doctorId-${doctor.doctorId}.${ext}`;
     const bucketName = getBucketName();
     setProfileAvatarUploading(true);
     try {
@@ -581,7 +597,7 @@ export default function DashboardScreen() {
                   ]}
                   numberOfLines={2}
                 >
-                  Welcome Dr. {doctor.fullName}
+                  Welcome Dr. {doctorDisplayName}
                 </Text>
               </View>
               <TouchableOpacity
@@ -916,7 +932,7 @@ export default function DashboardScreen() {
                   if (profileError) setProfileError(null);
                 }}
                 autoCapitalize="words"
-                placeholder="Enter your full name"
+                placeholder="<Your Name>"
                 error={profileError ?? undefined}
               />
               <AppInput
