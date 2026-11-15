@@ -14,7 +14,6 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { useTheme } from "../theme/useTheme";
 import { useCurrentDoctor } from "../features/doctors/hooks";
@@ -114,14 +113,7 @@ export default function CreateCaseScreen() {
       const { signedUrl } = await getUploadSignedUrl(bucketName, s3Key, tags);
       const fileInfo = await new File(fileUri).info();
       if (!fileInfo.exists) throw new Error("File does not exist");
-      const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(fileBase64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      const bytes = await new File(fileUri).bytes();
       const response = await fetch(signedUrl, {
         method: "PUT",
         body: bytes,

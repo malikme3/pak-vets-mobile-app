@@ -12,7 +12,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
@@ -98,18 +97,8 @@ export default function AddMediaScreen() {
       throw new Error("File does not exist");
     }
 
-    // Read file as base64
-    const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    // Convert base64 to binary string for upload
-    // React Native fetch can handle base64 directly, but we need to convert it properly
-    const binaryString = atob(fileBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    // Read binary data directly for upload
+    const bytes = await new File(fileUri).bytes();
 
     // Upload to S3 using presigned URL with binary data
     const response = await fetch(presignedUrl, {

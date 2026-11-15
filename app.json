@@ -6,18 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "scheme": [
       "pak-vets-mobile-app",
       "pak-vets",
       "com.googleusercontent.apps.723134103138-ppv0s10lo0n3l5mr137n9i8f9sktvvp7",
       "com.googleusercontent.apps.723134103138-6ak38jl31in2drmstc4khel6si56su08"
     ],
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "buildNumber": "5",
@@ -32,12 +26,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.pakvets.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single"
     },
     "extra": {
       "eas": {
@@ -53,6 +47,28 @@
       "googleIosClientId": "723134103138-ppv0s10lo0n3l5mr137n9i8f9sktvvp7.apps.googleusercontent.com",
       "googleAndroidClientId": "723134103138-6ak38jl31in2drmstc4khel6si56su08.apps.googleusercontent.com"
     },
-    "plugins": ["expo-font", "@react-native-community/datetimepicker"]
+    "plugins": [
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Pak Vets to record voice notes for animal care.",
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ]
   }
 }

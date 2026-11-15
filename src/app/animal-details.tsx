@@ -452,10 +452,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   profileHeaderOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   profileHeaderOverlayTop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   profileHeaderContent: {
     paddingHorizontal: 14,

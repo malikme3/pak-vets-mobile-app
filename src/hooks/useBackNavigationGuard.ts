@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { BackHandler } from "react-native";
-import { useFocusEffect, useNavigation } from "expo-router";
+import { useFocusEffect, useNavigation, usePreventRemove } from "expo-router";
 
 type BackGuardOptions = {
   shouldHandleBack: () => boolean;
@@ -17,6 +17,21 @@ export function useBackNavigationGuard({
 }: BackGuardOptions) {
   const navigation = useNavigation();
 
+  usePreventRemove(
+    !allowExitRef?.current && shouldHandleBack(),
+    ({ data, repeat }) => {
+      if (allowExitRef?.current || !shouldHandleBack()) {
+        repeat();
+        return;
+      }
+      if (data.action.type === "GO_BACK" || data.action.type === "POP") {
+        onBack();
+      } else {
+        repeat();
+      }
+    },
+  );
+
   useEffect(() => {
     if (!hideHeader) return;
     navigation.setOptions({ headerShown: false });
@@ -25,6 +40,7 @@ export function useBackNavigationGuard({
   useFocusEffect(
     useCallback(() => {
       const onHardwareBack = () => {
+        if (allowExitRef?.current) return false;
         if (!shouldHandleBack()) return false;
         onBack();
         return true;
@@ -33,17 +49,8 @@ export function useBackNavigationGuard({
         "hardwareBackPress",
         onHardwareBack,
       );
-      const beforeRemove = navigation.addListener("beforeRemove", (event) => {
-        if (allowExitRef?.current) return;
-        if (!shouldHandleBack()) return;
-        const actionType = event.data.action?.type;
-        if (actionType !== "GO_BACK" && actionType !== "POP") return;
-        event.preventDefault();
-        onBack();
-      });
       return () => {
         subscription.remove();
-        beforeRemove();
       };
     }, [allowExitRef, navigation, onBack, shouldHandleBack]),
   );

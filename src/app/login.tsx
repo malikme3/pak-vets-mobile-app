@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   heroScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.6,
   },
   heroContent: {

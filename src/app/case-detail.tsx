@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  type TextInputInstance,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -14,12 +15,11 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Audio } from "expo-av";
+import { Audio } from "../services/voiceAudio";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Button } from "../components/ui/Button";
@@ -331,14 +331,7 @@ export default function CaseDetailScreen() {
       const { signedUrl } = await getUploadSignedUrl(bucketName, s3Key, tags);
       const fileInfo = await new File(fileUri).info();
       if (!fileInfo.exists) throw new Error("File does not exist");
-      const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(fileBase64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      const bytes = await new File(fileUri).bytes();
       const response = await fetch(signedUrl, {
         method: "PUT",
         body: bytes,
@@ -680,7 +673,7 @@ export default function CaseDetailScreen() {
 
   // Editable chief complaint (manual edit only); sync from case when loaded
   const [chiefComplaint, setChiefComplaint] = useState("");
-  const chiefComplaintInputRef = useRef<TextInput>(null);
+  const chiefComplaintInputRef = useRef<TextInputInstance>(null);
   useEffect(() => {
     if (caseData?.chiefComplaint !== undefined) {
       setChiefComplaint(caseData.chiefComplaint ?? "");
@@ -2208,7 +2201,7 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
   headerScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.5,
   },
   headerContent: {

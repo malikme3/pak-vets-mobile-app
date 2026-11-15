@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Audio } from "expo-av";
+import { Audio } from "../services/voiceAudio";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";

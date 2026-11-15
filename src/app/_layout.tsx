@@ -19,7 +19,7 @@ export default function RootLayout() {
       <ThemePreferenceProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <Stack>
+            <Stack screenOptions={{ headerTransparent: false }}>
               <Stack.Screen
                 name="login"
                 options={{ title: "Login", headerShown: false }}

@@ -16,7 +16,6 @@ import { useAuthStore } from "../store/authStore";
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
@@ -387,14 +386,7 @@ export default function DashboardScreen() {
       );
       const fileInfo = await new File(asset.uri).info();
       if (!fileInfo.exists) throw new Error("File does not exist");
-      const fileBase64 = await FileSystem.readAsStringAsync(asset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(fileBase64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      const bytes = await new File(asset.uri).bytes();
       const uploadResponse = await fetch(signedUrl, {
         method: "PUT",
         body: bytes,

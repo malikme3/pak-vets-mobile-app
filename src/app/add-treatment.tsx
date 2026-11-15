@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Audio } from "expo-av";
+import { Audio } from "../services/voiceAudio";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useTheme } from "../theme/useTheme";
 import { Card } from "../components/ui/Card";
@@ -207,11 +207,6 @@ export default function AddTreatmentScreen() {
       }
 
       console.log("[Auto-fill] Microphone permission granted");
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
 
       // Stop any existing recording
       if (autoFillRecording) {
@@ -307,7 +302,7 @@ export default function AddTreatmentScreen() {
 
       // Wait for S3 to process the file
       console.log("[Auto-fill] Waiting for S3 processing (2s)...");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise<void>((resolve) => setTimeout(resolve, 2000));
 
       // Process structured transcription
       const audioS3Url = `https://${bucketName}.s3.amazonaws.com/${s3Key}`;

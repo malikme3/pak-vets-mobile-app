@@ -6,7 +6,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { Audio } from "expo-av";
+import { Audio } from "../../services/voiceAudio";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Haptics from "expo-haptics";
 import * as FileSystem from "expo-file-system/legacy";
@@ -114,12 +114,6 @@ export function VoiceMessageRecorder({
         isRecordingInProgressRef.current = false;
         return;
       }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
 
       if (recordingRef.current) {
         try {
@@ -260,7 +254,7 @@ export function VoiceMessageRecorder({
       console.log(
         `[VoiceRecorder] Waiting ${S3_PROCESSING_DELAY_MS}ms for S3 processing...`,
       );
-      await new Promise((resolve) =>
+      await new Promise<void>((resolve) =>
         setTimeout(resolve, S3_PROCESSING_DELAY_MS),
       );
 

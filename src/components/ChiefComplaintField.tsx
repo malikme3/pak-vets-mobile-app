@@ -5,7 +5,7 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  type TextInput as RNTextInput,
+  type TextInputInstance as RNTextInput,
 } from "react-native";
 import { useTheme } from "../theme/useTheme";
 import { VoiceMessageRecorder } from "./voice/VoiceMessageRecorder";

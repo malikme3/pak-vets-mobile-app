@@ -4,8 +4,8 @@ Expo + React Native mobile app for veterinary case management.
 
 ## Stack
 
-- Expo SDK 54
-- React Native 0.81
+- Expo SDK 58
+- React Native 0.88
 - TypeScript (strict)
 - Expo Router (file-based navigation)
 - TanStack React Query
@@ -42,11 +42,15 @@ Main entry is `index.ts` (`expo-router/entry`). Root providers and stack live in
 
 ## Setup
 
-1. Install dependencies:
+1. Select the project’s Node version and install dependencies using Yarn Classic:
 
 ```bash
-npm install
+nvm install
+nvm use
+yarn install --frozen-lockfile
 ```
+
+Firebase requires Node.js 24.12 or newer; `.nvmrc` pins the version used by EAS builds.
 
 2. Optional environment overrides:
 
@@ -60,22 +64,28 @@ API pagination currently follows backend `limit`/`offset` query params (for endp
 3. Run app:
 
 ```bash
-npm run start
+yarn start
 ```
+
+For iOS on a Mac, install Xcode 27 and its iOS platform support in Xcode Settings → Components. Run `yarn ios` to start Metro and open a simulator in Device Hub, or press `i` after `yarn start`. Use the SDK 58 version of Expo Go; older development builds must be rebuilt after this SDK upgrade.
+
+Voice recording and playback use `expo-audio`. Test microphone permission, recording/transcription, pause/resume, and replay on a device before release.
 
 ## Quality Checks
 
 ```bash
-npm run check
+yarn run check
+yarn test
+npx expo-doctor@latest
 ```
 
-(`check` currently runs TypeScript typecheck.)
+`check` runs TypeScript; `test` checks voice-note playback and recording resource lifecycles. Expo Doctor validates SDK dependencies and app configuration.
 
 ## Build
 
 ```bash
-npm run build:android
-npm run build:ios
+yarn build:android
+yarn build:ios
 ```
 
 EAS profiles are defined in `eas.json`.
