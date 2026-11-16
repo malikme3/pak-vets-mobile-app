@@ -21,6 +21,22 @@ export default function RootLayout() {
           <AuthProvider>
             <Stack screenOptions={{ headerTransparent: false }}>
               <Stack.Screen
+                name="farm-vitals"
+                options={{ title: "Farm Vitals", headerShown: false }}
+              />
+              <Stack.Screen
+                name="create-farm"
+                options={{ title: "Register Farm", headerShown: false }}
+              />
+              <Stack.Screen
+                name="farm-dashboard"
+                options={{ title: "Submitted Farms", headerShown: false }}
+              />
+              <Stack.Screen
+                name="add-farm-animal"
+                options={{ title: "Add Animal", headerShown: false }}
+              />
+              <Stack.Screen
                 name="login"
                 options={{ title: "Login", headerShown: false }}
               />

@@ -28,7 +28,12 @@ Main entry is `index.ts` (`expo-router/entry`). Root providers and stack live in
 
 ## Available Routes
 
-- `/` dashboard
+- `/farm-vitals` public Farm Vitals introduction
+- `/create-farm` public farm registration
+- `/farm-dashboard` public submitted-farm review
+- `/add-farm-animal` public animal entry for an open farm
+- `/login` existing sign-in flow
+- `/` authenticated dashboard
 - `/select-animal`
 - `/create-animal`
 - `/create-case`
@@ -39,6 +44,8 @@ Main entry is `index.ts` (`expo-router/entry`). Root providers and stack live in
 - `/add-note`
 - `/add-media`
 - `/nearby-cases`
+
+Signed-out users land on Farm Vitals. From there they can register a farm, review submitted farms, and add animals using the active templates. Sign-in continues through the existing Pak Vets flow.
 
 ## Setup
 

@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { useAuthStore } from "../store/authStore";
-import { useRouter } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
+import { getAuthRedirect } from "../utils/authNavigation";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const segments = useSegments();
+  const firstSegment = segments[0];
   const hydrate = useAuthStore((state) => state.hydrate);
   const refreshIfNeeded = useAuthStore((state) => state.refreshIfNeeded);
   const tokens = useAuthStore((state) => state.tokens);
@@ -25,10 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshIfNeeded, status, tokens]);
 
   useEffect(() => {
-    if (status === "signedOut") {
-      router.replace("/login");
-    }
-  }, [router, status]);
+    const destination = getAuthRedirect(status, firstSegment);
+    if (destination) router.replace(destination);
+  }, [router, status, firstSegment]);
 
   return <>{children}</>;
 }

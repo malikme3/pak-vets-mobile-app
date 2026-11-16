@@ -7,6 +7,7 @@ import {
   ImageBackground,
   TextInput,
   Platform,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Google from "expo-auth-session/providers/google";
@@ -223,6 +224,16 @@ export default function LoginScreen() {
       >
         <View style={[styles.heroScrim, { backgroundColor: colors.surface }]} />
         <View style={styles.heroContent}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Farm Vitals"
+            onPress={() => router.replace("/farm-vitals")}
+            style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}
+          >
+            <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>
+              ← Explore Farm Vitals
+            </Text>
+          </Pressable>
           <Text style={[styles.title, { color: colors.text }]}>
             Welcome to Pak Vets
           </Text>
