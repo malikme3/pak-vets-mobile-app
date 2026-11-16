@@ -16,6 +16,7 @@ import {
   getFarmReview,
   listSubmittedFarms,
   type FarmReview,
+  type FarmReviewSection,
   type SubmittedFarm,
 } from "../services/farmVitalsApi";
 
@@ -24,57 +25,75 @@ const colors = {
   ink: "#173D32",
   muted: "#63766C",
   green: "#1E7F5C",
-  border: "#DFE6DC",
+  border: "#E4EBE3",
   surface: "#FFFFFF",
   danger: "#B42318",
+  mint: "#E7F5EE",
 };
 
 function when(value: string | null): string {
-  if (!value) return "Submission time unavailable";
+  if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function visibleSections(review: FarmReview): FarmReviewSection[] {
+  return review.sections
+    .map((section) => ({
+      ...section,
+      rows: section.rows.filter((row) => row.value !== "Not provided"),
+    }))
+    .filter((section) => section.rows.length > 0);
+}
+
+function ownerLine(review: FarmReview): string {
+  for (const section of review.sections) {
+    const row = section.rows.find(
+      (item) =>
+        item.value !== "Not provided" &&
+        /owner/i.test(item.label) &&
+        /name/i.test(item.label),
+    );
+    if (row) return row.value;
+  }
+  return "";
 }
 
 function CollapseSection({
   title,
-  subtitle,
-  species,
+  count,
   expanded,
   onToggle,
   children,
 }: {
   title: string;
-  subtitle?: string;
-  species?: string;
+  count: number;
   expanded: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   return (
-    <View style={styles.collapse}>
+    <View style={styles.card}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         onPress={onToggle}
-        style={styles.collapseHeader}
+        style={styles.sectionHeader}
       >
-        {species ? (
-          <View style={styles.avatar}>
-            <SpeciesIcon species={species} size={40} resizeMode="cover" />
-          </View>
-        ) : null}
-        <View style={styles.cardCopy}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          {subtitle ? <Text style={styles.help}>{subtitle}</Text> : null}
-        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.count}>{count}</Text>
         <Feather
           name={expanded ? "chevron-up" : "chevron-down"}
-          size={18}
+          size={16}
           color={colors.green}
         />
       </Pressable>
-      {expanded ? <View style={styles.collapseBody}>{children}</View> : null}
+      {expanded ? children : null}
     </View>
   );
 }
@@ -140,6 +159,10 @@ export default function FarmDashboardScreen() {
     }, [openFarm, reviewId]),
   );
 
+  const sections = review ? visibleSections(review) : [];
+  const owner = review ? ownerLine(review) : "";
+  const registered = review ? when(review.submittedAt) : "";
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
@@ -161,14 +184,7 @@ export default function FarmDashboardScreen() {
             {review ? "Submitted farms" : "Farm Vitals"}
           </Text>
         </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          {review ? review.name : "Submitted farms"}
-        </Text>
-        <Text style={styles.subtitle}>
-          {review
-            ? when(review.submittedAt)
-            : "Review the farms that have been registered."}
-        </Text>
+
         {loading || opening ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -178,98 +194,172 @@ export default function FarmDashboardScreen() {
           </View>
         ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
         {!review && !loading ? (
-          farms.length ? (
-            farms.map((farm) => (
+          <>
+            <View style={styles.titleRow}>
+              <View style={styles.titleCopy}>
+                <Text accessibilityRole="header" style={styles.title}>
+                  Submitted farms
+                </Text>
+                <Text style={styles.help}>
+                  {farms.length
+                    ? `${farms.length} registered`
+                    : "No farms have been submitted yet."}
+                </Text>
+              </View>
               <Pressable
-                key={farm.farmId}
                 accessibilityRole="button"
-                onPress={() => void openFarm(farm.farmId)}
-                style={styles.card}
+                accessibilityLabel="Refresh farms"
+                onPress={() => void load()}
+                style={styles.iconButton}
               >
-                <View style={styles.cardCopy}>
-                  <Text style={styles.cardTitle}>{farm.name}</Text>
-                  <Text style={styles.help}>{when(farm.submittedAt)}</Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.green} />
+                <Feather name="refresh-cw" size={16} color={colors.green} />
               </Pressable>
-            ))
-          ) : (
-            <Text style={styles.help}>No farms have been submitted yet.</Text>
-          )
+            </View>
+            {farms.map((farm) => {
+              const date = when(farm.submittedAt);
+              return (
+                <Pressable
+                  key={farm.farmId}
+                  accessibilityRole="button"
+                  onPress={() => void openFarm(farm.farmId)}
+                  style={styles.row}
+                >
+                  <View style={styles.mark}>
+                    <Text style={styles.initial}>
+                      {farm.name.slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.copy}>
+                    <Text numberOfLines={1} style={styles.rowTitle}>
+                      {farm.name}
+                    </Text>
+                    {date ? <Text style={styles.help}>{date}</Text> : null}
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.green} />
+                </Pressable>
+              );
+            })}
+          </>
         ) : null}
-        {review
-          ? review.sections.map((section, index) => {
+
+        {review && !opening ? (
+          <>
+            <View style={styles.identity}>
+              <View style={styles.farmMark}>
+                <Feather name="home" size={22} color={colors.green} />
+              </View>
+              <View style={styles.copy}>
+                <Text accessibilityRole="header" style={styles.name}>
+                  {review.name}
+                </Text>
+                <Text style={styles.meta}>
+                  {[owner, registered ? `Registered ${registered}` : ""]
+                    .filter(Boolean)
+                    .join(" · ") || "Farm"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.stats}>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{review.animals.length}</Text>
+                <Text style={styles.statLabel}>Animals</Text>
+              </View>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{sections.length}</Text>
+                <Text style={styles.statLabel}>Sections</Text>
+              </View>
+            </View>
+            {sections.map((section, index) => {
               const key = `farm-${index}`;
-              const expanded = openSections[key] ?? true;
+              const expanded = openSections[key] ?? index === 0;
               return (
                 <CollapseSection
                   key={key}
                   title={section.title}
+                  count={section.rows.length}
                   expanded={expanded}
-                  onToggle={() => toggleSection(key, true)}
+                  onToggle={() => toggleSection(key, index === 0)}
                 >
                   {section.rows.map((row) => (
-                    <View key={`${key}-${row.label}`} style={styles.row}>
-                      <Text style={styles.rowLabel}>{row.label}</Text>
-                      <Text style={styles.rowValue}>{row.value}</Text>
+                    <View key={`${key}-${row.label}`} style={styles.fact}>
+                      <Text style={styles.factLabel}>{row.label}</Text>
+                      <Text style={styles.factValue}>{row.value}</Text>
                     </View>
                   ))}
                 </CollapseSection>
               );
-            })
-          : null}
-        {review ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Animals</Text>
+            })}
+            <View style={styles.animalHead}>
+              <Text style={styles.sectionTitle}>Animals</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: "/add-farm-animal",
+                    params: { farmId: review.farmId },
+                  })
+                }
+                style={styles.add}
+              >
+                <Feather name="plus" size={14} color="#FFFFFF" />
+                <Text style={styles.addText}>Add</Text>
+              </Pressable>
+            </View>
             {review.animals.length ? (
               review.animals.map((animal) => {
-                const key = `animal-${animal.entryId}`;
-                const expanded = openSections[key] ?? false;
+                const date = when(animal.submittedAt);
                 return (
-                  <CollapseSection
-                    key={key}
-                    title={animal.name}
-                    subtitle={when(animal.submittedAt)}
-                    species={animal.species}
-                    expanded={expanded}
-                    onToggle={() => toggleSection(key, false)}
+                  <Pressable
+                    key={animal.entryId}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${animal.name}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/farm-animal",
+                        params: {
+                          farmId: review.farmId,
+                          entryId: animal.entryId,
+                        },
+                      })
+                    }
+                    style={styles.row}
                   >
-                    {animal.sections.flatMap((section) =>
-                      section.rows.map((row) => (
-                        <View
-                          key={`${key}-${section.title}-${row.label}`}
-                          style={styles.row}
-                        >
-                          <Text style={styles.rowLabel}>{row.label}</Text>
-                          <Text style={styles.rowValue}>{row.value}</Text>
-                        </View>
-                      )),
-                    )}
-                  </CollapseSection>
+                    <View style={styles.avatar}>
+                      {animal.species ? (
+                        <SpeciesIcon
+                          species={animal.species}
+                          size={36}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text style={styles.initial}>
+                          {animal.name.slice(0, 1).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.copy}>
+                      <Text numberOfLines={1} style={styles.rowTitle}>
+                        {animal.name}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.help}>
+                        {[animal.species, date].filter(Boolean).join(" · ") ||
+                          "Animal"}
+                      </Text>
+                    </View>
+                    <Feather
+                      name="chevron-right"
+                      size={16}
+                      color={colors.green}
+                    />
+                  </Pressable>
                 );
               })
             ) : (
               <Text style={styles.help}>No animals have been added yet.</Text>
             )}
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: "/add-farm-animal",
-                  params: { farmId: review.farmId },
-                })
-              }
-              style={styles.action}
-            >
-              <Text style={styles.actionText}>Add Animal</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {!review ? (
-          <Pressable accessibilityRole="button" onPress={() => void load()}>
-            <Text style={styles.retry}>Refresh</Text>
-          </Pressable>
+          </>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -278,73 +368,150 @@ export default function FarmDashboardScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: 24, paddingBottom: 40, gap: 14 },
+  scroll: { padding: 20, paddingBottom: 36, gap: 12 },
   back: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     alignSelf: "flex-start",
+    minHeight: 36,
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 32, fontWeight: "800" },
-  subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  titleCopy: { flex: 1, gap: 2 },
+  title: {
+    color: colors.ink,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.3,
   },
-  cardCopy: { flex: 1, gap: 4 },
-  cardTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },
-  section: { gap: 10 },
-  collapse: {
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  identity: { flexDirection: "row", alignItems: "center", gap: 12 },
+  farmMark: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.mint,
+  },
+  copy: { flex: 1, gap: 2 },
+  name: {
+    color: colors.ink,
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
+  meta: { color: colors.ink, fontSize: 14, fontWeight: "600" },
+  stats: { flexDirection: "row", gap: 8 },
+  stat: {
+    flex: 1,
     borderRadius: 14,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 1,
+  },
+  statValue: { color: colors.ink, fontSize: 20, fontWeight: "800" },
+  statLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
     overflow: "hidden",
   },
-  collapseHeader: {
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  sectionTitle: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: "800" },
+  count: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  fact: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  factLabel: { flex: 1, color: colors.muted, fontSize: 13, fontWeight: "600" },
+  factValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+  animalHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  add: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: colors.green,
+  },
+  addText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rowTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
+  mark: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.mint,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#E7F5EE",
+    backgroundColor: colors.mint,
   },
-  collapseBody: { gap: 10, paddingHorizontal: 16, paddingBottom: 16 },
-  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
-  row: {
-    gap: 4,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  rowLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-  rowValue: { color: colors.ink, fontSize: 16 },
-  retry: { color: colors.green, fontWeight: "700" },
-  action: {
-    minHeight: 52,
-    borderRadius: 14,
-    backgroundColor: colors.green,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  initial: { color: colors.green, fontSize: 15, fontWeight: "800" },
 });

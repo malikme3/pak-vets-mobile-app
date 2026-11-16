@@ -1,0 +1,225 @@
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import Feather from "@expo/vector-icons/Feather";
+import {
+  getFarmReview,
+  type FarmHistoryReview,
+} from "../services/farmVitalsApi";
+
+const colors = {
+  background: "#F8F8F2",
+  ink: "#173D32",
+  muted: "#63766C",
+  green: "#1E7F5C",
+  border: "#E4EBE3",
+  surface: "#FFFFFF",
+  danger: "#B42318",
+};
+
+function when(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export default function FarmHistoryScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ farmId?: string; entryId?: string }>();
+  const farmId = typeof params.farmId === "string" ? params.farmId : "";
+  const entryId = typeof params.entryId === "string" ? params.entryId : "";
+  const [history, setHistory] = useState<FarmHistoryReview | null>(null);
+  const [animalName, setAnimalName] = useState("Animal");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!farmId || !entryId) {
+      setLoading(false);
+      setError("Open this history from its animal.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const review = await getFarmReview(farmId);
+      const match = review.animals.flatMap((animal) => {
+        const records = [...animal.medicalHistory, ...animal.productionHistory];
+        return records
+          .filter((item) => item.entryId === entryId)
+          .map((item) => ({ item, animalName: animal.name }));
+      })[0];
+      if (!match) throw new Error("This history is no longer on the animal.");
+      setAnimalName(match.animalName);
+      setHistory(match.item);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "This history could not be opened.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [entryId, farmId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const title =
+    history?.kind === "production-history" ? "Production History" : "Medical History";
+  const added = history ? when(history.submittedAt) : "";
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          style={styles.back}
+        >
+          <Feather name="arrow-left" size={18} color={colors.green} />
+          <Text style={styles.backText}>{animalName}</Text>
+        </Pressable>
+        {loading ? (
+          <View style={styles.status}>
+            <ActivityIndicator color={colors.green} />
+            <Text style={styles.help}>Opening history…</Text>
+          </View>
+        ) : null}
+        {error ? (
+          <View style={styles.status}>
+            <Text style={styles.error}>{error}</Text>
+            <Pressable accessibilityRole="button" onPress={() => void load()}>
+              <Text style={styles.retry}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {history ? (
+          <>
+            <View style={styles.heading}>
+              <Text style={styles.kicker}>{title}</Text>
+              <Text accessibilityRole="header" style={styles.name}>
+                {history.name}
+              </Text>
+              {added ? <Text style={styles.help}>{added}</Text> : null}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/add-farm-history",
+                  params: { farmId, entryId, kind: history.kind },
+                })
+              }
+              style={styles.edit}
+            >
+              <Feather name="edit-2" size={16} color={colors.green} />
+              <Text style={styles.editText}>Edit</Text>
+            </Pressable>
+            {history.sections.map((section) => (
+              <View key={section.title} style={styles.card}>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+                {section.rows.map((row, index) => (
+                  <View
+                    key={`${row.label}-${index}`}
+                    style={[styles.fact, index > 0 && styles.factDivider]}
+                  >
+                    <Text style={styles.factLabel}>{row.label}</Text>
+                    <Text style={styles.factValue}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </>
+        ) : null}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  scroll: { padding: 20, paddingBottom: 36, gap: 16 },
+  back: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    minHeight: 36,
+  },
+  backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
+  status: { gap: 8 },
+  help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  error: { color: colors.danger, fontSize: 13 },
+  retry: { color: colors.green, fontWeight: "700" },
+  heading: { gap: 2 },
+  kicker: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  name: { color: colors.ink, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
+  edit: {
+    alignSelf: "flex-start",
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.green,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  editText: { color: colors.green, fontSize: 15, fontWeight: "700" },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    paddingTop: 12,
+  },
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+  },
+  fact: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  factDivider: { borderTopWidth: 1, borderTopColor: colors.border },
+  factLabel: { flex: 1, color: colors.muted, fontSize: 13, fontWeight: "600" },
+  factValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+});

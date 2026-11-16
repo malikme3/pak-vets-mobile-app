@@ -32,6 +32,9 @@ Main entry is `index.ts` (`expo-router/entry`). Root providers and stack live in
 - `/create-farm` public farm registration
 - `/farm-dashboard` public submitted-farm review
 - `/add-farm-animal` public animal entry for an open farm
+- `/farm-animal` public animal details for an animal on a farm
+- `/add-farm-history` public medical or production history for an animal
+- `/farm-history` public full medical or production history
 - `/login` existing sign-in flow
 - `/` authenticated dashboard
 - `/select-animal`

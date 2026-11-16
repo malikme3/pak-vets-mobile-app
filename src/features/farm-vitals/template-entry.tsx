@@ -216,6 +216,30 @@ function collectValues(
   );
 }
 
+function answersFromValues(
+  fields: FarmTemplateField[],
+  values: Record<string, unknown>,
+): Answers {
+  const answers: Answers = {};
+  for (const field of entryFields(fields)) {
+    const value = values[field.key];
+    if (isGroup(field)) {
+      const nested =
+        typeof value === "object" && value !== null && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {};
+      answers[field.key] = answersFromValues(field.fields ?? [], nested);
+    } else if (field.type === "checkbox" || field.type === "switch") {
+      answers[field.key] = value === true;
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      answers[field.key] = String(value);
+    } else if (typeof value === "string") {
+      answers[field.key] = value;
+    }
+  }
+  return answers;
+}
+
 function choiceOptions(field: FarmTemplateField): string[] {
   return (field.rules.options ?? [])
     .map((option) => option.trim())
@@ -440,14 +464,21 @@ export function TemplateEntryForm({
   template,
   submitLabel,
   saving,
+  initialValues,
   onSubmit,
 }: {
   template: ActiveFarmTemplate;
   submitLabel: string;
   saving: boolean;
+  initialValues?: Record<string, unknown>;
   onSubmit: (values: Record<string, unknown>) => Promise<void> | void;
 }) {
-  const [answers, setAnswers] = useState<Answers>({});
+  const [answers, setAnswers] = useState<Answers>(() =>
+    answersFromValues(
+      template.form.steps.flatMap((step) => step.fields),
+      initialValues ?? {},
+    ),
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function submit() {

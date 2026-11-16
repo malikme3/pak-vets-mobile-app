@@ -37,6 +37,18 @@ export default function RootLayout() {
                 options={{ title: "Add Animal", headerShown: false }}
               />
               <Stack.Screen
+                name="farm-animal"
+                options={{ title: "Animal", headerShown: false }}
+              />
+              <Stack.Screen
+                name="add-farm-history"
+                options={{ title: "Add History", headerShown: false }}
+              />
+              <Stack.Screen
+                name="farm-history"
+                options={{ title: "History", headerShown: false }}
+              />
+              <Stack.Screen
                 name="login"
                 options={{ title: "Login", headerShown: false }}
               />
