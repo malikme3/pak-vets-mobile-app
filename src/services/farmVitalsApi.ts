@@ -1,3 +1,5 @@
+import { File } from "expo-file-system";
+
 const FARM_VITALS_API_URL = (
   process.env.EXPO_PUBLIC_FARM_VITALS_API_URL ||
   "https://dl6axiz667.execute-api.us-east-1.amazonaws.com"
@@ -115,6 +117,39 @@ function parseForm(value: unknown): FarmTemplateForm | null {
     status: typeof value.status === "string" ? value.status : undefined,
     steps,
   };
+}
+
+export async function uploadFarmImage(
+  uri: string,
+  fileName: string,
+  farmId: string,
+  species: string,
+): Promise<string> {
+  const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/uploads`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fileName, farmId, species }),
+  });
+  const payload = await readJson(response);
+  const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
+  const uploadUrl = text(data?.uploadUrl);
+  const fileUrl = text(data?.fileUrl);
+  const contentType = text(data?.contentType);
+  if (!uploadUrl || !fileUrl || !contentType)
+    throw new Error("The image upload link was incomplete.");
+  const file = new File(uri);
+  const info = file.info();
+  if (!info.exists) throw new Error("The selected image could not be read.");
+  const uploaded = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: await file.bytes(),
+  });
+  if (!uploaded.ok) throw new Error("The image could not be uploaded.");
+  return fileUrl;
 }
 
 async function readJson(response: Response): Promise<unknown> {

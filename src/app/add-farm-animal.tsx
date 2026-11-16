@@ -119,6 +119,7 @@ export default function AddFarmAnimalScreen() {
             template={template}
             submitLabel="Add Animal"
             saving={saving}
+            farmId={farmId}
             onSubmit={submit}
           />
         ) : null}

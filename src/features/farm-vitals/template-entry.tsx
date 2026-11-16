@@ -7,15 +7,16 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import type {
-  ActiveFarmTemplate,
-  FarmTemplateField,
+import {
+  uploadFarmImage,
+  type ActiveFarmTemplate,
+  type FarmTemplateField,
 } from "../../services/farmVitalsApi";
 
 const colors = {
@@ -240,10 +241,126 @@ function answersFromValues(
   return answers;
 }
 
+function selectedSpecies(answers: Answers): string {
+  for (const [key, value] of Object.entries(answers)) {
+    if (typeof value === "string" && value.trim() && /type|species/i.test(key))
+      return value.trim();
+    if (isAnswerGroup(value)) {
+      const nested = selectedSpecies(value);
+      if (nested) return nested;
+    }
+  }
+  return "";
+}
+
+function isAnswerGroup(value: Answer | undefined): value is Answers {
+  return typeof value === "object" && value !== null;
+}
+
+function imageFileName(asset: ImagePicker.ImagePickerAsset): string {
+  const mime = asset.mimeType?.toLowerCase() ?? "";
+  const extension = mime.includes("png")
+    ? "png"
+    : mime.includes("webp")
+      ? "webp"
+      : mime.includes("gif")
+        ? "gif"
+        : mime.includes("heic") || mime.includes("heif")
+          ? "heic"
+          : "jpg";
+  const base = (asset.fileName || "photo").replace(/\.[^.]+$/, "") || "photo";
+  return `${base}.${extension}`;
+}
+
 function choiceOptions(field: FarmTemplateField): string[] {
   return (field.rules.options ?? [])
     .map((option) => option.trim())
     .filter(Boolean);
+}
+
+function isWideField(field: FarmTemplateField): boolean {
+  return (
+    isGroup(field) ||
+    field.type === "textarea" ||
+    field.type === "upload" ||
+    field.type === "image" ||
+    field.type === "contact" ||
+    field.type === "location" ||
+    choiceOptions(field).length > 0
+  );
+}
+
+function layoutRows(
+  fields: FarmTemplateField[],
+  columns: number,
+): FarmTemplateField[][] {
+  const rows: FarmTemplateField[][] = [];
+  let compact: FarmTemplateField[] = [];
+  const flush = () => {
+    while (compact.length) {
+      rows.push(compact.slice(0, columns));
+      compact = compact.slice(columns);
+    }
+  };
+  for (const field of fields) {
+    if (isWideField(field)) {
+      flush();
+      rows.push([field]);
+    } else compact.push(field);
+  }
+  flush();
+  return rows;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += size)
+    rows.push(items.slice(index, index + size));
+  return rows;
+}
+
+function ChoiceTabs({
+  options,
+  value,
+  onChange,
+  radio = false,
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (id: string) => void;
+  radio?: boolean;
+}) {
+  return (
+    <View style={styles.optionRows}>
+      {chunk(options, 4).map((row, rowIndex) => (
+        <View key={rowIndex} style={styles.optionRow}>
+          {row.map((option) => {
+            const selected = value === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole={radio ? "radio" : "tab"}
+                accessibilityState={{ selected }}
+                onPress={() => onChange(option.id)}
+                style={[styles.option, selected && styles.optionSelected]}
+              >
+                <Text
+                  numberOfLines={2}
+                  style={[
+                    styles.optionText,
+                    styles.optionLabel,
+                    selected && styles.optionTextSelected,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function FieldControl({
@@ -252,6 +369,9 @@ function FieldControl({
   errors,
   path,
   forceRequired = false,
+  columns,
+  farmId,
+  species,
   onChange,
 }: {
   field: FarmTemplateField;
@@ -259,9 +379,14 @@ function FieldControl({
   errors: Record<string, string>;
   path: string;
   forceRequired?: boolean;
+  columns: number;
+  farmId: string;
+  species: string;
   onChange: (value: Answer) => void;
 }) {
   const [showDate, setShowDate] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const required = forceRequired || field.rules.required === true;
   const error = errors[path];
   const text = typeof value === "string" ? value : "";
@@ -273,16 +398,24 @@ function FieldControl({
       <View style={styles.group}>
         <Text style={styles.groupLabel}>{label}</Text>
         {field.helpText ? <Text style={styles.help}>{field.helpText}</Text> : null}
-        {(field.fields ?? []).map((child) => (
-          <FieldControl
-            key={child.id}
-            field={child}
-            value={nested[child.key]}
-            errors={errors}
-            path={`${path}.${child.key}`}
-            forceRequired={required}
-            onChange={(next) => onChange({ ...nested, [child.key]: next })}
-          />
+        {layoutRows(field.fields ?? [], columns).map((row) => (
+          <View key={row.map((child) => child.id).join("-")} style={styles.fieldRow}>
+            {row.map((child) => (
+              <View key={child.id} style={styles.fieldSlot}>
+                <FieldControl
+                  field={child}
+                  value={nested[child.key]}
+                  errors={errors}
+                  path={`${path}.${child.key}`}
+                  forceRequired={required}
+                  columns={columns}
+                  farmId={farmId}
+                  species={species}
+                  onChange={(next) => onChange({ ...nested, [child.key]: next })}
+                />
+              </View>
+            ))}
+          </View>
         ))}
       </View>
     );
@@ -327,29 +460,12 @@ function FieldControl({
     return (
       <View style={styles.field}>
         <Text style={styles.label}>{label}</Text>
-        <View style={styles.options}>
-          {options.map((option) => {
-            const selected = text === option;
-            return (
-              <Pressable
-                key={option}
-                accessibilityRole={field.type === "radio" ? "radio" : "button"}
-                accessibilityState={{ selected }}
-                onPress={() => onChange(option)}
-                style={[styles.option, selected && styles.optionSelected]}
-              >
-                <Text
-                  style={[
-                    styles.optionText,
-                    selected && styles.optionTextSelected,
-                  ]}
-                >
-                  {option}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ChoiceTabs
+          radio={field.type === "radio"}
+          value={text}
+          onChange={onChange}
+          options={options.map((option) => ({ id: option, label: option }))}
+        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {!error && field.helpText ? (
           <Text style={styles.help}>{field.helpText}</Text>
@@ -408,6 +524,47 @@ function FieldControl({
       </View>
     );
   }
+  async function pickImage() {
+    setUploadError(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setUploadError("Photo library access is needed to choose an image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    if (!farmId) {
+      setUploadError("Open a farm before adding a photo.");
+      return;
+    }
+    if (!species) {
+      setUploadError("Choose the animal type before adding a photo.");
+      return;
+    }
+    setUploading(true);
+    try {
+      onChange(
+        await uploadFarmImage(
+          result.assets[0].uri,
+          imageFileName(result.assets[0]),
+          farmId,
+          species,
+        ),
+      );
+    } catch (cause) {
+      setUploadError(
+        cause instanceof Error
+          ? cause.message
+          : "The image could not be uploaded.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const fileField = field.type === "upload" || field.type === "image";
   return (
     <View style={styles.field}>
@@ -415,30 +572,17 @@ function FieldControl({
       {fileField ? (
         <Pressable
           accessibilityRole="button"
-          onPress={async () => {
-            if (field.type === "image") {
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                quality: 0.8,
-              });
-              if (!result.canceled)
-                onChange(result.assets[0]?.fileName || "photo.jpg");
-              return;
-            }
-            const result = await DocumentPicker.getDocumentAsync({
-              copyToCacheDirectory: false,
-            });
-            if (!result.canceled) onChange(result.assets[0]?.name || "file");
-          }}
+          disabled={uploading}
+          onPress={() => void pickImage()}
           style={styles.fileButton}
         >
-          <Text style={styles.fileButtonText}>
-            {text
-              ? "Change file"
-              : field.type === "image"
-                ? "Choose photo"
-                : "Choose file"}
-          </Text>
+          {uploading ? (
+            <ActivityIndicator color={colors.green} />
+          ) : (
+            <Text style={styles.fileButtonText}>
+              {text ? "Change photo" : "Choose photo"}
+            </Text>
+          )}
         </Pressable>
       ) : (
         <TextInput
@@ -451,7 +595,12 @@ function FieldControl({
           style={[styles.input, field.type === "textarea" && styles.textarea]}
         />
       )}
-      {text && fileField ? <Text style={styles.help}>{text}</Text> : null}
+      {text && fileField ? (
+        <Text style={styles.help}>
+          {text.startsWith("http") ? "Photo uploaded" : text}
+        </Text>
+      ) : null}
+      {uploadError ? <Text style={styles.error}>{uploadError}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {!error && !fileField && field.helpText ? (
         <Text style={styles.help}>{field.helpText}</Text>
@@ -465,14 +614,22 @@ export function TemplateEntryForm({
   submitLabel,
   saving,
   initialValues,
+  farmId = "",
   onSubmit,
 }: {
   template: ActiveFarmTemplate;
   submitLabel: string;
   saving: boolean;
   initialValues?: Record<string, unknown>;
+  farmId?: string;
   onSubmit: (values: Record<string, unknown>) => Promise<void> | void;
 }) {
+  const { width } = useWindowDimensions();
+  const fieldColumns = width >= 840 ? 4 : width >= 560 ? 3 : 2;
+  const steps = template.form.steps
+    .map((step) => ({ ...step, fields: entryFields(step.fields) }))
+    .filter((step) => step.fields.length > 0);
+  const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Answers>(() =>
     answersFromValues(
       template.form.steps.flatMap((step) => step.fields),
@@ -480,47 +637,77 @@ export function TemplateEntryForm({
     ),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const activeIndex = Math.min(stepIndex, Math.max(steps.length - 1, 0));
+  const activeStep = steps[activeIndex];
 
   function submit() {
-    const fields = entryFields(
-      template.form.steps.flatMap((step) => step.fields),
-    );
+    const fields = steps.flatMap((step) => step.fields);
     const nextErrors: Record<string, string> = {};
     collectErrors(fields, answers, "", false, nextErrors);
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length || saving) return;
+    if (Object.keys(nextErrors).length) {
+      const found = steps.findIndex((step) =>
+        step.fields.some((field) =>
+          Object.keys(nextErrors).some(
+            (key) => key === field.key || key.startsWith(`${field.key}.`),
+          ),
+        ),
+      );
+      if (found >= 0) setStepIndex(found);
+      return;
+    }
+    if (saving) return;
     void onSubmit(collectValues(fields, answers));
   }
 
   return (
     <>
-      {template.form.steps.map((step) => {
-        const fields = entryFields(step.fields);
-        if (!fields.length) return null;
-        return (
-          <View key={step.id} style={styles.step}>
-            <Text style={styles.stepTitle}>{step.title}</Text>
-            {template.form.description ? (
-              <Text style={styles.help}>{template.form.description}</Text>
-            ) : null}
-            {fields.map((field) => (
-              <FieldControl
-                key={field.id}
-                field={field}
-                value={answers[field.key]}
-                errors={errors}
-                path={field.key}
-                onChange={(value) =>
-                  setAnswers((current) => ({
-                    ...current,
-                    [field.key]: value,
-                  }))
-                }
-              />
-            ))}
-          </View>
-        );
-      })}
+      {template.form.description ? (
+        <Text style={styles.help}>{template.form.description}</Text>
+      ) : null}
+      {steps.length > 1 ? (
+        <ChoiceTabs
+          value={activeStep?.id ?? ""}
+          onChange={(id) => {
+            const next = steps.findIndex((step) => step.id === id);
+            if (next >= 0) setStepIndex(next);
+          }}
+          options={steps.map((step) => ({ id: step.id, label: step.title }))}
+        />
+      ) : null}
+      {activeStep ? (
+        <View style={styles.step}>
+          {steps.length === 1 ? (
+            <Text style={styles.stepTitle}>{activeStep.title}</Text>
+          ) : null}
+          {layoutRows(activeStep.fields, fieldColumns).map((row) => (
+            <View
+              key={row.map((field) => field.id).join("-")}
+              style={styles.fieldRow}
+            >
+              {row.map((field) => (
+                <View key={field.id} style={styles.fieldSlot}>
+                  <FieldControl
+                    field={field}
+                    value={answers[field.key]}
+                    errors={errors}
+                    path={field.key}
+                    columns={fieldColumns}
+                    farmId={farmId}
+                    species={selectedSpecies(answers)}
+                    onChange={(value) =>
+                      setAnswers((current) => ({
+                        ...current,
+                        [field.key]: value,
+                      }))
+                    }
+                  />
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         disabled={saving}
@@ -538,9 +725,16 @@ export function TemplateEntryForm({
 }
 
 const styles = StyleSheet.create({
-  step: { gap: 14 },
+  step: { gap: 14, width: "100%" },
   stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
-  field: { gap: 6 },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+  },
+  fieldSlot: { flex: 1, minWidth: 0 },
+  field: { gap: 6, width: "100%" },
   group: {
     gap: 12,
     padding: 14,
@@ -578,16 +772,23 @@ const styles = StyleSheet.create({
   },
   checkSelected: { backgroundColor: colors.green, borderColor: colors.green },
   textarea: { minHeight: 96, paddingTop: 12, textAlignVertical: "top" },
-  options: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  optionRows: { gap: 8, width: "100%" },
+  optionRow: { flexDirection: "row", gap: 8, width: "100%" },
   option: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 999,
-    paddingHorizontal: 14,
+    borderRadius: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     backgroundColor: colors.surface,
   },
   optionSelected: { borderColor: colors.green, backgroundColor: "#E7F5EE" },
+  optionLabel: { textAlign: "center" },
   optionText: { color: colors.ink, fontSize: 14 },
   optionTextSelected: { color: colors.green, fontWeight: "700" },
   switchRow: {
@@ -597,7 +798,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   fileButton: {
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: colors.green,
     borderRadius: 12,
