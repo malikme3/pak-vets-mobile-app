@@ -349,6 +349,8 @@ const BUILTIN_FORM_TYPES: FarmFormType[] = [
     parent: "animal",
     status: "Active",
   },
+  { key: "contact", label: "Contact", parent: null, status: "Active" },
+  { key: "location", label: "Location", parent: null, status: "Active" },
 ];
 
 function builtinParent(key: string): string | null {
