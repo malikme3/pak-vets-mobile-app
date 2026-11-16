@@ -12,6 +12,7 @@ import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import {
+  formTypeTitle,
   getFarmReview,
   type FarmHistoryReview,
 } from "../services/farmVitalsApi";
@@ -57,14 +58,17 @@ export default function FarmHistoryScreen() {
     setError(null);
     try {
       const review = await getFarmReview(farmId);
-      const match = review.animals.flatMap((animal) => {
-        const records = [...animal.medicalHistory, ...animal.productionHistory];
-        return records
+      const match =
+        review.animals.flatMap((animal) =>
+          animal.records
+            .filter((item) => item.entryId === entryId)
+            .map((item) => ({ item, ownerName: animal.name })),
+        )[0] ??
+        review.records
           .filter((item) => item.entryId === entryId)
-          .map((item) => ({ item, animalName: animal.name }));
-      })[0];
-      if (!match) throw new Error("This history is no longer on the animal.");
-      setAnimalName(match.animalName);
+          .map((item) => ({ item, ownerName: review.name }))[0];
+      if (!match) throw new Error("This record is no longer available.");
+      setAnimalName(match.ownerName);
       setHistory(match.item);
     } catch (cause) {
       setError(
@@ -81,8 +85,7 @@ export default function FarmHistoryScreen() {
     }, [load]),
   );
 
-  const title =
-    history?.kind === "production-history" ? "Production History" : "Medical History";
+  const title = history ? formTypeTitle(history.kind) : "Record";
   const added = history ? when(history.submittedAt) : "";
 
   return (

@@ -54,10 +54,18 @@ function text(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
-function templateKindLabel(type: FarmTemplateKind): string {
-  if (type === "medical-history") return "medical history";
-  if (type === "production-history") return "production history";
-  return type;
+export function formTypeTitle(type: string): string {
+  if (type === "medical-history") return "Medical History";
+  if (type === "production-history") return "Production History";
+  return type
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function templateKindLabel(type: string): string {
+  return formTypeTitle(type).toLowerCase();
 }
 
 function parseRules(value: unknown): FarmFieldRules {
@@ -150,6 +158,23 @@ export async function uploadFarmImage(
   });
   if (!uploaded.ok) throw new Error("The image could not be uploaded.");
   return fileUrl;
+}
+
+export async function readableFarmImage(fileUrl: string): Promise<string> {
+  const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/uploads/download`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fileUrl }),
+  });
+  const payload = await readJson(response);
+  const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
+  const downloadUrl = text(data?.downloadUrl);
+  if (!downloadUrl.startsWith("http"))
+    throw new Error("The photo could not be opened.");
+  return downloadUrl;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -251,14 +276,8 @@ async function getInputPresets(): Promise<Map<string, CatalogField[]>> {
   return presets;
 }
 
-export type FarmTemplateKind =
-  | "farm"
-  | "animal"
-  | "medical-history"
-  | "production-history";
-
 export async function getActiveTemplate(
-  type: FarmTemplateKind,
+  type: string,
 ): Promise<ActiveFarmTemplate> {
   const response = await fetch(
     `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${type}?active=true`,
@@ -305,7 +324,92 @@ export type SubmittedFarm = {
 
 export type FarmReviewRow = { label: string; value: string };
 export type FarmReviewSection = { title: string; rows: FarmReviewRow[] };
-export type FarmHistoryKind = "medical-history" | "production-history";
+export type FarmHistoryKind = string;
+
+export type FarmFormType = {
+  key: string;
+  label: string;
+  parent: string | null;
+  status: "Active" | "Inactive";
+};
+
+const BUILTIN_FORM_TYPES: FarmFormType[] = [
+  { key: "farm", label: "Farm", parent: null, status: "Active" },
+  { key: "animal", label: "Animal", parent: "farm", status: "Active" },
+  { key: "doctor", label: "Doctor", parent: null, status: "Active" },
+  {
+    key: "medical-history",
+    label: "Medical History",
+    parent: "animal",
+    status: "Active",
+  },
+  {
+    key: "production-history",
+    label: "Production History",
+    parent: "animal",
+    status: "Active",
+  },
+];
+
+function builtinParent(key: string): string | null {
+  return BUILTIN_FORM_TYPES.find((type) => type.key === key)?.parent ?? null;
+}
+
+export async function listFormTypes(): Promise<FarmFormType[]> {
+  try {
+    const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/form-types`, {
+      headers: { Accept: "application/json" },
+    });
+    const payload = await readJson(response);
+    const formTypes =
+      isObject(payload) && isObject(payload.data) ? payload.data.formTypes : null;
+    if (!Array.isArray(formTypes)) throw new Error("The form type list was incomplete.");
+    const parsed = formTypes.flatMap((item): FarmFormType[] => {
+      if (!isObject(item) || typeof item.key !== "string" || !item.key) return [];
+      const parent =
+        "parent" in item
+          ? typeof item.parent === "string" && item.parent
+            ? item.parent
+            : null
+          : builtinParent(item.key);
+      return [
+        {
+          key: item.key,
+          label:
+            typeof item.label === "string" && item.label.trim()
+              ? item.label.trim()
+              : formTypeTitle(item.key),
+          parent,
+          status: item.status === "Inactive" ? "Inactive" : "Active",
+        },
+      ];
+    });
+    return parsed.length ? parsed : BUILTIN_FORM_TYPES;
+  } catch {
+    return BUILTIN_FORM_TYPES;
+  }
+}
+
+export function childFormTypes(
+  types: FarmFormType[],
+  parent: string,
+  recordKinds: string[] = [],
+): FarmFormType[] {
+  const active = types.filter(
+    (type) => type.status === "Active" && type.parent === parent,
+  );
+  const known = new Set(active.map((type) => type.key));
+  const extras = [...new Set(recordKinds)].filter((kind) => !known.has(kind));
+  return [
+    ...active,
+    ...extras.map((key) => ({
+      key,
+      label: formTypeTitle(key),
+      parent,
+      status: "Active" as const,
+    })),
+  ];
+}
 
 export type FarmHistoryReview = {
   entryId: string;
@@ -321,8 +425,8 @@ export type FarmAnimalReview = {
   species: string;
   submittedAt: string | null;
   sections: FarmReviewSection[];
-  medicalHistory: FarmHistoryReview[];
-  productionHistory: FarmHistoryReview[];
+  photos: string[];
+  records: FarmHistoryReview[];
 };
 
 export type FarmReview = {
@@ -331,6 +435,7 @@ export type FarmReview = {
   submittedAt: string | null;
   sections: FarmReviewSection[];
   animals: FarmAnimalReview[];
+  records: FarmHistoryReview[];
 };
 
 export async function listSubmittedFarms(): Promise<SubmittedFarm[]> {
@@ -399,12 +504,34 @@ function animalSpecies(values: Record<string, unknown>): string {
   return named ? named[1].trim() : "";
 }
 
-function historyKind(item: Record<string, unknown>): FarmHistoryKind | null {
+function animalPhotos(values: Record<string, unknown>): string[] {
+  const saved = Array.isArray(values.photos)
+    ? values.photos.filter(
+        (item): item is string =>
+          typeof item === "string" && item.startsWith("http"),
+      )
+    : [];
+  const single = values.animalPhoto ?? values.photo ?? values.image;
+  if (
+    typeof single === "string" &&
+    single.startsWith("http") &&
+    !saved.includes(single)
+  )
+    return [single, ...saved];
+  return saved;
+}
+
+function historyKind(item: Record<string, unknown>): string | null {
   const template = isObject(item.template) ? item.template : {};
   const form = isObject(item.form) ? item.form : {};
-  const kind = template.type ?? form.entity;
-  if (kind === "medical-history" || kind === "production-history") return kind;
-  return null;
+  const kind =
+    typeof template.type === "string"
+      ? template.type
+      : typeof form.entity === "string"
+        ? form.entity
+        : "";
+  if (!kind || kind === "farm" || kind === "animal") return null;
+  return kind;
 }
 
 function reviewRows(
@@ -452,7 +579,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     const kind = historyKind(item);
     const animalEntryId =
       typeof item.animalEntryId === "string" ? item.animalEntryId : "";
-    if (!kind || !animalEntryId) return [];
+    if (!kind) return [];
     const historyForm = isObject(item.form) ? parseForm(item.form) : null;
     const historyValues = isObject(item.values) ? item.values : {};
     const sections = (historyForm?.steps ?? [])
@@ -471,10 +598,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
         kind,
         name:
           summary?.value ??
-          text(
-            historyForm?.name,
-            kind === "medical-history" ? "Medical History" : "Production History",
-          ),
+          text(historyForm?.name, formTypeTitle(kind)),
         submittedAt: typeof item.submittedAt === "string" ? item.submittedAt : null,
         sections,
       },
@@ -499,10 +623,8 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
             rows: reviewRows(step.fields, animalValues),
           }))
           .filter((section) => section.rows.length > 0),
-        medicalHistory: linked.filter((history) => history.kind === "medical-history"),
-        productionHistory: linked.filter(
-          (history) => history.kind === "production-history",
-        ),
+        photos: animalPhotos(animalValues),
+        records: linked,
       },
     ];
   });
@@ -515,6 +637,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
         : null,
     sections: sections.filter((section) => section.rows.length > 0),
     animals,
+    records: histories.filter((history) => !history.animalEntryId),
   };
 }
 
@@ -581,7 +704,7 @@ export async function addAnimalRecord(
   await appendFarmEntry(farmId, {
     entryId: `${Date.now()}`,
     submittedAt: new Date().toISOString(),
-    template: { type: "animal", updatedAt: template.updatedAt },
+    template: { type: template.type || "animal", updatedAt: template.updatedAt },
     form: template.form,
     values,
   });
@@ -621,6 +744,40 @@ export async function getAnimalHistoryDraft(
   };
 }
 
+export async function addAnimalPhotos(
+  farmId: string,
+  entryId: string,
+  urls: string[],
+): Promise<void> {
+  const nextUrls = urls.filter((url) => url.startsWith("http"));
+  if (!nextUrls.length) return;
+  const { data, entries } = await readFarmDocument(farmId);
+  const index = entries.findIndex(
+    (item) =>
+      isObject(item) &&
+      item.entryId === entryId &&
+      isObject(item.form) &&
+      item.form.entity === "animal",
+  );
+  if (index < 0) throw new Error("This animal is no longer on the farm.");
+  const current = entries[index];
+  if (!isObject(current)) throw new Error("This animal could not be updated.");
+  const values = isObject(current.values) ? { ...current.values } : {};
+  const existing = Array.isArray(values.photos)
+    ? values.photos.filter((item): item is string => typeof item === "string")
+    : [];
+  values.photos = [
+    ...existing,
+    ...nextUrls.filter((url) => !existing.includes(url)),
+  ];
+  const nextEntries = entries.slice();
+  nextEntries[index] = { ...current, values };
+  await saveFarmDocument(farmId, {
+    ...data,
+    farmVitals: { version: 1, entries: nextEntries },
+  });
+}
+
 export async function updateAnimalHistory(
   farmId: string,
   entryId: string,
@@ -648,8 +805,8 @@ export async function addAnimalHistory(
   values: Record<string, unknown>,
 ): Promise<void> {
   const kind = template.type;
-  if (kind !== "medical-history" && kind !== "production-history")
-    throw new Error("Choose medical history or production history.");
+  if (!kind || kind === "farm" || kind === "animal")
+    throw new Error("Choose a record type for this animal.");
   await appendFarmEntry(farmId, {
     entryId: `${Date.now()}`,
     animalEntryId,

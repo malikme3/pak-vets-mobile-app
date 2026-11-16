@@ -32,6 +32,7 @@ test("the public preview, sign-in, and OAuth callbacks remain reachable", () => 
     "farm-dashboard",
     "add-farm-animal",
     "farm-animal",
+    "farm-photos",
     "add-farm-history",
     "farm-history",
     "login",

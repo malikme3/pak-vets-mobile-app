@@ -14,11 +14,11 @@ import Feather from "@expo/vector-icons/Feather";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   addAnimalHistory,
+  formTypeTitle,
   getActiveTemplate,
   getAnimalHistoryDraft,
   updateAnimalHistory,
   type ActiveFarmTemplate,
-  type FarmHistoryKind,
 } from "../services/farmVitalsApi";
 
 const colors = {
@@ -29,14 +29,15 @@ const colors = {
   danger: "#B42318",
 };
 
-function historyKind(value: string | undefined): FarmHistoryKind | null {
-  if (value === "medical-history" || value === "production-history") return value;
+function historyKind(value: string | undefined): string | null {
+  if (
+    value &&
+    /^[a-z][a-z0-9_-]{0,39}$/.test(value) &&
+    !/[-_]$/.test(value) &&
+    !/[-_]{2}/.test(value)
+  )
+    return value;
   return null;
-}
-
-function historyTitle(kind: FarmHistoryKind | null): string {
-  if (kind === "production-history") return "Production History";
-  return "Medical History";
 }
 
 export default function AddFarmHistoryScreen() {
@@ -54,8 +55,8 @@ export default function AddFarmHistoryScreen() {
   const requestedKind = historyKind(
     typeof params.kind === "string" ? params.kind : "",
   );
-  const [kind, setKind] = useState<FarmHistoryKind | null>(requestedKind);
-  const title = historyTitle(kind);
+  const [kind, setKind] = useState<string | null>(requestedKind);
+  const title = kind ? formTypeTitle(kind) : "Record";
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [initialValues, setInitialValues] = useState<Record<string, unknown>>(
     {},

@@ -13,8 +13,11 @@ import { useFocusEffect, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
+  childFormTypes,
   getFarmReview,
+  listFormTypes,
   listSubmittedFarms,
+  type FarmFormType,
   type FarmReview,
   type FarmReviewSection,
   type SubmittedFarm,
@@ -102,6 +105,7 @@ export default function FarmDashboardScreen() {
   const router = useRouter();
   const [farms, setFarms] = useState<SubmittedFarm[]>([]);
   const [review, setReview] = useState<FarmReview | null>(null);
+  const [formTypes, setFormTypes] = useState<FarmFormType[]>([]);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
@@ -133,8 +137,12 @@ export default function FarmDashboardScreen() {
     setReviewId(farmId);
     setError(null);
     try {
-      const next = await getFarmReview(farmId);
+      const [next, types] = await Promise.all([
+        getFarmReview(farmId),
+        listFormTypes(),
+      ]);
       setReview(next);
+      setFormTypes(types);
       if (!quiet) setOpenSections({});
     } catch (cause) {
       setError(
@@ -291,74 +299,125 @@ export default function FarmDashboardScreen() {
                 </CollapseSection>
               );
             })}
-            <View style={styles.animalHead}>
-              <Text style={styles.sectionTitle}>Animals</Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname: "/add-farm-animal",
-                    params: { farmId: review.farmId },
-                  })
-                }
-                style={styles.add}
-              >
-                <Feather name="plus" size={14} color="#FFFFFF" />
-                <Text style={styles.addText}>Add</Text>
-              </Pressable>
-            </View>
-            {review.animals.length ? (
-              review.animals.map((animal) => {
-                const date = when(animal.submittedAt);
-                return (
-                  <Pressable
-                    key={animal.entryId}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open ${animal.name}`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/farm-animal",
-                        params: {
-                          farmId: review.farmId,
-                          entryId: animal.entryId,
-                        },
+            {childFormTypes(formTypes, "farm", [
+              ...(review.animals.length ? ["animal"] : []),
+              ...review.records.map((record) => record.kind),
+            ]).map((type) => {
+              const entries =
+                type.key === "animal"
+                  ? review.animals
+                  : review.records.filter((record) => record.kind === type.key);
+              const title = type.key === "animal" ? "Animals" : type.label;
+              return (
+                <View key={type.key} style={styles.childSection}>
+                  <View style={styles.animalHead}>
+                    <Text style={styles.sectionTitle}>{title}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/add-farm-animal",
+                          params: { farmId: review.farmId, kind: type.key },
+                        })
+                      }
+                      style={styles.add}
+                    >
+                      <Feather name="plus" size={14} color="#FFFFFF" />
+                      <Text style={styles.addText}>Add</Text>
+                    </Pressable>
+                  </View>
+                  {type.key === "animal" ? (
+                    review.animals.length ? (
+                      review.animals.map((animal) => {
+                        const date = when(animal.submittedAt);
+                        return (
+                          <Pressable
+                            key={animal.entryId}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${animal.name}`}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/farm-animal",
+                                params: {
+                                  farmId: review.farmId,
+                                  entryId: animal.entryId,
+                                },
+                              })
+                            }
+                            style={styles.row}
+                          >
+                            <View style={styles.avatar}>
+                              {animal.species ? (
+                                <SpeciesIcon
+                                  species={animal.species}
+                                  size={36}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <Text style={styles.initial}>
+                                  {animal.name.slice(0, 1).toUpperCase()}
+                                </Text>
+                              )}
+                            </View>
+                            <View style={styles.copy}>
+                              <Text numberOfLines={1} style={styles.rowTitle}>
+                                {animal.name}
+                              </Text>
+                              <Text numberOfLines={1} style={styles.help}>
+                                {[animal.species, date].filter(Boolean).join(" · ") ||
+                                  "Animal"}
+                              </Text>
+                            </View>
+                            <Feather
+                              name="chevron-right"
+                              size={16}
+                              color={colors.green}
+                            />
+                          </Pressable>
+                        );
                       })
-                    }
-                    style={styles.row}
-                  >
-                    <View style={styles.avatar}>
-                      {animal.species ? (
-                        <SpeciesIcon
-                          species={animal.species}
-                          size={36}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <Text style={styles.initial}>
-                          {animal.name.slice(0, 1).toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={styles.copy}>
-                      <Text numberOfLines={1} style={styles.rowTitle}>
-                        {animal.name}
-                      </Text>
-                      <Text numberOfLines={1} style={styles.help}>
-                        {[animal.species, date].filter(Boolean).join(" · ") ||
-                          "Animal"}
-                      </Text>
-                    </View>
-                    <Feather
-                      name="chevron-right"
-                      size={16}
-                      color={colors.green}
-                    />
-                  </Pressable>
-                );
-              })
-            ) : (
-              <Text style={styles.help}>No animals have been added yet.</Text>
-            )}
+                    ) : (
+                      <Text style={styles.help}>No animals have been added yet.</Text>
+                    )
+                  ) : entries.length ? (
+                    entries.map((record) => (
+                      <Pressable
+                        key={record.entryId}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${record.name}`}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/farm-history",
+                            params: {
+                              farmId: review.farmId,
+                              entryId: record.entryId,
+                            },
+                          })
+                        }
+                        style={styles.row}
+                      >
+                        <View style={styles.avatar}>
+                          <Text style={styles.initial}>
+                            {record.name.slice(0, 1).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.copy}>
+                          <Text numberOfLines={1} style={styles.rowTitle}>
+                            {record.name}
+                          </Text>
+                          {when(record.submittedAt) ? (
+                            <Text style={styles.help}>{when(record.submittedAt)}</Text>
+                          ) : null}
+                        </View>
+                        <Feather name="chevron-right" size={16} color={colors.green} />
+                      </Pressable>
+                    ))
+                  ) : (
+                    <Text style={styles.help}>None yet.</Text>
+                  )}
+                </View>
+              );
+            })}
           </>
         ) : null}
       </ScrollView>
@@ -471,9 +530,11 @@ const styles = StyleSheet.create({
   animalHead: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
     marginTop: 4,
   },
+  childSection: { gap: 12 },
   add: {
     flexDirection: "row",
     alignItems: "center",

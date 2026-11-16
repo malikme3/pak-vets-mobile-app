@@ -14,6 +14,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   addAnimalRecord,
+  formTypeTitle,
   getActiveTemplate,
   type ActiveFarmTemplate,
 } from "../services/farmVitalsApi";
@@ -28,8 +29,10 @@ const colors = {
 
 export default function AddFarmAnimalScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ farmId?: string }>();
+  const params = useLocalSearchParams<{ farmId?: string; kind?: string }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
+  const kind =
+    typeof params.kind === "string" && params.kind.trim() ? params.kind : "animal";
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,7 +48,7 @@ export default function AddFarmAnimalScreen() {
     setLoading(true);
     setError(null);
     try {
-      setTemplate(await getActiveTemplate("animal"));
+      setTemplate(await getActiveTemplate(kind));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -55,7 +58,7 @@ export default function AddFarmAnimalScreen() {
     } finally {
       setLoading(false);
     }
-  }, [farmId]);
+  }, [farmId, kind]);
 
   useEffect(() => {
     void load();
@@ -72,7 +75,7 @@ export default function AddFarmAnimalScreen() {
       setError(
         cause instanceof Error
           ? cause.message
-          : "The animal could not be saved.",
+          : `The ${formTypeTitle(kind).toLowerCase()} could not be saved.`,
       );
     } finally {
       setSaving(false);
@@ -95,15 +98,15 @@ export default function AddFarmAnimalScreen() {
           <Text style={styles.backText}>Farm</Text>
         </Pressable>
         <Text accessibilityRole="header" style={styles.title}>
-          Add Animal
+          Add {formTypeTitle(kind)}
         </Text>
         <Text style={styles.subtitle}>
-          {template?.form.name ?? "Enter the animal details."}
+          {template?.form.name ?? `Enter the ${formTypeTitle(kind).toLowerCase()} details.`}
         </Text>
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
-            <Text style={styles.help}>Loading the animal template…</Text>
+            <Text style={styles.help}>Loading the template…</Text>
           </View>
         ) : null}
         {error ? (

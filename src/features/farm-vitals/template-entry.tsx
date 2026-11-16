@@ -526,32 +526,23 @@ function FieldControl({
   }
   async function pickImage() {
     setUploadError(null);
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setUploadError("Photo library access is needed to choose an image.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets[0]?.uri) return;
-    if (!farmId) {
-      setUploadError("Open a farm before adding a photo.");
-      return;
-    }
-    if (!species) {
-      setUploadError("Choose the animal type before adding a photo.");
-      return;
-    }
-    setUploading(true);
     try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets[0]?.uri) return;
+      if (!farmId) {
+        setUploadError("Open a farm before adding a photo.");
+        return;
+      }
+      setUploading(true);
       onChange(
         await uploadFarmImage(
           result.assets[0].uri,
           imageFileName(result.assets[0]),
           farmId,
-          species,
+          species || "unknown",
         ),
       );
     } catch (cause) {

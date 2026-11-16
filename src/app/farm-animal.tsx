@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,11 +11,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
+  addAnimalPhotos,
   getFarmReview,
+  listFormTypes,
+  readableFarmImage,
+  uploadFarmImage,
+  childFormTypes,
   type FarmAnimalReview,
+  type FarmFormType,
   type FarmHistoryReview,
   type FarmReviewRow,
 } from "../services/farmVitalsApi";
@@ -61,38 +69,84 @@ function chipTone(value: string): { background: string; color: string } {
   return { background: "#F3F6F1", color: colors.ink };
 }
 
+function photoFileName(asset: ImagePicker.ImagePickerAsset): string {
+  const mime = asset.mimeType?.toLowerCase() ?? "";
+  const extension = mime.includes("png")
+    ? "png"
+    : mime.includes("webp")
+      ? "webp"
+      : mime.includes("gif")
+        ? "gif"
+        : mime.includes("heic") || mime.includes("heif")
+          ? "heic"
+          : "jpg";
+  const base = (asset.fileName || "photo").replace(/\.[^.]+$/, "") || "photo";
+  return `${base}.${extension}`;
+}
+
 function HistoryList({
   title,
   records,
+  onAdd,
   onOpen,
 }: {
   title: string;
   records: FarmHistoryReview[];
+  onAdd: () => void;
   onOpen: (entryId: string) => void;
 }) {
-  if (!records.length) return null;
+  const [open, setOpen] = useState(false);
   return (
-    <View style={styles.history}>
-      <Text style={styles.historyTitle}>{title}</Text>
-      {records.map((record) => (
+    <View style={styles.card}>
+      <View style={styles.sectionHeader}>
         <Pressable
-          key={record.entryId}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${record.name}`}
-          onPress={() => onOpen(record.entryId)}
-          style={styles.historyRow}
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen((current) => !current)}
+          style={styles.sectionToggle}
         >
-          <View style={styles.historyCopy}>
-            <Text numberOfLines={1} style={styles.historyName}>
-              {record.name}
-            </Text>
-            {when(record.submittedAt) ? (
-              <Text style={styles.help}>{when(record.submittedAt)}</Text>
-            ) : null}
-          </View>
-          <Feather name="chevron-right" size={18} color={colors.green} />
+          <Text style={styles.historyTitle}>{title}</Text>
+          <Text style={styles.count}>{records.length}</Text>
+          <Feather
+            name={open ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.green}
+          />
         </Pressable>
-      ))}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Add ${title}`}
+          onPress={onAdd}
+          style={styles.addIcon}
+        >
+          <Feather name="plus" size={16} color="#FFFFFF" />
+        </Pressable>
+      </View>
+      {open
+        ? records.length
+          ? records.map((record) => (
+              <Pressable
+                key={record.entryId}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${record.name}`}
+                onPress={() => onOpen(record.entryId)}
+                style={styles.historyRow}
+              >
+                <View style={styles.historyCopy}>
+                  <Text numberOfLines={1} style={styles.historyName}>
+                    {record.name}
+                  </Text>
+                  {when(record.submittedAt) ? (
+                    <Text style={styles.help}>{when(record.submittedAt)}</Text>
+                  ) : null}
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.green} />
+              </Pressable>
+            ))
+          : (
+            <Text style={styles.empty}>None yet.</Text>
+          )
+        : null}
     </View>
   );
 }
@@ -103,24 +157,31 @@ export default function FarmAnimalScreen() {
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
   const [animal, setAnimal] = useState<FarmAnimalReview | null>(null);
+  const [formTypes, setFormTypes] = useState<FarmFormType[]>([]);
   const [farmName, setFarmName] = useState("Farm");
   const [loading, setLoading] = useState(true);
+  const [addingPhotos, setAddingPhotos] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (quiet = false) => {
     if (!farmId || !entryId) {
       setLoading(false);
       setError("Open this animal from its farm.");
       return;
     }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError(null);
     try {
-      const review = await getFarmReview(farmId);
+      const [review, types] = await Promise.all([
+        getFarmReview(farmId),
+        listFormTypes(),
+      ]);
       const match = review.animals.find((item) => item.entryId === entryId);
       if (!match) throw new Error("This animal is no longer on the farm.");
       setFarmName(review.name);
       setAnimal(match);
+      setFormTypes(types);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "This animal could not be opened.",
@@ -136,15 +197,84 @@ export default function FarmAnimalScreen() {
     }, [load]),
   );
 
+  useEffect(() => {
+    const stored = animal?.photos ?? [];
+    if (!stored.length) {
+      setPhotoUrls([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      stored.map((url) => readableFarmImage(url).catch(() => "")),
+    ).then((urls) => {
+      if (!cancelled) setPhotoUrls(urls.filter((url) => url.startsWith("http")));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [animal]);
+
   const rows = animal?.sections.flatMap((section) => section.rows) ?? [];
   const tag = rows.find(
     (row) => provided(row) && /tag|animal id|^id$/i.test(row.label),
   );
   const highlights = rows.filter((row) => provided(row) && isHighlight(row.label));
   const facts = rows.filter(
-    (row) => !isIdentity(row.label) && !isHighlight(row.label),
+    (row) =>
+      provided(row) &&
+      !isIdentity(row.label) &&
+      !isHighlight(row.label) &&
+      !/photo|image/i.test(row.label),
   );
+
+  function openPhotos(index: number) {
+    if (!animal) return;
+    router.push({
+      pathname: "/farm-photos",
+      params: { farmId, entryId: animal.entryId, index: String(index) },
+    });
+  }
+
+  async function addPhotos() {
+    if (!animal || addingPhotos) return;
+    setError(null);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        selectionLimit: 8,
+      });
+      if (result.canceled || !result.assets.length) return;
+      setAddingPhotos(true);
+      const urls: string[] = [];
+      for (const asset of result.assets) {
+        if (!asset.uri) continue;
+        urls.push(
+          await uploadFarmImage(
+            asset.uri,
+            photoFileName(asset),
+            farmId,
+            animal.species || "unknown",
+          ),
+        );
+      }
+      await addAnimalPhotos(farmId, animal.entryId, urls);
+      await load(true);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "The photos could not be added.",
+      );
+    } finally {
+      setAddingPhotos(false);
+    }
+  }
   const added = animal ? when(animal.submittedAt) : "";
+  const childSections = childFormTypes(
+    formTypes,
+    "animal",
+    animal?.records.map((record) => record.kind) ?? [],
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -176,7 +306,19 @@ export default function FarmAnimalScreen() {
           <>
             <View style={styles.identity}>
               <View style={styles.avatar}>
-                {animal.species ? (
+                {photoUrls[0] ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${animal.name} photos`}
+                    onPress={() => openPhotos(0)}
+                  >
+                    <Image
+                      source={{ uri: photoUrls[0] }}
+                      style={styles.avatarImage}
+                      accessibilityLabel={`${animal.name} photo`}
+                    />
+                  </Pressable>
+                ) : animal.species ? (
                   <SpeciesIcon
                     species={animal.species}
                     size={64}
@@ -199,40 +341,41 @@ export default function FarmAnimalScreen() {
                 {added ? <Text style={styles.help}>Added {added}</Text> : null}
               </View>
             </View>
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname: "/add-farm-history",
-                    params: {
-                      farmId,
-                      animalEntryId: animal.entryId,
-                      kind: "medical-history",
-                    },
-                  })
-                }
-                style={styles.action}
-              >
-                <Text style={styles.actionText}>Add Medical History</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  router.push({
-                    pathname: "/add-farm-history",
-                    params: {
-                      farmId,
-                      animalEntryId: animal.entryId,
-                      kind: "production-history",
-                    },
-                  })
-                }
-                style={styles.actionAlt}
-              >
-                <Text style={styles.actionAltText}>Add Production History</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={addingPhotos}
+              onPress={() => void addPhotos()}
+              style={styles.photoButton}
+            >
+              {addingPhotos ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Feather name="camera" size={16} color="#FFFFFF" />
+                  <Text style={styles.actionText}>Add photos</Text>
+                </>
+              )}
+            </Pressable>
+            {photoUrls.length ? (
+              <View style={styles.photos}>
+                {photoUrls.map((photo, photoIndex) => (
+                  <Pressable
+                    key={photo}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open photo ${photoIndex + 1}`}
+                    onPress={() => openPhotos(photoIndex)}
+                  >
+                    <Image
+                      source={{ uri: photo }}
+                      style={styles.photo}
+                      accessibilityLabel="Animal photo"
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            ) : animal.photos.length ? (
+              <Text style={styles.help}>Photos could not be opened.</Text>
+            ) : null}
             {highlights.length ? (
               <View style={styles.chips}>
                 {highlights.map((row) => {
@@ -264,26 +407,29 @@ export default function FarmAnimalScreen() {
                 ))}
               </View>
             ) : null}
-            <HistoryList
-              title="Medical history"
-              records={animal.medicalHistory}
-              onOpen={(historyId) =>
-                router.push({
-                  pathname: "/farm-history",
-                  params: { farmId, entryId: historyId },
-                })
-              }
-            />
-            <HistoryList
-              title="Production history"
-              records={animal.productionHistory}
-              onOpen={(historyId) =>
-                router.push({
-                  pathname: "/farm-history",
-                  params: { farmId, entryId: historyId },
-                })
-              }
-            />
+            {childSections.map((type) => (
+              <HistoryList
+                key={type.key}
+                title={type.label}
+                records={animal.records.filter((record) => record.kind === type.key)}
+                onAdd={() =>
+                  router.push({
+                    pathname: "/add-farm-history",
+                    params: {
+                      farmId,
+                      animalEntryId: animal.entryId,
+                      kind: type.key,
+                    },
+                  })
+                }
+                onOpen={(historyId) =>
+                  router.push({
+                    pathname: "/farm-history",
+                    params: { farmId, entryId: historyId },
+                  })
+                }
+              />
+            ))}
           </>
         ) : null}
       </ScrollView>
@@ -316,57 +462,72 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.mint,
   },
+  avatarImage: { width: 72, height: 72 },
   identityCopy: { flex: 1, gap: 2 },
   initial: { color: colors.green, fontSize: 28, fontWeight: "800" },
   name: { color: colors.ink, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
   meta: { color: colors.ink, fontSize: 15, fontWeight: "600" },
-  actions: { flexDirection: "row", gap: 8 },
-  action: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 12,
-    backgroundColor: colors.green,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
   actionText: {
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "700",
     textAlign: "center",
   },
-  actionAlt: {
-    flex: 1,
-    minHeight: 52,
+  photoButton: {
+    minHeight: 48,
     borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.green,
+    backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  photos: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  photo: {
+    width: 84,
+    height: 84,
+    borderRadius: 12,
+    backgroundColor: colors.mint,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 14,
+    paddingRight: 10,
     paddingVertical: 8,
   },
-  actionAltText: {
-    color: colors.green,
-    fontSize: 13,
-    fontWeight: "700",
-    textAlign: "center",
+  sectionToggle: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 36,
   },
-  history: { gap: 8 },
-  historyTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  addIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.green,
+  },
+  count: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  empty: {
+    color: colors.muted,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  historyTitle: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: "800" },
   historyRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   historyCopy: { flex: 1, gap: 2 },
   historyName: { color: colors.ink, fontSize: 15, fontWeight: "700" },
