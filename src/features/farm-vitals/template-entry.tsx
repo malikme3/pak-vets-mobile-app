@@ -1,8 +1,11 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -10,6 +13,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Feather from "@expo/vector-icons/Feather";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
@@ -49,6 +53,18 @@ function entryFields(fields: FarmTemplateField[]): FarmTemplateField[] {
     );
 }
 
+function isUtilGroup(field: FarmTemplateField): boolean {
+  return Boolean(field.source) && isGroup(field);
+}
+
+function hasAnswer(value: Answer | undefined): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "boolean") return value;
+  if (value && typeof value === "object")
+    return Object.values(value).some((item) => hasAnswer(item));
+  return false;
+}
+
 function isGroup(field: FarmTemplateField): boolean {
   return (
     field.type === "group" ||
@@ -56,6 +72,56 @@ function isGroup(field: FarmTemplateField): boolean {
     field.type === "location" ||
     Boolean(field.fields?.length)
   );
+}
+
+function isPakistanPhone(field: FarmTemplateField): boolean {
+  return field.rules.pattern === "^\\+92-\\d{3}-\\d{3}-\\d{4}$";
+}
+
+function isPakistanNic(field: FarmTemplateField): boolean {
+  return field.rules.pattern === "^\\d{5}-\\d{7}-\\d{1}$";
+}
+
+function formatPakistanNic(input: string, previous = ""): string {
+  let digits = input.replace(/\D/g, "");
+  const previousDigits = previous.replace(/\D/g, "");
+  const deleting = input.length < previous.length;
+  if (deleting && digits.length >= previousDigits.length && digits.length > 0)
+    digits = digits.slice(0, -1);
+  digits = digits.slice(0, 13);
+  if (!digits) return "";
+  let formatted = digits.slice(0, Math.min(5, digits.length));
+  if (digits.length < 5) return formatted;
+  formatted += "-";
+  if (digits.length === 5) return formatted;
+  formatted += digits.slice(5, Math.min(12, digits.length));
+  if (digits.length < 12) return formatted;
+  formatted += "-";
+  if (digits.length === 12) return formatted;
+  return `${formatted}${digits.slice(12, 13)}`;
+}
+
+function formatPakistanPhone(input: string, previous = ""): string {
+  let digits = input.replace(/\D/g, "");
+  let previousDigits = previous.replace(/\D/g, "");
+  if (digits.startsWith("92")) digits = digits.slice(2);
+  if (previousDigits.startsWith("92")) previousDigits = previousDigits.slice(2);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (previousDigits.startsWith("0")) previousDigits = previousDigits.slice(1);
+  const deleting = input.length < previous.length;
+  if (deleting && digits.length >= previousDigits.length && digits.length > 0)
+    digits = digits.slice(0, -1);
+  digits = digits.slice(0, 10);
+  if (!digits) return "+92-";
+  let formatted = `+92-${digits.slice(0, Math.min(3, digits.length))}`;
+  if (digits.length < 3) return formatted;
+  formatted += "-";
+  if (digits.length === 3) return formatted;
+  formatted += digits.slice(3, Math.min(6, digits.length));
+  if (digits.length < 6) return formatted;
+  formatted += "-";
+  if (digits.length === 6) return formatted;
+  return `${formatted}${digits.slice(6, 10)}`;
 }
 
 function patternExample(pattern: string): string | null {
@@ -190,6 +256,13 @@ function collectErrors(
   }
 }
 
+export function savedGroupValues(
+  field: FarmTemplateField,
+  draft: Answers,
+): Record<string, unknown> {
+  return collectValues(field.fields ?? [], draft);
+}
+
 function collectValues(
   fields: FarmTemplateField[],
   answers: Answers,
@@ -278,9 +351,17 @@ function choiceOptions(field: FarmTemplateField): string[] {
     .filter(Boolean);
 }
 
-function isWideField(field: FarmTemplateField): boolean {
+function isWideField(field: FarmTemplateField, columns = 2): boolean {
+  const longLabel = columns <= 2 && (field.label?.trim().length ?? 0) > 12;
   return (
     isGroup(field) ||
+    field.key === "full_name" ||
+    field.key === "phone" ||
+    field.key === "nic" ||
+    isPakistanPhone(field) ||
+    isPakistanNic(field) ||
+    longLabel ||
+    (field.type === "date" && columns <= 2) ||
     field.type === "textarea" ||
     field.type === "upload" ||
     field.type === "image" ||
@@ -303,7 +384,7 @@ function layoutRows(
     }
   };
   for (const field of fields) {
-    if (isWideField(field)) {
+    if (isWideField(field, columns)) {
       flush();
       rows.push([field]);
     } else compact.push(field);
@@ -319,6 +400,14 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
+function choiceColumns(labels: string[]): number {
+  const longest = labels.reduce((max, label) => Math.max(max, label.length), 0);
+  if (labels.length <= 2) return Math.max(labels.length, 1);
+  if (longest >= 9) return 2;
+  if (longest >= 8) return 3;
+  return Math.min(4, labels.length);
+}
+
 function ChoiceTabs({
   options,
   value,
@@ -330,9 +419,10 @@ function ChoiceTabs({
   onChange: (id: string) => void;
   radio?: boolean;
 }) {
+  const perRow = choiceColumns(options.map((option) => option.label));
   return (
     <View style={styles.optionRows}>
-      {chunk(options, 4).map((row, rowIndex) => (
+      {chunk(options, perRow).map((row, rowIndex) => (
         <View key={rowIndex} style={styles.optionRow}>
           {row.map((option) => {
             const selected = value === option.id;
@@ -345,7 +435,7 @@ function ChoiceTabs({
                 style={[styles.option, selected && styles.optionSelected]}
               >
                 <Text
-                  numberOfLines={2}
+                  numberOfLines={1}
                   style={[
                     styles.optionText,
                     styles.optionLabel,
@@ -372,6 +462,7 @@ function FieldControl({
   columns,
   farmId,
   species,
+  embedded = false,
   onChange,
 }: {
   field: FarmTemplateField;
@@ -382,6 +473,7 @@ function FieldControl({
   columns: number;
   farmId: string;
   species: string;
+  embedded?: boolean;
   onChange: (value: Answer) => void;
 }) {
   const [showDate, setShowDate] = useState(false);
@@ -394,10 +486,18 @@ function FieldControl({
   const label = `${field.label || "Field"}${required ? " *" : ""}`;
   if (isGroup(field)) {
     const nested = typeof value === "object" ? value : {};
+    const hint = field.helpText.replace(/\.+$/, "").trim();
+    const stacked = label.length > 16 || hint.length > 20;
     return (
-      <View style={styles.group}>
-        <Text style={styles.groupLabel}>{label}</Text>
-        {field.helpText ? <Text style={styles.help}>{field.helpText}</Text> : null}
+      <View style={embedded ? styles.embedded : styles.group}>
+        <View style={stacked ? styles.groupHeadStack : styles.groupHead}>
+          <Text style={embedded ? styles.embeddedLabel : styles.groupLabel}>
+            {label}
+          </Text>
+          {hint ? (
+            <Text style={stacked ? styles.help : styles.optional}>{hint}</Text>
+          ) : null}
+        </View>
         {layoutRows(field.fields ?? [], columns).map((row) => (
           <View key={row.map((child) => child.id).join("-")} style={styles.fieldRow}>
             {row.map((child) => (
@@ -411,6 +511,7 @@ function FieldControl({
                   columns={columns}
                   farmId={farmId}
                   species={species}
+                  embedded={isGroup(child)}
                   onChange={(next) => onChange({ ...nested, [child.key]: next })}
                 />
               </View>
@@ -557,6 +658,8 @@ function FieldControl({
   }
 
   const fileField = field.type === "upload" || field.type === "image";
+  const phone = isPakistanPhone(field);
+  const nic = isPakistanNic(field);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -578,11 +681,36 @@ function FieldControl({
       ) : (
         <TextInput
           value={text}
-          onChangeText={onChange}
+          onChangeText={(next) =>
+            onChange(
+              phone
+                ? formatPakistanPhone(next, text)
+                : nic
+                  ? formatPakistanNic(next, text)
+                  : next,
+            )
+          }
+          onFocus={() => {
+            if (phone && !text) onChange("+92-");
+          }}
+          onBlur={() => {
+            if (phone && (text === "+92-" || text === "+92")) onChange("");
+          }}
+          placeholder={
+            phone ? "+92-300-000-0000" : nic ? "00000-0000000-0" : undefined
+          }
           placeholderTextColor={colors.muted}
-          keyboardType={field.type === "number" ? "decimal-pad" : "default"}
+          keyboardType={
+            phone
+              ? "phone-pad"
+              : nic
+                ? "number-pad"
+                : field.type === "number"
+                  ? "decimal-pad"
+                  : "default"
+          }
           multiline={field.type === "textarea"}
-          maxLength={field.rules.maxLength}
+          maxLength={phone ? 16 : nic ? 15 : field.rules.maxLength}
           style={[styles.input, field.type === "textarea" && styles.textarea]}
         />
       )}
@@ -597,6 +725,139 @@ function FieldControl({
         <Text style={styles.help}>{field.helpText}</Text>
       ) : null}
     </View>
+  );
+}
+
+export function UtilSheet({
+  field,
+  value,
+  columns,
+  farmId,
+  species,
+  saving = false,
+  saveError = null,
+  onClose,
+  onSave,
+}: {
+  field: FarmTemplateField;
+  value: Answer | undefined;
+  columns: number;
+  farmId: string;
+  species: string;
+  saving?: boolean;
+  saveError?: string | null;
+  onClose: () => void;
+  onSave: (value: Answers) => void;
+}) {
+  const [draft, setDraft] = useState<Answers>(
+    typeof value === "object" ? value : {},
+  );
+  const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+  const { height } = useWindowDimensions();
+  function save() {
+    if (saving) return;
+    const nextErrors: Record<string, string> = {};
+    collectErrors(
+      field.fields ?? [],
+      draft,
+      field.key,
+      field.rules.required === true,
+      nextErrors,
+    );
+    setLocalErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+    onSave(draft);
+  }
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.modalRoot}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          onPress={onClose}
+          style={styles.backdrop}
+        />
+        <SafeAreaView edges={["bottom"]} style={styles.modalCard}>
+          <View style={styles.modalHandle} />
+          <View style={styles.modalHead}>
+            <Text accessibilityRole="header" style={styles.modalTitle}>
+              {field.label}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              onPress={onClose}
+              style={styles.modalClose}
+            >
+              <Feather name="x" size={18} color={colors.ink} />
+            </Pressable>
+          </View>
+          <ScrollView
+            style={{ maxHeight: height * 0.62 }}
+            contentContainerStyle={styles.sheetBody}
+            keyboardShouldPersistTaps="handled"
+          >
+            {layoutRows(field.fields ?? [], columns).map((row) => (
+              <View
+                key={row.map((child) => child.id).join("-")}
+                style={styles.fieldRow}
+              >
+                {row.map((child) => (
+                  <View key={child.id} style={styles.fieldSlot}>
+                    <FieldControl
+                      field={child}
+                      value={draft[child.key]}
+                      errors={localErrors}
+                      path={`${field.key}.${child.key}`}
+                      forceRequired={field.rules.required === true}
+                      columns={columns}
+                      farmId={farmId}
+                      species={species}
+                      embedded={isGroup(child)}
+                      onChange={(next) =>
+                        setDraft((current) => ({ ...current, [child.key]: next }))
+                      }
+                    />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+          {saveError ? <Text style={styles.error}>{saveError}</Text> : null}
+          <View style={styles.modalActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={onClose}
+              style={styles.modalCancel}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={save}
+              style={styles.modalSave}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.actionText}>Save</Text>
+              )}
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -628,8 +889,19 @@ export function TemplateEntryForm({
     ),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [openUtil, setOpenUtil] = useState<string | null>(null);
+  const separateUtils = steps.some((step) => step.fields.some(isUtilGroup));
   const activeIndex = Math.min(stepIndex, Math.max(steps.length - 1, 0));
   const activeStep = steps[activeIndex];
+  const directFields = separateUtils
+    ? (activeStep?.fields.filter((field) => !isUtilGroup(field)) ?? [])
+    : (activeStep?.fields ?? []);
+  const utilFields = separateUtils
+    ? (activeStep?.fields.filter(isUtilGroup) ?? [])
+    : [];
+  const openField =
+    steps.flatMap((step) => step.fields).find((field) => field.key === openUtil) ??
+    null;
 
   function submit() {
     const fields = steps.flatMap((step) => step.fields);
@@ -652,7 +924,7 @@ export function TemplateEntryForm({
   }
 
   return (
-    <>
+    <View style={styles.form}>
       {template.form.description ? (
         <Text style={styles.help}>{template.form.description}</Text>
       ) : null}
@@ -671,7 +943,7 @@ export function TemplateEntryForm({
           {steps.length === 1 ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
-          {layoutRows(activeStep.fields, fieldColumns).map((row) => (
+          {layoutRows(directFields, fieldColumns).map((row) => (
             <View
               key={row.map((field) => field.id).join("-")}
               style={styles.fieldRow}
@@ -697,6 +969,31 @@ export function TemplateEntryForm({
               ))}
             </View>
           ))}
+          {utilFields.length ? (
+            <View style={styles.utilList}>
+              {utilFields.map((field) => {
+                const saved = hasAnswer(answers[field.key]);
+                return (
+                  <Pressable
+                    key={field.id}
+                    accessibilityRole="button"
+                    onPress={() => setOpenUtil(field.key)}
+                    style={styles.utilButton}
+                  >
+                    <Feather
+                      name={saved ? "check" : "plus"}
+                      size={16}
+                      color={colors.green}
+                    />
+                    <Text style={styles.utilText}>
+                      {saved ? field.label : `Add ${field.label}`}
+                    </Text>
+                    {saved ? <Text style={styles.optional}>Edit</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
         </View>
       ) : null}
       <Pressable
@@ -711,13 +1008,110 @@ export function TemplateEntryForm({
           <Text style={styles.actionText}>{submitLabel}</Text>
         )}
       </Pressable>
-    </>
+      {openField ? (
+        <UtilSheet
+          field={openField}
+          value={answers[openField.key]}
+          columns={fieldColumns}
+          farmId={farmId}
+          species={selectedSpecies(answers)}
+          onClose={() => setOpenUtil(null)}
+          onSave={(value) => {
+            setAnswers((current) => ({ ...current, [openField.key]: value }));
+            setErrors((current) =>
+              Object.fromEntries(
+                Object.entries(current).filter(
+                  ([key]) =>
+                    key !== openField.key &&
+                    !key.startsWith(`${openField.key}.`),
+                ),
+              ),
+            );
+            setOpenUtil(null);
+          }}
+        />
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  step: { gap: 14, width: "100%" },
-  stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
+  form: { gap: 12, width: "100%" },
+  utilList: { gap: 8, width: "100%" },
+  utilButton: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E4EBE3",
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+  },
+  utilText: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "700" },
+  modalRoot: { flex: 1, justifyContent: "flex-end" },
+  backdrop: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(23, 61, 50, 0.45)",
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  modalHandle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D5DED6",
+    marginBottom: 4,
+  },
+  modalHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  modalTitle: { flex: 1, color: colors.ink, fontSize: 20, fontWeight: "800" },
+  modalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F3F6F2",
+  },
+  modalActions: { flexDirection: "row", gap: 8, paddingTop: 4 },
+  modalCancel: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F3F6F2",
+  },
+  modalCancelText: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  modalSave: {
+    flex: 1.4,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.green,
+  },
+  sheetBody: { gap: 12, paddingTop: 8, paddingBottom: 8 },
+  step: { gap: 16, width: "100%" },
+  stepTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },
   fieldRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -730,20 +1124,35 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
+    borderColor: "#E4EBE3",
+    borderRadius: 18,
     backgroundColor: colors.surface,
   },
-  groupLabel: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  embedded: { gap: 8, width: "100%" },
+  groupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  groupHeadStack: { gap: 4, width: "100%" },
+  groupLabel: { flexShrink: 1, color: colors.ink, fontSize: 15, fontWeight: "700" },
+  embeddedLabel: {
+    flexShrink: 1,
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  optional: { color: colors.muted, fontSize: 12, fontWeight: "600" },
   label: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   input: {
     minHeight: 48,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: "#8FA397",
     borderRadius: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
     color: colors.ink,
     paddingHorizontal: 14,
     fontSize: 16,
@@ -768,19 +1177,19 @@ const styles = StyleSheet.create({
   option: {
     flex: 1,
     minWidth: 0,
-    minHeight: 44,
+    minHeight: 46,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: colors.surface,
   },
   optionSelected: { borderColor: colors.green, backgroundColor: "#E7F5EE" },
   optionLabel: { textAlign: "center" },
-  optionText: { color: colors.ink, fontSize: 14 },
+  optionText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   optionTextSelected: { color: colors.green, fontWeight: "700" },
   switchRow: {
     flexDirection: "row",
@@ -799,8 +1208,8 @@ const styles = StyleSheet.create({
   },
   fileButtonText: { color: colors.green, fontWeight: "700" },
   action: {
-    minHeight: 52,
-    borderRadius: 14,
+    minHeight: 48,
+    borderRadius: 12,
     backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",

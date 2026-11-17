@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,14 +13,17 @@ import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
+import { savedGroupValues, UtilSheet } from "../features/farm-vitals/template-entry";
 import {
   childFormTypes,
   getFarmReview,
   listFormTypes,
   listSubmittedFarms,
+  updateFarmGroup,
   type FarmFormType,
   type FarmReview,
   type FarmReviewSection,
+  type FarmReviewUtil,
   type SubmittedFarm,
 } from "../services/farmVitalsApi";
 
@@ -50,19 +54,19 @@ function visibleSections(review: FarmReview): FarmReviewSection[] {
     .map((section) => ({
       ...section,
       rows: section.rows.filter((row) => row.value !== "Not provided"),
+      utils: section.utils ?? [],
     }))
-    .filter((section) => section.rows.length > 0);
+    .filter((section) => section.rows.length > 0 || section.utils.length > 0);
 }
 
 function ownerLine(review: FarmReview): string {
   for (const section of review.sections) {
-    const row = section.rows.find(
-      (item) =>
-        item.value !== "Not provided" &&
-        /owner/i.test(item.label) &&
-        /name/i.test(item.label),
-    );
-    if (row) return row.value;
+    for (const util of section.utils ?? []) {
+      const row = util.rows.find(
+        (item) => /name/i.test(item.label) && item.value !== "Not provided",
+      );
+      if (row && /owner|contact/i.test(util.label)) return row.value;
+    }
   }
   return "";
 }
@@ -111,6 +115,12 @@ export default function FarmDashboardScreen() {
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [openUtils, setOpenUtils] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<FarmReviewUtil | null>(null);
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
+  const fieldColumns = width >= 840 ? 4 : width >= 560 ? 3 : 2;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,6 +168,29 @@ export default function FarmDashboardScreen() {
       ...current,
       [key]: !(current[key] ?? fallback),
     }));
+  }
+
+  async function saveGroup(draft: Parameters<typeof savedGroupValues>[1]) {
+    if (!review || !editing || savingGroup) return;
+    setSavingGroup(true);
+    setGroupError(null);
+    try {
+      await updateFarmGroup(
+        review.farmId,
+        editing.key,
+        savedGroupValues(editing.field, draft),
+      );
+      setEditing(null);
+      await openFarm(review.farmId, true);
+    } catch (cause) {
+      setGroupError(
+        cause instanceof Error
+          ? cause.message
+          : `The ${editing.label.toLowerCase()} could not be saved.`,
+      );
+    } finally {
+      setSavingGroup(false);
+    }
   }
 
   useFocusEffect(
@@ -286,7 +319,7 @@ export default function FarmDashboardScreen() {
                 <CollapseSection
                   key={key}
                   title={section.title}
-                  count={section.rows.length}
+                  count={section.rows.length + (section.utils?.length ?? 0)}
                   expanded={expanded}
                   onToggle={() => toggleSection(key, index === 0)}
                 >
@@ -296,6 +329,59 @@ export default function FarmDashboardScreen() {
                       <Text style={styles.factValue}>{row.value}</Text>
                     </View>
                   ))}
+                  {(section.utils ?? []).map((util) => {
+                    const utilKey = `${key}-${util.label}`;
+                    const open = openUtils[utilKey] ?? false;
+                    return (
+                      <View key={utilKey}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => {
+                            if (!util.filled) {
+                              setGroupError(null);
+                              setEditing(util);
+                              return;
+                            }
+                            setOpenUtils((current) => ({
+                              ...current,
+                              [utilKey]: !open,
+                            }));
+                          }}
+                          style={styles.utilButton}
+                        >
+                          <Feather
+                            name={util.filled ? "check" : "plus"}
+                            size={16}
+                            color={colors.green}
+                          />
+                          <Text style={styles.utilText}>
+                            {util.filled ? util.label : `Add ${util.label}`}
+                          </Text>
+                          {util.filled ? (
+                            <Feather
+                              name={open ? "chevron-up" : "chevron-down"}
+                              size={16}
+                              color={colors.muted}
+                            />
+                          ) : null}
+                        </Pressable>
+                        {open
+                          ? util.rows.map((row) => (
+                              <View
+                                key={`${utilKey}-${row.label}`}
+                                style={styles.fact}
+                              >
+                                <Text style={styles.factLabel}>{row.label}</Text>
+                                <Text style={styles.factValue}>{row.value}</Text>
+                              </View>
+                            ))
+                          : null}
+                        {open && !util.rows.length ? (
+                          <Text style={styles.utilEmpty}>Nothing saved.</Text>
+                        ) : null}
+                      </View>
+                    );
+                  })}
                 </CollapseSection>
               );
             })}
@@ -421,6 +507,23 @@ export default function FarmDashboardScreen() {
           </>
         ) : null}
       </ScrollView>
+      {review && editing ? (
+        <UtilSheet
+          field={editing.field}
+          value={undefined}
+          columns={fieldColumns}
+          farmId={review.farmId}
+          species=""
+          saving={savingGroup}
+          saveError={groupError}
+          onClose={() => {
+            if (savingGroup) return;
+            setEditing(null);
+            setGroupError(null);
+          }}
+          onSave={(value) => void saveGroup(value)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -526,6 +629,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     textAlign: "right",
+  },
+  utilButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 14,
+    marginVertical: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+  },
+  utilText: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "700" },
+  utilEmpty: {
+    color: colors.muted,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
   },
   animalHead: {
     flexDirection: "row",

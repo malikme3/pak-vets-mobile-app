@@ -131,7 +131,7 @@ export default function CreateFarmScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: 24, paddingBottom: 40, gap: 16 },
+  scroll: { padding: 20, paddingBottom: 32, gap: 12 },
   back: {
     flexDirection: "row",
     alignItems: "center",
@@ -139,8 +139,8 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 32, fontWeight: "800" },
-  subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  title: { color: colors.ink, fontSize: 28, fontWeight: "800" },
+  subtitle: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
   stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },

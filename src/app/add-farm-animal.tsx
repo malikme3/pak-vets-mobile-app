@@ -36,7 +36,6 @@ export default function AddFarmAnimalScreen() {
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -70,7 +69,7 @@ export default function AddFarmAnimalScreen() {
     setError(null);
     try {
       await addAnimalRecord(farmId, template, values);
-      setSaved(true);
+      router.back();
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -117,7 +116,7 @@ export default function AddFarmAnimalScreen() {
             </Pressable>
           </View>
         ) : null}
-        {template && !saved ? (
+        {template ? (
           <TemplateEntryForm
             template={template}
             submitLabel="Add Animal"
@@ -125,14 +124,6 @@ export default function AddFarmAnimalScreen() {
             farmId={farmId}
             onSubmit={submit}
           />
-        ) : null}
-        {saved ? (
-          <View style={styles.success}>
-            <Text style={styles.stepTitle}>Animal added</Text>
-            <Pressable accessibilityRole="button" onPress={() => router.back()}>
-              <Text style={styles.retry}>Back to farm</Text>
-            </Pressable>
-          </View>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -153,9 +144,7 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
-  stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  success: { gap: 6 },
 });

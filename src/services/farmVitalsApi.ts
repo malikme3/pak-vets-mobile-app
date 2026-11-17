@@ -22,6 +22,7 @@ export type FarmTemplateField = {
   type: string;
   helpText: string;
   rules: FarmFieldRules;
+  source?: string;
   fields?: FarmTemplateField[];
 };
 
@@ -98,6 +99,8 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       helpText: text(item.helpText),
       rules: parseRules(item.rules),
     };
+    if (typeof item.source === "string" && item.source.trim())
+      field.source = item.source.trim();
     if (Array.isArray(item.fields))
       field.fields = parseFields(item.fields, depth + 1);
     return [field];
@@ -241,6 +244,131 @@ function catalogField(field: CatalogField, id: string): FarmTemplateField {
   };
 }
 
+const phoneRule = { pattern: "^\\+92-\\d{3}-\\d{3}-\\d{4}$" };
+
+function utilLeaf(
+  key: string,
+  label: string,
+  type: string,
+  rules: FarmFieldRules = {},
+): FarmTemplateField {
+  return { id: key, key, label, type, helpText: "", rules };
+}
+
+function defaultUtilFields(key: string): FarmTemplateField[] {
+  if (key === "doctor")
+    return [
+      utilLeaf("full_name", "Full Name", "text"),
+      utilLeaf("phone", "Phone", "text", phoneRule),
+    ];
+  if (key === "contact")
+    return [
+      utilLeaf("full_name", "Full Name", "text"),
+      utilLeaf("phone", "Phone", "text", phoneRule),
+      utilLeaf("nic", "NIC", "text", { pattern: "^\\d{5}-\\d{7}-\\d{1}$" }),
+    ];
+  if (key === "location")
+    return [
+      utilLeaf("city", "City", "text"),
+      utilLeaf("town", "Town", "text"),
+      utilLeaf("district", "District", "text"),
+      {
+        id: "gps",
+        key: "gps",
+        label: "GPS",
+        type: "group",
+        helpText: "Optional.",
+        rules: {},
+        fields: [
+          utilLeaf("latitude", "Latitude", "number", { min: -90, max: 90 }),
+          utilLeaf("longitude", "Longitude", "number", { min: -180, max: 180 }),
+        ],
+      },
+    ];
+  if (key === "medical-history")
+    return [
+      utilLeaf("visit_date", "Visit Date", "date"),
+      utilLeaf("diagnosis", "Diagnosis", "text"),
+      utilLeaf("treatment", "Treatment", "text"),
+      utilLeaf("notes", "Notes", "textarea"),
+    ];
+  if (key === "production-history")
+    return [
+      utilLeaf("record_date", "Record Date", "date"),
+      utilLeaf("product", "Product", "text"),
+      utilLeaf("quantity", "Quantity", "number"),
+      utilLeaf("notes", "Notes", "textarea"),
+    ];
+  return [utilLeaf("name", "Name", "text")];
+}
+
+function cloneFields(
+  fields: FarmTemplateField[],
+  prefix: string,
+): FarmTemplateField[] {
+  return fields.map((field) => ({
+    ...field,
+    id: `${prefix}.${field.key}`,
+    rules: { ...field.rules },
+    ...(field.fields
+      ? { fields: cloneFields(field.fields, `${prefix}.${field.key}`) }
+      : {}),
+  }));
+}
+
+async function readSourceFields(type: string): Promise<FarmTemplateField[] | null> {
+  const response = await fetch(
+    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (response.status === 404) return null;
+  const payload = await readJson(response);
+  if (!isObject(payload) || !isObject(payload.data)) return null;
+  const stored = isObject(payload.data.data) ? payload.data.data : null;
+  const adminConfig =
+    stored && isObject(stored.adminConfig) ? stored.adminConfig : null;
+  const forms = adminConfig ? adminConfig.forms : null;
+  const form = Array.isArray(forms) ? parseForm(forms[0]) : null;
+  if (!form) return null;
+  const fields = form.steps
+    .flatMap((step) => step.fields)
+    .filter((field) => field.key !== "active");
+  return fields.length ? fields : null;
+}
+
+async function expandSources(
+  fields: FarmTemplateField[],
+  cache: Map<string, FarmTemplateField[]>,
+  depth = 0,
+): Promise<FarmTemplateField[]> {
+  if (depth > 5) return fields;
+  const expanded: FarmTemplateField[] = [];
+  for (const field of fields) {
+    if (field.source) {
+      if (!cache.has(field.source)) {
+        const loaded = await readSourceFields(field.source).catch(() => null);
+        cache.set(field.source, loaded ?? defaultUtilFields(field.source));
+      }
+      const children = await expandSources(
+        cloneFields(cache.get(field.source) ?? [], field.id),
+        cache,
+        depth + 1,
+      );
+      expanded.push({ ...field, type: "group", fields: children });
+      continue;
+    }
+    expanded.push(
+      field.fields
+        ? {
+            ...field,
+            fields: await expandSources(field.fields, cache, depth + 1),
+          }
+        : field,
+    );
+  }
+  return expanded;
+}
+
 function hydrateFields(
   fields: FarmTemplateField[],
   presets: Map<string, CatalogField[]>,
@@ -295,17 +423,19 @@ export async function getActiveTemplate(
   if (!adminConfig || !form)
     throw new Error(`No active ${templateKindLabel(type)} template is available.`);
   const presets = await getInputPresets().catch(() => new Map());
+  const sources = new Map<string, FarmTemplateField[]>();
+  const steps = [];
+  for (const step of form.steps) {
+    steps.push({
+      ...step,
+      fields: await expandSources(hydrateFields(step.fields, presets), sources),
+    });
+  }
   return {
     type: text(record.type, type),
     updatedAt: text(record.updatedAt),
     name: text(adminConfig.name, form.name),
-    form: {
-      ...form,
-      steps: form.steps.map((step) => ({
-        ...step,
-        fields: hydrateFields(step.fields, presets),
-      })),
-    },
+    form: { ...form, steps },
     adminConfig,
   };
 }
@@ -323,7 +453,18 @@ export type SubmittedFarm = {
 };
 
 export type FarmReviewRow = { label: string; value: string };
-export type FarmReviewSection = { title: string; rows: FarmReviewRow[] };
+export type FarmReviewUtil = {
+  key: string;
+  label: string;
+  filled: boolean;
+  rows: FarmReviewRow[];
+  field: FarmTemplateField;
+};
+export type FarmReviewSection = {
+  title: string;
+  rows: FarmReviewRow[];
+  utils?: FarmReviewUtil[];
+};
 export type FarmHistoryKind = string;
 
 export type FarmFormType = {
@@ -541,13 +682,36 @@ function reviewRows(
   values: Record<string, unknown>,
 ): FarmReviewRow[] {
   return fields.flatMap((field) => {
-    if (isStatusField(field)) return [];
+    if (isStatusField(field) || field.source) return [];
     const value = values[field.key];
     if (field.fields?.length) {
       const nested = isObject(value) ? value : {};
       return reviewRows(field.fields, nested);
     }
     return [{ label: field.label || field.key, value: reviewValue(value) }];
+  });
+}
+
+function reviewUtils(
+  fields: FarmTemplateField[],
+  values: Record<string, unknown>,
+): FarmReviewUtil[] {
+  return fields.flatMap((field) => {
+    if (!field.source || isStatusField(field)) return [];
+    const value = values[field.key];
+    const nested = isObject(value) ? value : {};
+    const rows = reviewRows(field.fields ?? [], nested).filter(
+      (row) => row.value !== "Not provided",
+    );
+    return [
+      {
+        key: field.key,
+        label: field.label || field.key,
+        filled: rows.length > 0,
+        rows,
+        field,
+      },
+    ];
   });
 }
 
@@ -573,6 +737,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
   const sections = (form?.steps ?? []).map((step) => ({
     title: step.title,
     rows: reviewRows(step.fields, values),
+    utils: reviewUtils(step.fields, values),
   }));
   const histories = entries.flatMap((item): (FarmHistoryReview & {
     animalEntryId: string;
@@ -637,7 +802,9 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
       isObject(entry) && typeof entry.submittedAt === "string"
         ? entry.submittedAt
         : null,
-    sections: sections.filter((section) => section.rows.length > 0),
+    sections: sections.filter(
+      (section) => section.rows.length > 0 || section.utils.length > 0,
+    ),
     animals,
     records: histories.filter((history) => !history.animalEntryId),
   };
@@ -695,6 +862,30 @@ async function appendFarmEntry(
   await saveFarmDocument(farmId, {
     ...data,
     farmVitals: { version: 1, entries: [...entries, entry] },
+  });
+}
+
+export async function updateFarmGroup(
+  farmId: string,
+  key: string,
+  groupValues: Record<string, unknown>,
+): Promise<void> {
+  const { data, entries } = await readFarmDocument(farmId);
+  let index = -1;
+  entries.forEach((item, itemIndex) => {
+    if (isObject(item) && isObject(item.form) && item.form.entity === "farm")
+      index = itemIndex;
+  });
+  if (index < 0) throw new Error("This farm could not be updated.");
+  const current = entries[index];
+  if (!isObject(current)) throw new Error("This farm could not be updated.");
+  const values = isObject(current.values) ? { ...current.values } : {};
+  values[key] = groupValues;
+  const nextEntries = entries.slice();
+  nextEntries[index] = { ...current, values };
+  await saveFarmDocument(farmId, {
+    ...data,
+    farmVitals: { version: 1, entries: nextEntries },
   });
 }
 
