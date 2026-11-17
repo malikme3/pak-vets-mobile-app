@@ -644,6 +644,7 @@ function FieldControl({
           imageFileName(result.assets[0]),
           farmId,
           species || "unknown",
+          field.promptKey ?? "",
         ),
       );
     } catch (cause) {

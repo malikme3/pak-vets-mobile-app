@@ -16,6 +16,8 @@ import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   addAnimalPhotos,
+  animalPhotoPromptKey,
+  farmPhotoPairs,
   getFarmReview,
   listFormTypes,
   readableFarmImage,
@@ -161,7 +163,10 @@ export default function FarmAnimalScreen() {
   const [farmName, setFarmName] = useState("Farm");
   const [loading, setLoading] = useState(true);
   const [addingPhotos, setAddingPhotos] = useState(false);
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [photoPairs, setPhotoPairs] = useState<
+    { original: string; enhanced: string }[]
+  >([]);
+  const [missingAi, setMissingAi] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (quiet = false) => {
@@ -198,16 +203,28 @@ export default function FarmAnimalScreen() {
   );
 
   useEffect(() => {
-    const stored = animal?.photos ?? [];
+    const stored = farmPhotoPairs(animal?.photos ?? []);
     if (!stored.length) {
-      setPhotoUrls([]);
+      setPhotoPairs([]);
+      setMissingAi({});
       return;
     }
     let cancelled = false;
     void Promise.all(
-      stored.map((url) => readableFarmImage(url).catch(() => "")),
-    ).then((urls) => {
-      if (!cancelled) setPhotoUrls(urls.filter((url) => url.startsWith("http")));
+      stored.map(async (pair) => {
+        const [original, enhanced] = await Promise.all([
+          readableFarmImage(pair.original).catch(() => ""),
+          readableFarmImage(pair.enhanced).catch(() => ""),
+        ]);
+        return {
+          original: original.startsWith("http") ? original : "",
+          enhanced: enhanced.startsWith("http") ? enhanced : "",
+        };
+      }),
+    ).then((pairs) => {
+      if (cancelled) return;
+      setPhotoPairs(pairs.filter((pair) => pair.original));
+      setMissingAi({});
     });
     return () => {
       cancelled = true;
@@ -247,6 +264,7 @@ export default function FarmAnimalScreen() {
       });
       if (result.canceled || !result.assets.length) return;
       setAddingPhotos(true);
+      const promptKey = await animalPhotoPromptKey();
       const urls: string[] = [];
       for (const asset of result.assets) {
         if (!asset.uri) continue;
@@ -256,6 +274,7 @@ export default function FarmAnimalScreen() {
             photoFileName(asset),
             farmId,
             animal.species || "unknown",
+            promptKey,
           ),
         );
       }
@@ -306,14 +325,14 @@ export default function FarmAnimalScreen() {
           <>
             <View style={styles.identity}>
               <View style={styles.avatar}>
-                {photoUrls[0] ? (
+                {photoPairs[0]?.original ? (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Open ${animal.name} photos`}
                     onPress={() => openPhotos(0)}
                   >
                     <Image
-                      source={{ uri: photoUrls[0] }}
+                      source={{ uri: photoPairs[0].original }}
                       style={styles.avatarImage}
                       accessibilityLabel={`${animal.name} photo`}
                     />
@@ -356,21 +375,58 @@ export default function FarmAnimalScreen() {
                 </>
               )}
             </Pressable>
-            {photoUrls.length ? (
+            {photoPairs.length ? (
               <View style={styles.photos}>
-                {photoUrls.map((photo, photoIndex) => (
-                  <Pressable
-                    key={photo}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open photo ${photoIndex + 1}`}
-                    onPress={() => openPhotos(photoIndex)}
-                  >
-                    <Image
-                      source={{ uri: photo }}
-                      style={styles.photo}
-                      accessibilityLabel="Animal photo"
-                    />
-                  </Pressable>
+                <View style={styles.photosHeader}>
+                  <Text style={styles.photosTitle}>Photos</Text>
+                  <Text style={styles.count}>{photoPairs.length}</Text>
+                </View>
+                {photoPairs.map((pair, photoIndex) => (
+                  <View key={pair.original} style={styles.photoCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open original photo ${photoIndex + 1}`}
+                      onPress={() => openPhotos(photoIndex * 2)}
+                      style={styles.photoCell}
+                    >
+                      <Image
+                        source={{ uri: pair.original }}
+                        style={styles.photo}
+                        accessibilityLabel="Original animal photo"
+                      />
+                      <View style={styles.photoBadge}>
+                        <Text style={styles.photoBadgeText}>Original</Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open AI photo ${photoIndex + 1}`}
+                      onPress={() => openPhotos(photoIndex * 2 + 1)}
+                      style={styles.photoCell}
+                    >
+                      {pair.enhanced && !missingAi[pair.enhanced] ? (
+                        <Image
+                          source={{ uri: pair.enhanced }}
+                          style={styles.photo}
+                          accessibilityLabel="AI animal photo"
+                          onError={() =>
+                            setMissingAi((current) => ({
+                              ...current,
+                              [pair.enhanced]: true,
+                            }))
+                          }
+                        />
+                      ) : (
+                        <View style={[styles.photo, styles.photoPending]}>
+                          <Feather name="image" size={18} color={colors.muted} />
+                          <Text style={styles.photoPendingText}>No AI photo</Text>
+                        </View>
+                      )}
+                      <View style={styles.photoBadge}>
+                        <Text style={styles.photoBadgeText}>AI</Text>
+                      </View>
+                    </Pressable>
+                  </View>
                 ))}
               </View>
             ) : animal.photos.length ? (
@@ -482,12 +538,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  photos: { gap: 10 },
+  photosHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  photosTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  photoCard: {
+    flexDirection: "row",
+    gap: 8,
+    padding: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  photoCell: { flex: 1, borderRadius: 12, overflow: "hidden" },
   photo: {
-    width: 84,
-    height: 84,
-    borderRadius: 12,
+    width: "100%",
+    aspectRatio: 1,
     backgroundColor: colors.mint,
+  },
+  photoBadge: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: "rgba(23, 61, 50, 0.78)",
+  },
+  photoBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  photoPending: { alignItems: "center", justifyContent: "center", gap: 4 },
+  photoPendingText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
   },
   sectionHeader: {
     flexDirection: "row",

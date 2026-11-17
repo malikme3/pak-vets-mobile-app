@@ -24,6 +24,7 @@ export type FarmTemplateField = {
   rules: FarmFieldRules;
   source?: string;
   fields?: FarmTemplateField[];
+  promptKey?: string;
 };
 
 export type FarmTemplateForm = {
@@ -101,6 +102,12 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
     };
     if (typeof item.source === "string" && item.source.trim())
       field.source = item.source.trim();
+    if (
+      (item.type === "upload" || item.type === "image") &&
+      typeof item.promptKey === "string" &&
+      item.promptKey.trim()
+    )
+      field.promptKey = item.promptKey.trim();
     if (Array.isArray(item.fields))
       field.fields = parseFields(item.fields, depth + 1);
     return [field];
@@ -130,11 +137,36 @@ function parseForm(value: unknown): FarmTemplateForm | null {
   };
 }
 
+function firstPhotoPrompt(fields: FarmTemplateField[]): string {
+  for (const field of fields) {
+    if (
+      (field.type === "upload" || field.type === "image") &&
+      field.promptKey
+    )
+      return field.promptKey;
+    const nested = field.fields ? firstPhotoPrompt(field.fields) : "";
+    if (nested) return nested;
+  }
+  return "";
+}
+
+export async function animalPhotoPromptKey(): Promise<string> {
+  try {
+    const template = await getActiveTemplate("animal");
+    return firstPhotoPrompt(
+      template.form.steps.flatMap((step) => step.fields),
+    );
+  } catch {
+    return "";
+  }
+}
+
 export async function uploadFarmImage(
   uri: string,
   fileName: string,
   farmId: string,
   species: string,
+  promptKey = "",
 ): Promise<string> {
   const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/uploads`, {
     method: "POST",
@@ -142,7 +174,12 @@ export async function uploadFarmImage(
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ fileName, farmId, species }),
+    body: JSON.stringify({
+      fileName,
+      farmId,
+      species,
+      ...(promptKey ? { promptKey } : {}),
+    }),
   });
   const payload = await readJson(response);
   const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
@@ -161,6 +198,45 @@ export async function uploadFarmImage(
   });
   if (!uploaded.ok) throw new Error("The image could not be uploaded.");
   return fileUrl;
+}
+
+function aiFarmImageUrl(fileUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(fileUrl);
+  } catch {
+    return "";
+  }
+  const path = decodeURIComponent(url.pathname.replace(/^\//, ""));
+  const slash = path.lastIndexOf("/");
+  const directory = slash >= 0 ? path.slice(0, slash) : "";
+  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  const match = /\.([a-z0-9]+)$/i.exec(name);
+  const extension = match?.[1]?.toLowerCase() ?? "";
+  const base = extension ? name.slice(0, -(extension.length + 1)) : name;
+  if (!extension || /-ai$/i.test(base)) return "";
+  const output =
+    extension === "jpg" || extension === "jpeg"
+      ? "jpeg"
+      : extension === "png" || extension === "webp"
+        ? extension
+        : "";
+  if (!output) return "";
+  const nextPath = [directory, `${base}-ai.${output}`].filter(Boolean).join("/");
+  const encoded = nextPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${url.origin}/${encoded}${url.search}`;
+}
+
+export function farmPhotoPairs(
+  fileUrls: string[],
+): { original: string; enhanced: string }[] {
+  return fileUrls.flatMap((fileUrl) => {
+    const enhanced = aiFarmImageUrl(fileUrl);
+    return enhanced ? [{ original: fileUrl, enhanced }] : [];
+  });
 }
 
 export async function readableFarmImage(fileUrl: string): Promise<string> {
