@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { useAuthStore } from "../store/authStore";
 
 const colors = {
   background: "#F8F8F2",
@@ -45,6 +46,7 @@ function FarmArtwork({ wide }: { wide: boolean }) {
 
 export default function FarmVitalsScreen() {
   const router = useRouter();
+  const authStatus = useAuthStore((state) => state.status);
   const { width } = useWindowDimensions();
   const wide = width >= 900;
 
@@ -143,6 +145,18 @@ export default function FarmVitalsScreen() {
                   <Text style={styles.secondaryActionText}>
                     Sign in to Pak Vets
                   </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push(authStatus === "signedIn" ? "/" : "/login")
+                  }
+                  style={({ pressed }) => [
+                    styles.secondaryAction,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.secondaryActionText}>Old flow</Text>
                 </Pressable>
               </View>
             </View>

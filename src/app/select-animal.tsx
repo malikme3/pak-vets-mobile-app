@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
 } from "react-native";
@@ -438,53 +439,51 @@ export default function SelectAnimalScreen() {
   const LOCATION_MAX_AGE_MS = 60_000; // Use cached location up to 1 min old
   const LOCATION_TIMEOUT_MS = 12_000; // Don't wait for GPS longer than 12s
 
-  const handleStartUploadingPhotos = async () => {
-    if (!canStartUploading) return;
-    setStartUploadingLoading(true);
+  const readRegistrationLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Location required",
-          "Please allow location access to record where the animal is being registered.",
-          [{ text: "OK" }],
-        );
-        setStartUploadingLoading(false);
-        return;
-      }
-      // Prefer last known position (instant when available); fallback to current with low accuracy + timeout
-      let loc = await Location.getLastKnownPositionAsync({
+      if (status !== "granted") return null;
+      const lastKnown = await Location.getLastKnownPositionAsync({
         maxAge: LOCATION_MAX_AGE_MS,
       });
-      if (!loc) {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  "Location timed out. Try again with GPS or network enabled.",
-                ),
-              ),
-            LOCATION_TIMEOUT_MS,
-          ),
-        );
-        loc = await Promise.race([
-          Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Low,
-          }),
-          timeoutPromise,
-        ]);
+      if (lastKnown) {
+        return {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+        };
       }
-      const lat = loc.coords.latitude;
-      const lng = loc.coords.longitude;
+      const current = await Promise.race([
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Low,
+        }).catch(() => null),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), LOCATION_TIMEOUT_MS),
+        ),
+      ]);
+      if (!current) return null;
+      return {
+        latitude: current.coords.latitude,
+        longitude: current.coords.longitude,
+      };
+    } catch {
+      return null;
+    }
+  };
 
+  const handleStartUploadingPhotos = async () => {
+    if (!canStartUploading) return;
+    const species = resolvedSpecies;
+    // Close the sheet first. iOS presents the location prompt behind a Modal,
+    // so Next looks stuck until the prompt is visible on this screen.
+    setCreateAnimalModalVisible(false);
+    setStartUploadingLoading(true);
+    try {
+      const position = await readRegistrationLocation();
       const created = await animalApi.createAnimal({
-        species: resolvedSpecies,
-        latitude: lat,
-        longitude: lng,
+        species,
+        ...(position ?? {}),
       });
 
-      setCreateAnimalModalVisible(false);
       setSelectedSpeciesOption(null);
       setOtherSpeciesText("");
       router.push({
@@ -492,21 +491,29 @@ export default function SelectAnimalScreen() {
         params: {
           returnTo,
           animalId: String(created.animalId),
-          species: resolvedSpecies,
-          latitude: String(lat),
-          longitude: String(lng),
+          species,
+          ...(position
+            ? {
+                latitude: String(position.latitude),
+                longitude: String(position.longitude),
+              }
+            : {}),
           startAtUpload: "1",
         },
       });
     } catch (e) {
-      if (__DEV__) console.error("[SelectAnimal] Create animal / location:", e);
-      Alert.alert(
-        "Error",
+      if (__DEV__) console.error("[SelectAnimal] Create animal:", e);
+      setCreateAnimalModalVisible(true);
+      const message =
         e instanceof Error
           ? e.message
-          : "Failed to create animal. Please try again.",
-        [{ text: "OK" }],
-      );
+          : e &&
+              typeof e === "object" &&
+              "message" in e &&
+              typeof e.message === "string"
+            ? e.message
+            : "Failed to create animal. Please try again.";
+      Alert.alert("Error", message, [{ text: "OK" }]);
     } finally {
       setStartUploadingLoading(false);
     }
@@ -1180,10 +1187,13 @@ export default function SelectAnimalScreen() {
           Animal not in list?
         </Text>
         <Button
-          title="Create new animal"
+          title={
+            startUploadingLoading ? "Getting location…" : "Create new animal"
+          }
           onPress={handleCreateAnimal}
           variant="secondary"
           style={styles.footerButton}
+          disabled={startUploadingLoading}
         />
       </View>
 
@@ -1193,14 +1203,14 @@ export default function SelectAnimalScreen() {
         transparent
         onRequestClose={() => setCreateAnimalModalVisible(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setCreateAnimalModalVisible(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setCreateAnimalModalVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close create animal"
+          />
+          <View
             style={[styles.modalSheet, { backgroundColor: colors.surface }]}
           >
             <Text style={[styles.modalTitle, { color: colors.text }]}>
@@ -1285,8 +1295,8 @@ export default function SelectAnimalScreen() {
                 disabled={!canStartUploading || startUploadingLoading}
               />
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1500,6 +1510,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalSheet: {
+    zIndex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,

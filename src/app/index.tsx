@@ -11,7 +11,7 @@ import {
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter, useFocusEffect } from "expo-router";
+import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { useAuthStore } from "../store/authStore";
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
@@ -481,6 +481,28 @@ export default function DashboardScreen() {
 
   return (
     <>
+      <Stack.Screen
+        options={{
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.replace("/farm-vitals")}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Back to Farm Vitals"
+              style={styles.homeBackButton}
+            >
+              <FontAwesome
+                name="chevron-left"
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={[styles.homeBackText, { color: colors.primary }]}>
+                Farm Vitals
+              </Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <StatusBar style="auto" />
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -1058,6 +1080,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.7,
+  },
+  homeBackButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingRight: 8,
+    minHeight: 44,
+  },
+  homeBackText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
   logoutButton: {
     flexDirection: "row",
