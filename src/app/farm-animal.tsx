@@ -375,6 +375,19 @@ export default function FarmAnimalScreen() {
                 </>
               )}
             </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/farm-post",
+                  params: { farmId, entryId: animal.entryId },
+                })
+              }
+              style={styles.postButton}
+            >
+              <Feather name="share-2" size={16} color={colors.green} />
+              <Text style={styles.postText}>Prepare post</Text>
+            </Pressable>
             {photoPairs.length ? (
               <View style={styles.photos}>
                 <View style={styles.photosHeader}>
@@ -538,6 +551,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  postButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.green,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  postText: { color: colors.green, fontSize: 13, fontWeight: "700" },
   photos: { gap: 10 },
   photosHeader: {
     flexDirection: "row",

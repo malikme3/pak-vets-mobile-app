@@ -239,6 +239,160 @@ export function farmPhotoPairs(
   });
 }
 
+export async function prepareFarmPost(draft: {
+  fileUrls: string[];
+  tagline: string;
+  note: string;
+  farmName: string;
+  animalName: string;
+  species: string;
+  dateLabel: string;
+  promptKey?: string;
+  rewrite?: boolean;
+  description?: string;
+}): Promise<{ posterUrl: string; description: string; tagline: string }> {
+  const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/posts`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...draft,
+      promptKey: draft.promptKey || "facebook_post",
+    }),
+  });
+  const payload = await readJson(response);
+  const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
+  const posterUrl = text(data?.posterUrl);
+  const description = text(data?.description);
+  const tagline = text(data?.tagline) || draft.tagline;
+  if (!posterUrl.startsWith("http") || !description) {
+    throw new Error("The post could not be prepared.");
+  }
+  return { posterUrl, description, tagline };
+}
+
+export type SocialPostStatus = "draft" | "ready" | "shared" | "scheduled";
+
+export type SocialPost = {
+  postId: string;
+  farmId: string;
+  entryId: string;
+  farmName: string;
+  animalName: string;
+  species: string;
+  dateLabel: string;
+  tagline: string;
+  printedTagline: string;
+  note: string;
+  description: string;
+  posterUrl: string;
+  fileUrls: string[];
+  status: SocialPostStatus;
+  scheduledFor: string;
+  sharedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function socialStatus(value: unknown): SocialPostStatus {
+  return value === "ready" || value === "shared" || value === "scheduled" || value === "draft"
+    ? value
+    : "draft";
+}
+
+function socialPost(value: unknown): SocialPost | null {
+  if (!isObject(value) || !text(value.postId) || !text(value.posterUrl).startsWith("http")) return null;
+  return {
+    postId: text(value.postId),
+    farmId: text(value.farmId),
+    entryId: text(value.entryId),
+    farmName: text(value.farmName),
+    animalName: text(value.animalName),
+    species: text(value.species),
+    dateLabel: text(value.dateLabel),
+    tagline: text(value.tagline),
+    printedTagline: text(value.printedTagline),
+    note: text(value.note),
+    description: text(value.description),
+    posterUrl: text(value.posterUrl),
+    fileUrls: Array.isArray(value.fileUrls)
+      ? value.fileUrls.filter((url): url is string => typeof url === "string")
+      : [],
+    status: socialStatus(value.status),
+    scheduledFor: text(value.scheduledFor),
+    sharedAt: text(value.sharedAt),
+    createdAt: text(value.createdAt),
+    updatedAt: text(value.updatedAt),
+  };
+}
+
+export async function listSocialPosts(
+  farmId: string,
+  entryId = "",
+  status = "",
+): Promise<SocialPost[]> {
+  const params = new URLSearchParams();
+  if (farmId) params.set("farmId", farmId);
+  if (entryId) params.set("entryId", entryId);
+  if (status) params.set("status", status);
+  const query = params.toString();
+  const response = await fetch(
+    `${FARM_VITALS_API_URL}/farm-vitals/social-posts${query ? `?${query}` : ""}`,
+    { headers: { Accept: "application/json" } },
+  );
+  const payload = await readJson(response);
+  const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
+  const posts = Array.isArray(data?.posts) ? data.posts : [];
+  return posts.flatMap((item) => {
+    const post = socialPost(item);
+    return post ? [post] : [];
+  });
+}
+
+export async function saveSocialPost(input: {
+  postId?: string;
+  farmId: string;
+  entryId: string;
+  farmName: string;
+  animalName: string;
+  species: string;
+  dateLabel: string;
+  tagline: string;
+  printedTagline: string;
+  note: string;
+  description: string;
+  posterUrl: string;
+  fileUrls: string[];
+  status: SocialPostStatus;
+  scheduledFor?: string;
+}): Promise<SocialPost> {
+  const response = await fetch(
+    `${FARM_VITALS_API_URL}/farm-vitals/social-posts${input.postId ? `/${input.postId}` : ""}`,
+    {
+      method: input.postId ? "PUT" : "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  const payload = await readJson(response);
+  const post = socialPost(isObject(payload) ? payload.data : null);
+  if (!post) throw new Error("The post could not be saved.");
+  return post;
+}
+
+export async function deleteSocialPost(postId: string): Promise<void> {
+  const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/social-posts/${postId}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  await readJson(response);
+}
+
 export async function readableFarmImage(fileUrl: string): Promise<string> {
   const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/uploads/download`, {
     method: "POST",

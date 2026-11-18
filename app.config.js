@@ -57,9 +57,16 @@ module.exports = ({ config }) => {
     baseExtra.googleAndroidClientId ||
     "";
 
+  const plugins = [
+    ...(baseExpoConfig.plugins || []),
+    ...(config?.plugins || []),
+  ];
+  if (!plugins.includes("expo-sharing")) plugins.push("expo-sharing");
+
   return {
     ...baseExpoConfig,
     ...config,
+    plugins,
     extra: {
       ...baseExtra,
       ...incomingExtra,

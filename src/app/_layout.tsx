@@ -45,6 +45,10 @@ export default function RootLayout() {
                 options={{ title: "Photos", headerShown: false }}
               />
               <Stack.Screen
+                name="farm-post"
+                options={{ title: "Prepare post", headerShown: false }}
+              />
+              <Stack.Screen
                 name="add-farm-history"
                 options={{ title: "Add History", headerShown: false }}
               />
