@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import { savedGroupValues, UtilSheet } from "../features/farm-vitals/template-entry";
@@ -107,6 +107,7 @@ function CollapseSection({
 
 export default function FarmDashboardScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ farmId?: string }>();
   const [farms, setFarms] = useState<SubmittedFarm[]>([]);
   const [review, setReview] = useState<FarmReview | null>(null);
   const [formTypes, setFormTypes] = useState<FarmFormType[]>([]);
@@ -162,6 +163,12 @@ export default function FarmDashboardScreen() {
       if (!quiet) setOpening(false);
     }
   }, []);
+
+  useEffect(() => {
+    const requested = params.farmId;
+    const farmId = Array.isArray(requested) ? requested[0] : requested;
+    if (farmId) void openFarm(farmId);
+  }, [openFarm, params.farmId]);
 
   function toggleSection(key: string, fallback: boolean) {
     setOpenSections((current) => ({

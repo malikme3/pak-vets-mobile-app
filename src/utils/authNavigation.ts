@@ -2,6 +2,7 @@ const PUBLIC_ROUTES = new Set([
   "farm-vitals",
   "create-farm",
   "farm-dashboard",
+  "farm-board",
   "add-farm-animal",
   "farm-animal",
   "farm-photos",

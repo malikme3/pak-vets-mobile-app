@@ -23,6 +23,7 @@ export type FarmTemplateField = {
   helpText: string;
   rules: FarmFieldRules;
   source?: string;
+  showOnDashboard?: boolean;
   fields?: FarmTemplateField[];
   promptKey?: string;
 };
@@ -33,6 +34,12 @@ export type FarmTemplateForm = {
   description: string;
   entity: string;
   status?: string;
+  dashboardFields?: {
+    key: string;
+    source?: string;
+    groupKey?: string;
+    filter?: boolean;
+  }[];
   steps: {
     id: string;
     title: string;
@@ -102,6 +109,8 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
     };
     if (typeof item.source === "string" && item.source.trim())
       field.source = item.source.trim();
+    if (item.showOnDashboard === true || item.showOnDashboard === false)
+      field.showOnDashboard = item.showOnDashboard;
     if (
       (item.type === "upload" || item.type === "image") &&
       typeof item.promptKey === "string" &&
@@ -111,6 +120,28 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
     if (Array.isArray(item.fields))
       field.fields = parseFields(item.fields, depth + 1);
     return [field];
+  });
+}
+
+function parseDashboardFields(
+  value: unknown,
+): { key: string; source?: string; groupKey?: string; filter?: boolean }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isObject(item) || typeof item.key !== "string" || !item.key.trim())
+      return [];
+    return [
+      {
+        key: item.key.trim(),
+        ...(typeof item.source === "string" && item.source.trim()
+          ? { source: item.source.trim() }
+          : {}),
+        ...(typeof item.groupKey === "string" && item.groupKey.trim()
+          ? { groupKey: item.groupKey.trim() }
+          : {}),
+        ...(item.filter === true ? { filter: true } : {}),
+      },
+    ];
   });
 }
 
@@ -133,6 +164,7 @@ function parseForm(value: unknown): FarmTemplateForm | null {
     description: text(value.description),
     entity: text(value.entity, "farm"),
     status: typeof value.status === "string" ? value.status : undefined,
+    dashboardFields: parseDashboardFields(value.dashboardFields),
     steps,
   };
 }
@@ -682,7 +714,13 @@ export type SubmittedFarm = {
   submittedAt: string | null;
 };
 
-export type FarmReviewRow = { label: string; value: string };
+export type FarmReviewRow = {
+  key?: string;
+  groupKey?: string;
+  filter?: boolean;
+  label: string;
+  value: string;
+};
 export type FarmReviewUtil = {
   key: string;
   label: string;
@@ -811,6 +849,109 @@ export type FarmReview = {
   records: FarmHistoryReview[];
 };
 
+export type FarmDashboardEntry = {
+  farmId: string;
+  name: string;
+  submittedAt: string | null;
+  rows: FarmReviewRow[];
+};
+
+function nestedValue(value: unknown, key: string): unknown {
+  if (!isObject(value)) return undefined;
+  if (key in value) return value[key];
+  for (const child of Object.values(value)) {
+    const found = nestedValue(child, key);
+    if (found !== undefined && found !== "") return found;
+  }
+  return undefined;
+}
+
+function fieldLabel(fields: FarmTemplateField[], key: string): string {
+  for (const field of fields) {
+    if (field.key === key) return field.label || field.key;
+    const nested = field.fields ? fieldLabel(field.fields, key) : "";
+    if (nested) return nested;
+  }
+  return "";
+}
+
+function dashboardRows(
+  fields: FarmTemplateField[],
+  values: Record<string, unknown>,
+  selected: { key: string; groupKey?: string; filter?: boolean }[],
+): FarmReviewRow[] {
+  const chosen: { key: string; groupKey?: string; filter?: boolean }[] =
+    selected.length
+      ? selected
+      : fields
+          .filter((field) => field.showOnDashboard === true && !field.source)
+          .map((field) => ({ key: field.key }));
+  return chosen.flatMap((choice) => {
+    const source = choice.groupKey ? values[choice.groupKey] : values;
+    const value = choice.groupKey
+      ? nestedValue(source, choice.key)
+      : values[choice.key];
+    const shown = reviewValue(value);
+    return [
+      {
+        key: choice.key,
+        ...(choice.groupKey ? { groupKey: choice.groupKey } : {}),
+        ...(choice.filter ? { filter: true } : {}),
+        label: fieldLabel(fields, choice.key) || choice.key,
+        value: shown === "Not provided" ? "" : shown,
+      },
+    ];
+  });
+}
+
+async function farmEntryValues(
+  farmId: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${FARM_VITALS_API_URL}/farm-vitals/farms/${encodeURIComponent(farmId)}`,
+    { headers: { Accept: "application/json" } },
+  );
+  const payload = await readJson(response);
+  if (!isObject(payload) || !isObject(payload.data)) return {};
+  const data = isObject(payload.data.data) ? payload.data.data : {};
+  const vitals = isObject(data.farmVitals) ? data.farmVitals : {};
+  const entries = Array.isArray(vitals.entries) ? vitals.entries : [];
+  const entry = [...entries].reverse().find(
+    (item) =>
+      isObject(item) && isObject(item.form) && item.form.entity === "farm",
+  );
+  return isObject(entry) && isObject(entry.values) ? entry.values : {};
+}
+
+export async function listFarmDashboard(): Promise<FarmDashboardEntry[]> {
+  const [template, farms] = await Promise.all([
+    getActiveFarmTemplate(),
+    listSubmittedFarms(),
+  ]);
+  const fields = template.form.steps.flatMap((step) => step.fields);
+  const selected = template.form.dashboardFields ?? [];
+  return Promise.all(
+    farms.map(async (farm) => {
+      try {
+        const values = await farmEntryValues(farm.farmId);
+        return {
+          farmId: farm.farmId,
+          name: namedText(values, farm.name),
+          submittedAt: farm.submittedAt,
+          rows: dashboardRows(fields, values, selected),
+        };
+      } catch {
+        return {
+          farmId: farm.farmId,
+          name: farm.name,
+          submittedAt: farm.submittedAt,
+          rows: [],
+        };
+      }
+    }),
+  );
+}
+
 export async function listSubmittedFarms(): Promise<SubmittedFarm[]> {
   const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/farms`, {
     headers: { Accept: "application/json" },
@@ -912,7 +1053,8 @@ function reviewRows(
   values: Record<string, unknown>,
 ): FarmReviewRow[] {
   return fields.flatMap((field) => {
-    if (isStatusField(field) || field.source) return [];
+    if (field.showOnDashboard === false || isStatusField(field) || field.source)
+      return [];
     const value = values[field.key];
     if (field.fields?.length) {
       const nested = isObject(value) ? value : {};
@@ -927,7 +1069,8 @@ function reviewUtils(
   values: Record<string, unknown>,
 ): FarmReviewUtil[] {
   return fields.flatMap((field) => {
-    if (!field.source || isStatusField(field)) return [];
+    if (!field.source || isStatusField(field) || field.showOnDashboard === false)
+      return [];
     const value = values[field.key];
     const nested = isObject(value) ? value : {};
     const rows = reviewRows(field.fields ?? [], nested).filter(

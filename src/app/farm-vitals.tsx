@@ -126,6 +126,16 @@ export default function FarmVitalsScreen() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
+                  onPress={() => router.push("/farm-board")}
+                  style={({ pressed }) => [
+                    styles.secondaryAction,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.secondaryActionText}>Farm dashboard</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
                   onPress={() => router.push("/farm-dashboard")}
                   style={({ pressed }) => [
                     styles.secondaryAction,

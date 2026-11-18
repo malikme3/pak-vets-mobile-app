@@ -33,6 +33,10 @@ export default function RootLayout() {
                 options={{ title: "Submitted Farms", headerShown: false }}
               />
               <Stack.Screen
+                name="farm-board"
+                options={{ title: "Farm dashboard", headerShown: false }}
+              />
+              <Stack.Screen
                 name="add-farm-animal"
                 options={{ title: "Add Animal", headerShown: false }}
               />
