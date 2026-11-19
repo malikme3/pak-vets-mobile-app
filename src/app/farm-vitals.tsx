@@ -109,52 +109,13 @@ export default function FarmVitalsScreen() {
               <View style={[styles.actions, wide && styles.actionWide]}>
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => router.push("/create-farm")}
+                  onPress={() => router.push("/farm-board")}
                   style={({ pressed }) => [
                     styles.action,
                     pressed && styles.pressed,
                   ]}
                 >
-                  <Text style={styles.actionText}>Register Farm</Text>
-                  <Feather
-                    name="arrow-right"
-                    size={20}
-                    color="#FFFFFF"
-                    accessible={false}
-                    aria-hidden
-                  />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push("/farm-board")}
-                  style={({ pressed }) => [
-                    styles.secondaryAction,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.secondaryActionText}>Farm dashboard</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push("/farm-dashboard")}
-                  style={({ pressed }) => [
-                    styles.secondaryAction,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.secondaryActionText}>Review farms</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push("/login")}
-                  style={({ pressed }) => [
-                    styles.secondaryAction,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.secondaryActionText}>
-                    Sign in to Pak Vets
-                  </Text>
+                  <Text style={styles.actionText}>Farms dashboard</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -295,7 +256,7 @@ const styles = StyleSheet.create({
     minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     gap: 16,
     paddingVertical: 16,
     paddingHorizontal: 22,

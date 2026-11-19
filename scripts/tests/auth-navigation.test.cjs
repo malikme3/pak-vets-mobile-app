@@ -30,11 +30,15 @@ test("the public preview, sign-in, and OAuth callbacks remain reachable", () => 
     "farm-vitals",
     "create-farm",
     "farm-dashboard",
+    "farm-board",
     "add-farm-animal",
     "farm-animal",
     "farm-photos",
     "add-farm-history",
     "farm-history",
+    "animal-case-dashboard",
+    "health-case",
+    "health-case-detail",
     "login",
     "auth",
     "oauthredirect",
@@ -44,10 +48,10 @@ test("the public preview, sign-in, and OAuth callbacks remain reachable", () => 
   }
 });
 
-test("loading sessions do not redirect and signed-in users retain their dashboard", () => {
+test("loading and signed-in sessions can stay on Farm Vitals", () => {
   assert.equal(getAuthRedirect("loading", undefined), null);
   assert.equal(getAuthRedirect("loading", "farm-vitals"), null);
-  assert.equal(getAuthRedirect("signedIn", "farm-vitals"), "/");
+  assert.equal(getAuthRedirect("signedIn", "farm-vitals"), null);
   assert.equal(getAuthRedirect("signedIn", "case-detail"), null);
   assert.equal(getAuthRedirect("signedIn", undefined), null);
 });

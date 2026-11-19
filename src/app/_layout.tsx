@@ -30,11 +30,11 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="farm-dashboard"
-                options={{ title: "Submitted Farms", headerShown: false }}
+                options={{ title: "Farm details", headerShown: false }}
               />
               <Stack.Screen
                 name="farm-board"
-                options={{ title: "Farm dashboard", headerShown: false }}
+                options={{ title: "Farms dashboard", headerShown: false }}
               />
               <Stack.Screen
                 name="add-farm-animal"
@@ -59,6 +59,18 @@ export default function RootLayout() {
               <Stack.Screen
                 name="farm-history"
                 options={{ title: "History", headerShown: false }}
+              />
+              <Stack.Screen
+                name="animal-case-dashboard"
+                options={{ title: "Case dashboard", headerShown: false }}
+              />
+              <Stack.Screen
+                name="health-case"
+                options={{ title: "Add case", headerShown: false }}
+              />
+              <Stack.Screen
+                name="health-case-detail"
+                options={{ title: "Case", headerShown: false }}
               />
               <Stack.Screen
                 name="login"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -7,11 +7,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import {
   listFarmDashboard,
@@ -26,6 +27,8 @@ const colors = {
   border: "#E4EBE3",
   surface: "#FFFFFF",
   danger: "#B42318",
+  mint: "#E8F4ED",
+  field: "#F5F7F3",
 };
 
 function isOwnerGroup(row: FarmDashboardEntry["rows"][number]): boolean {
@@ -49,19 +52,26 @@ function ownerLine(farm: FarmDashboardEntry): FarmDashboardEntry["rows"] {
   return [name, phone].flatMap((row) => (row ? [row] : []));
 }
 
+function farmNameRow(farm: FarmDashboardEntry) {
+  return (
+    farm.rows.find((row) => row.key === "farm_name" || row.key === "farmName") ??
+    farm.rows.find((row) => /farm name/i.test(row.label))
+  );
+}
+
 function landing(farm: FarmDashboardEntry): {
   title: string;
   highlights: FarmDashboardEntry["rows"];
   details: FarmDashboardEntry["rows"];
 } {
-  const name =
-    farm.rows.find((row) => row.key === "farm_name" || row.key === "farmName") ??
-    farm.rows.find((row) => /farm name/i.test(row.label));
+  const name = farmNameRow(farm);
   const highlights = ownerLine(farm);
   return {
-    title: name?.value || farm.name,
+    title: name?.value.trim() || farm.name,
     highlights,
-    details: farm.rows.filter((row) => row !== name && !highlights.includes(row)),
+    details: farm.rows.filter(
+      (row) => row.value.trim() && row !== name && !highlights.includes(row),
+    ),
   };
 }
 
@@ -69,86 +79,91 @@ function filterId(row: FarmDashboardEntry["rows"][number]): string {
   return `${row.groupKey ?? ""}:${row.key ?? row.label}`;
 }
 
-function dashboardFilters(farms: FarmDashboardEntry[]): {
-  id: string;
-  label: string;
-  values: string[];
-}[] {
-  const filters = new Map<string, { id: string; label: string; values: string[] }>();
-  for (const farm of farms) {
-    for (const row of farm.rows) {
-      if (!row.filter) continue;
-      const id = filterId(row);
-      const current = filters.get(id) ?? { id, label: row.label, values: [] };
-      if (row.value && !current.values.includes(row.value))
-        current.values.push(row.value);
-      filters.set(id, current);
-    }
-  }
-  return [...filters.values()]
-    .filter((filter) => filter.values.length > 0)
-    .map((filter) => ({
-      ...filter,
-      values: [...filter.values].sort((left, right) => left.localeCompare(right)),
-    }));
-}
-
-function matchesFilters(
-  farm: FarmDashboardEntry,
-  selected: Record<string, string>,
-): boolean {
-  return Object.entries(selected).every(([id, value]) => {
-    if (!value) return true;
-    return farm.rows.some(
-      (row) => row.filter && filterId(row) === id && row.value === value,
-    );
-  });
+function withinOneEdit(left: string, right: string): boolean {
+  if (Math.abs(left.length - right.length) > 1) return false;
+  let index = 0;
+  while (index < left.length && left[index] === right[index]) index++;
+  if (left.length === right.length)
+    return left.slice(index + 1) === right.slice(index + 1);
+  return left.length > right.length
+    ? left.slice(index + 1) === right.slice(index)
+    : left.slice(index) === right.slice(index + 1);
 }
 
 function matches(farm: FarmDashboardEntry, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return farm.rows.some(
-    (row) => row.filter && row.value.toLowerCase().includes(needle),
-  );
+  const name = farmNameRow(farm);
+  return farm.rows.some((row) => {
+    if (!row.filter) return false;
+    const value = row === name ? row.value.trim() || farm.name : row.value;
+    const searchable = value.toLowerCase();
+    if (searchable.includes(needle)) return true;
+    if (row !== name || needle.length < 4) return false;
+    return (
+      withinOneEdit(searchable, needle) ||
+      searchable.split(/[^\p{L}\p{N}]+/u).some((word) => withinOneEdit(word, needle))
+    );
+  });
 }
 
 export default function FarmBoardScreen() {
   const router = useRouter();
+  const { width, fontScale } = useWindowDimensions();
+  const singleColumn = width / fontScale < 340;
   const [farms, setFarms] = useState<FarmDashboardEntry[]>([]);
   const [query, setQuery] = useState("");
-  const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>(
-    {},
-  );
+  const [appliedQuery, setAppliedQuery] = useState("");
+  const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setFarms(await listFarmDashboard());
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The farm dashboard could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      setError(null);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+      listFarmDashboard()
+        .then((entries) => {
+          if (!cancelled) setFarms(entries);
+        })
+        .catch((cause: unknown) => {
+          if (!cancelled)
+            setError(
+              cause instanceof Error
+                ? cause.message
+                : "The farm dashboard could not be loaded.",
+            );
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
 
-  const filters = dashboardFilters(farms);
-  const shown = farms.filter(
-    (farm) => matches(farm, query) && matchesFilters(farm, selectedFilters),
+      return () => {
+        cancelled = true;
+      };
+    }, []),
   );
-  const narrowing =
-    Boolean(query.trim()) || Object.values(selectedFilters).some(Boolean);
+
+  const searchableFields = [
+    ...new Set(
+      farms.flatMap((farm) =>
+        farm.rows.filter((row) => row.filter).map((row) => row.label),
+      ),
+    ),
+  ];
+  const canSearch = searchableFields.length > 0;
+  const canSubmitSearch = canSearch && query.trim().length >= 3 && !searched;
+  const searchQuery = canSearch ? appliedQuery : "";
+  const shown = farms.filter((farm) => matches(farm, searchQuery));
+
+  function submitSearch() {
+    if (!canSubmitSearch) return;
+    setAppliedQuery(query.trim());
+    setSearched(true);
+    Keyboard.dismiss();
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -165,22 +180,28 @@ export default function FarmBoardScreen() {
           <Feather name="arrow-left" size={18} color={colors.green} />
           <Text style={styles.backText}>Farm Vitals</Text>
         </Pressable>
-        <View style={styles.titleRow}>
-          <View style={styles.titleCopy}>
-            <Text accessibilityRole="header" style={styles.title}>
-              Farm dashboard
-            </Text>
-            <Text style={styles.help}>
-              Owner name and phone sit under the farm name when they are saved.
-            </Text>
-          </View>
-        </View>
+        <Text accessibilityRole="header" style={styles.title}>
+          Farms dashboard
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/create-farm")}
+          style={styles.registerButton}
+        >
+          <Feather name="plus" size={18} color={colors.surface} />
+          <Text style={styles.searchButtonText}>Register Farm</Text>
+        </Pressable>
         <View style={styles.searchRow}>
           <TextInput
             value={query}
-            onChangeText={setQuery}
-            onSubmitEditing={() => Keyboard.dismiss()}
-            placeholder="Search filtered fields"
+            onChangeText={(value) => {
+              setQuery(value);
+              setSearched(false);
+              if (!value.trim()) setAppliedQuery("");
+            }}
+            onSubmitEditing={submitSearch}
+            editable={canSearch}
+            placeholder="Search farms"
             placeholderTextColor={colors.muted}
             returnKeyType="search"
             style={styles.searchInput}
@@ -188,47 +209,26 @@ export default function FarmBoardScreen() {
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Search"
-            onPress={() => Keyboard.dismiss()}
-            style={styles.searchButton}
+            accessibilityLabel={searched ? "Search applied" : "Search"}
+            onPress={submitSearch}
+            disabled={!canSubmitSearch}
+            style={[
+              styles.searchButton,
+              !canSubmitSearch && !searched && styles.searchDisabled,
+            ]}
           >
-            <Feather name="search" size={16} color="#FFFFFF" />
+            <Feather name={searched ? "check" : "search"} size={16} color="#FFFFFF" />
             <Text style={styles.searchButtonText}>Search</Text>
           </Pressable>
         </View>
-        {filters.map((filter) => (
-          <View key={filter.id} style={styles.filterBlock}>
-            <Text style={styles.filterLabel}>{filter.label}</Text>
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterChips}
-            >
-              {["", ...filter.values].map((value) => {
-                const on = (selectedFilters[filter.id] ?? "") === value;
-                return (
-                  <Pressable
-                    key={value || "all"}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: on }}
-                    onPress={() =>
-                      setSelectedFilters((current) => ({
-                        ...current,
-                        [filter.id]: value,
-                      }))
-                    }
-                    style={[styles.chip, on ? styles.chipOn : null]}
-                  >
-                    <Text style={on ? styles.chipTextOn : styles.chipText}>
-                      {value || "All"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        ))}
+        {!loading && !error && farms.length > 0 && !canSearch ? (
+          <Text style={styles.help}>No fields are enabled for filtering in the farm template.</Text>
+        ) : null}
+        {canSearch ? (
+          <Text style={styles.help}>
+            Search by {searchableFields.join(", ")}.
+          </Text>
+        ) : null}
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -238,7 +238,7 @@ export default function FarmBoardScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {!loading && !error && !shown.length ? (
           <Text style={styles.help}>
-            {narrowing
+            {searchQuery
               ? "No farms match that search."
               : "No dashboard fields are turned on yet."}
           </Text>
@@ -249,34 +249,35 @@ export default function FarmBoardScreen() {
             <Pressable
               key={farm.farmId}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${place.title}`}
+              accessibilityLabel={[
+                place.title,
+                ...place.highlights.map((row) => row.value),
+                ...place.details.map((row) => `${row.label}, ${row.value}`),
+              ].join(". ")}
+              accessibilityHint="Opens the farm"
               onPress={() =>
                 router.push({
                   pathname: "/farm-dashboard",
                   params: { farmId: farm.farmId },
                 })
               }
-              style={styles.card}
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             >
-              <View
-                style={[
-                  styles.landing,
-                  place.details.length ? styles.landingRule : null,
-                ]}
-              >
+              <View style={styles.landing}>
+                <View style={styles.farmIcon} accessible={false}>
+                  <Feather name="home" size={19} color={colors.green} />
+                </View>
                 <View style={styles.landingCopy}>
-                  <Text numberOfLines={1} style={styles.farmName}>
-                    {place.title}
-                  </Text>
+                  <Text style={styles.farmName}>{place.title}</Text>
                   {place.highlights.length ? (
-                    <Text numberOfLines={1} style={styles.subline}>
+                    <Text style={styles.subline}>
                       {place.highlights.map((row, index) => (
                         <Text
-                          key={`${farm.farmId}-highlight-${row.key ?? row.label}-${index}`}
+                          key={filterId(row)}
                           style={
                             /phone|mobile/i.test(`${row.key ?? ""} ${row.label}`)
                               ? styles.subPhone
-                              : styles.subCity
+                              : undefined
                           }
                         >
                           {index ? "  ·  " : ""}
@@ -286,26 +287,25 @@ export default function FarmBoardScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <Feather name="chevron-right" size={16} color="#A8B7AE" />
-              </View>
-              {place.details.map((row, index) => (
-                <View
-                  key={`${farm.farmId}-${row.key ?? row.label}-${index}`}
-                  style={[styles.fact, index ? styles.factRule : null]}
-                >
-                  <Text numberOfLines={1} style={styles.factLabel}>
-                    {row.label}
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={row.value ? styles.factValue : styles.factEmpty}
-                  >
-                    {row.value || "—"}
-                  </Text>
+                <View style={styles.openIcon} accessible={false}>
+                  <Feather name="chevron-right" size={18} color={colors.green} />
                 </View>
-              ))}
-              {!farm.rows.length ? (
-                <Text style={styles.emptyNote}>No dashboard fields saved.</Text>
+              </View>
+              {place.details.length ? (
+                <View style={styles.facts}>
+                  {place.details.map((row, index) => (
+                    <View
+                      key={`${filterId(row)}-${index}`}
+                      style={[
+                        styles.fact,
+                        (singleColumn || place.details.length === 1) && styles.factWide,
+                      ]}
+                    >
+                      <Text style={styles.factLabel}>{row.label}</Text>
+                      <Text style={styles.factValue}>{row.value}</Text>
+                    </View>
+                  ))}
+                </View>
               ) : null}
             </Pressable>
           );
@@ -326,22 +326,14 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  titleCopy: { flex: 1, gap: 2 },
   title: {
     color: colors.ink,
     fontSize: 24,
     fontWeight: "800",
     letterSpacing: -0.3,
+    textAlign: "center",
   },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  emptyNote: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
   error: { color: colors.danger, fontSize: 13 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -365,79 +357,74 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  searchButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
-  filterBlock: { gap: 6 },
-  filterLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-  filterChips: { gap: 6, paddingRight: 4 },
-  chip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  chipOn: { backgroundColor: colors.green, borderColor: colors.green },
-  chipText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
-  chipTextOn: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  landing: {
+  registerButton: {
+    alignSelf: "stretch",
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: colors.green,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 10,
+    justifyContent: "center",
+    gap: 8,
   },
-  landingRule: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+  searchDisabled: { opacity: 0.5 },
+  searchButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#CAD9CF",
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+    padding: 14,
+    gap: 12,
   },
-  landingCopy: { flex: 1, gap: 2 },
+  cardPressed: { borderColor: colors.green, backgroundColor: "#F4FAF6" },
+  landing: { flexDirection: "row", alignItems: "center", gap: 10 },
+  farmIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.mint,
+  },
+  landingCopy: { flex: 1, gap: 3 },
   farmName: {
     color: colors.ink,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "800",
     letterSpacing: -0.2,
   },
-  subline: { fontSize: 13, lineHeight: 18 },
-  subCity: { color: colors.ink, fontWeight: "600" },
+  subline: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   subPhone: { color: colors.green, fontWeight: "700" },
-  fact: {
-    minHeight: 36,
-    paddingHorizontal: 14,
-    flexDirection: "row",
+  openIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.field,
+  },
+  facts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 12,
+    rowGap: 8,
   },
-  factRule: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+  fact: {
+    width: "49%",
+    backgroundColor: colors.field,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 3,
   },
-  factLabel: {
-    flex: 1,
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  factValue: {
-    flexShrink: 1,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "right",
-  },
-  factEmpty: {
-    color: "#C5D0CA",
-    fontSize: 14,
-    fontWeight: "600",
-    textAlign: "right",
-  },
+  factWide: { width: "100%" },
+  factLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  factValue: { color: colors.ink, fontSize: 14, fontWeight: "700" },
 });

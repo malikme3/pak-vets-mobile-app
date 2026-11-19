@@ -78,11 +78,11 @@ export default function CreateFarmScreen() {
       >
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.back()}
+          onPress={() => router.dismissTo("/farm-board")}
           style={styles.back}
         >
           <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Farm Vitals</Text>
+          <Text style={styles.backText}>Farms dashboard</Text>
         </Pressable>
         <Text accessibilityRole="header" style={styles.title}>
           Register farm
@@ -118,9 +118,9 @@ export default function CreateFarmScreen() {
             <Text style={styles.help}>Farm ID: {farmId}</Text>
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push("/farm-dashboard")}
+              onPress={() => router.dismissTo("/farm-board")}
             >
-              <Text style={styles.retry}>Review farms</Text>
+              <Text style={styles.retry}>Return to Farms dashboard</Text>
             </Pressable>
           </View>
         ) : null}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -869,12 +869,16 @@ export function TemplateEntryForm({
   initialValues,
   farmId = "",
   onSubmit,
+  renderField,
+  onDraftChange,
 }: {
   template: ActiveFarmTemplate;
   submitLabel: string;
   saving: boolean;
   initialValues?: Record<string, unknown>;
   farmId?: string;
+  onDraftChange?: (answers: Record<string, unknown>) => void;
+  renderField?: (field: FarmTemplateField) => ReactNode;
   onSubmit: (values: Record<string, unknown>) => Promise<void> | void;
 }) {
   const { width } = useWindowDimensions();
@@ -903,6 +907,12 @@ export function TemplateEntryForm({
   const openField =
     steps.flatMap((step) => step.fields).find((field) => field.key === openUtil) ??
     null;
+
+  function changeAnswer(key: string, value: Answer) {
+    const next = { ...answers, [key]: value };
+    setAnswers(next);
+    onDraftChange?.(next);
+  }
 
   function submit() {
     const fields = steps.flatMap((step) => step.fields);
@@ -949,25 +959,26 @@ export function TemplateEntryForm({
               key={row.map((field) => field.id).join("-")}
               style={styles.fieldRow}
             >
-              {row.map((field) => (
-                <View key={field.id} style={styles.fieldSlot}>
-                  <FieldControl
-                    field={field}
-                    value={answers[field.key]}
-                    errors={errors}
-                    path={field.key}
-                    columns={fieldColumns}
-                    farmId={farmId}
-                    species={selectedSpecies(answers)}
-                    onChange={(value) =>
-                      setAnswers((current) => ({
-                        ...current,
-                        [field.key]: value,
-                      }))
-                    }
-                  />
-                </View>
-              ))}
+              {row.map((field) => {
+                const onChange = (value: Answer) =>
+                  changeAnswer(field.key, value);
+                return (
+                  <View key={field.id} style={styles.fieldSlot}>
+                    {renderField?.(field) ?? (
+                      <FieldControl
+                        field={field}
+                        value={answers[field.key]}
+                        errors={errors}
+                        path={field.key}
+                        columns={fieldColumns}
+                        farmId={farmId}
+                        species={selectedSpecies(answers)}
+                        onChange={onChange}
+                      />
+                    )}
+                  </View>
+                );
+              })}
             </View>
           ))}
           {utilFields.length ? (
@@ -1018,7 +1029,7 @@ export function TemplateEntryForm({
           species={selectedSpecies(answers)}
           onClose={() => setOpenUtil(null)}
           onSave={(value) => {
-            setAnswers((current) => ({ ...current, [openField.key]: value }));
+            changeAnswer(openField.key, value);
             setErrors((current) =>
               Object.fromEntries(
                 Object.entries(current).filter(

@@ -388,6 +388,19 @@ export default function FarmAnimalScreen() {
               <Feather name="share-2" size={16} color={colors.green} />
               <Text style={styles.postText}>Prepare post</Text>
             </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/animal-case-dashboard",
+                  params: { farmId, animalEntryId: animal.entryId },
+                })
+              }
+              style={styles.postButton}
+            >
+              <Feather name="list" size={16} color={colors.green} />
+              <Text style={styles.postText}>Case dashboard</Text>
+            </Pressable>
             {photoPairs.length ? (
               <View style={styles.photos}>
                 <View style={styles.photosHeader}>

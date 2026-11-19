@@ -28,6 +28,8 @@ export type FarmTemplateField = {
   promptKey?: string;
 };
 
+type CaseSection = "treatment" | "medicine";
+
 export type FarmTemplateForm = {
   id: string;
   name: string;
@@ -43,6 +45,7 @@ export type FarmTemplateForm = {
   steps: {
     id: string;
     title: string;
+    caseSection?: CaseSection;
     fields: FarmTemplateField[];
   }[];
 };
@@ -64,6 +67,7 @@ function text(value: unknown, fallback = ""): string {
 }
 
 export function formTypeTitle(type: string): string {
+  if (type === "health-case") return "Initial Symptoms";
   if (type === "medical-history") return "Medical History";
   if (type === "production-history") return "Production History";
   return type
@@ -145,6 +149,10 @@ function parseDashboardFields(
   });
 }
 
+function caseSection(value: unknown): CaseSection | undefined {
+  return value === "treatment" || value === "medicine" ? value : undefined;
+}
+
 function parseForm(value: unknown): FarmTemplateForm | null {
   if (!isObject(value) || !Array.isArray(value.steps)) return null;
   const steps = value.steps.flatMap((step) => {
@@ -153,6 +161,7 @@ function parseForm(value: unknown): FarmTemplateForm | null {
       {
         id: text(step.id, "step"),
         title: text(step.title, "Details"),
+        caseSection: caseSection(step.caseSection),
         fields: parseFields(step.fields),
       },
     ];
@@ -193,7 +202,7 @@ export async function animalPhotoPromptKey(): Promise<string> {
   }
 }
 
-export async function uploadFarmImage(
+export async function uploadFarmMedia(
   uri: string,
   fileName: string,
   farmId: string,
@@ -219,17 +228,39 @@ export async function uploadFarmImage(
   const fileUrl = text(data?.fileUrl);
   const contentType = text(data?.contentType);
   if (!uploadUrl || !fileUrl || !contentType)
-    throw new Error("The image upload link was incomplete.");
+    throw new Error("The upload link was incomplete.");
   const file = new File(uri);
   const info = file.info();
-  if (!info.exists) throw new Error("The selected image could not be read.");
+  if (!info.exists) throw new Error("The selected file could not be read.");
   const uploaded = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: await file.bytes(),
   });
-  if (!uploaded.ok) throw new Error("The image could not be uploaded.");
+  if (!uploaded.ok) throw new Error("The file could not be uploaded.");
   return fileUrl;
+}
+
+export function uploadHealthCaseMedia(
+  uri: string,
+  name: string,
+  farmId: string,
+  fallbackExtension: string,
+): Promise<string> {
+  const extension = /\.([a-z0-9]+)$/i.exec(name.trim())?.[1]?.toLowerCase() ??
+    fallbackExtension;
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return uploadFarmMedia(uri, `${unique}.${extension}`, farmId, "case");
+}
+
+export function uploadFarmImage(
+  uri: string,
+  fileName: string,
+  farmId: string,
+  species: string,
+  promptKey = "",
+): Promise<string> {
+  return uploadFarmMedia(uri, fileName, farmId, species, promptKey);
 }
 
 function aiFarmImageUrl(fileUrl: string): string {
@@ -561,6 +592,27 @@ function defaultUtilFields(key: string): FarmTemplateField[] {
       utilLeaf("quantity", "Quantity", "number"),
       utilLeaf("notes", "Notes", "textarea"),
     ];
+  if (key === "treatment")
+    return [
+      utilLeaf("treatment_name", "Treatment Name", "text", { required: true }),
+      utilLeaf("treatment_date", "Treatment Date", "date"),
+      utilLeaf("procedure", "Treatment Details", "textarea"),
+      utilLeaf("response", "Animal Response", "textarea"),
+      utilLeaf("follow_up", "Follow-up Date", "date"),
+      utilLeaf("notes", "Additional Notes", "textarea"),
+    ];
+  if (key === "medicine")
+    return [
+      utilLeaf("medicine_name", "Medicine Name", "text", { required: true }),
+      utilLeaf("strength", "Strength / Concentration", "text"),
+      utilLeaf("dose", "Dose and Unit", "text"),
+      utilLeaf("route", "Administration Route", "text"),
+      utilLeaf("frequency", "Frequency", "text"),
+      utilLeaf("duration", "Duration", "text"),
+      utilLeaf("start_date", "Start Date", "date"),
+      utilLeaf("withdrawal_period", "Withdrawal Period", "text"),
+      utilLeaf("notes", "Additional Notes", "textarea"),
+    ];
   return [utilLeaf("name", "Name", "text")];
 }
 
@@ -670,9 +722,35 @@ export async function getActiveTemplate(
   type: string,
 ): Promise<ActiveFarmTemplate> {
   const response = await fetch(
-    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${type}?active=true`,
+    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}?active=true`,
     { headers: { Accept: "application/json" } },
   );
+  if (type === "health-case" && response.status === 404)
+    throw new Error("No active Initial Symptoms template is available.");
+  const section = caseSection(type);
+  if (section && response.status === 404) {
+    const missing: unknown = await response.clone().json().catch(() => null);
+    if (
+      isObject(missing) &&
+      isObject(missing.error) &&
+      missing.error.message === "Form template not found"
+    ) {
+      const title = formTypeTitle(section);
+      return {
+        type: section,
+        name: title,
+        updatedAt: "",
+        adminConfig: {},
+        form: {
+          id: section,
+          name: title,
+          entity: section,
+          description: "",
+          steps: [{ id: section, title, fields: defaultUtilFields(section) }],
+        },
+      };
+    }
+  }
   const payload = await readJson(response);
   if (!isObject(payload) || !isObject(payload.data))
     throw new Error("The template response was incomplete.");
@@ -699,6 +777,36 @@ export async function getActiveTemplate(
     name: text(adminConfig.name, form.name),
     form: { ...form, steps },
     adminConfig,
+  };
+}
+
+export async function getActiveHealthCaseTemplate(): Promise<ActiveFarmTemplate> {
+  const sections = [
+    { type: "health-case", title: "Initial Symptoms" },
+    { type: "treatment", title: "Treatment" },
+    { type: "medicine", title: "Medicine" },
+  ] as const;
+  const templates = await Promise.all(
+    sections.map(({ type, title }) =>
+      getActiveTemplate(type).catch((error: unknown) => {
+        const reason =
+          error instanceof Error ? error.message : "Request failed.";
+        throw new Error(`Could not load the ${title} template. ${reason}`);
+      }),
+    ),
+  );
+  const [initial] = templates;
+  return {
+    ...initial,
+    form: {
+      ...initial.form,
+      steps: sections.map(({ type, title }, index) => ({
+        id: type,
+        title,
+        caseSection: caseSection(type),
+        fields: templates[index].form.steps.flatMap((step) => step.fields),
+      })),
+    },
   };
 }
 
@@ -822,6 +930,145 @@ export function childFormTypes(
   ];
 }
 
+export type HealthCaseFile = {
+  url: string;
+  name: string;
+  kind: "photo" | "video" | "audio" | "file";
+};
+
+export type HealthCaseUpdate = {
+  id: string;
+  at: string;
+  given: string;
+  medicine: string;
+  notes: string;
+  media: HealthCaseFile[];
+};
+
+export type HealthCase = {
+  entryId: string;
+  animalEntryId: string;
+  animalName: string;
+  status: "draft" | "saved";
+  openedAt: string;
+  caseTemplate?: { updatedAt: string; form: FarmTemplateForm };
+  caseValues?: Record<string, unknown>;
+  caseSectionValues?: Partial<Record<CaseSection, Record<string, unknown>>>;
+  draftStep?: number;
+  complaint: string;
+  symptoms: string[];
+  onset: string;
+  duration: string;
+  conditionPhotos: HealthCaseFile[];
+  evidence: HealthCaseFile[];
+  treatmentGiven: string;
+  medicine: string;
+  notes: string;
+  followUp: string;
+  media: HealthCaseFile[];
+  updates: HealthCaseUpdate[];
+};
+
+export function healthCaseValues(
+  health: HealthCase,
+  section?: CaseSection,
+): Record<string, unknown> {
+  if (section === "treatment")
+    return health.caseSectionValues?.treatment ?? {
+      treatment_name: health.treatmentGiven,
+    };
+  if (section === "medicine")
+    return health.caseSectionValues?.medicine ?? {
+      medicine_name: health.medicine,
+    };
+  return {
+    complaint: health.complaint,
+    symptoms: health.symptoms.join(", "),
+    onset: health.onset,
+    duration: health.duration,
+    treatment: health.treatmentGiven,
+    medicine: health.medicine,
+    notes: health.notes,
+    follow_up: health.followUp,
+    ...health.caseValues,
+  };
+}
+
+export function healthCaseAnswers(health: HealthCase): [string, string][] {
+  function rows(
+    fields: FarmTemplateField[],
+    answers: Record<string, unknown>,
+  ): [string, string][] {
+    return fields.flatMap((field): [string, string][] => {
+      const value = answers[field.key];
+      if (field.fields && isObject(value)) return rows(field.fields, value);
+      if (typeof value === "boolean")
+        return [[field.label, value ? "Yes" : "No"]];
+      if (
+        typeof value === "number" ||
+        (typeof value === "string" && value.trim())
+      )
+        return [[field.label, String(value)]];
+      return [];
+    });
+  }
+  if (health.caseTemplate) {
+    return health.caseTemplate.form.steps.flatMap((step) =>
+      rows(step.fields, healthCaseValues(health, step.caseSection)),
+    );
+  }
+  const legacyAnswers: [string, string][] = [
+    ["Reported Problem", health.complaint],
+    ["Observed Symptoms", health.symptoms.join(", ")],
+    ["Symptoms First Noticed", health.onset],
+    ["Symptom Duration", health.duration],
+    ["Treatment", health.treatmentGiven],
+    ["Medicine and dosage", health.medicine],
+    ["Additional Observations", health.notes],
+    ["Follow-up", health.followUp],
+  ];
+  return legacyAnswers.filter(([, value]) => value.trim());
+}
+
+export function updateHealthCaseAnswers(
+  health: HealthCase,
+  values: Record<string, unknown>,
+  section?: CaseSection,
+): HealthCase {
+  if (section) {
+    return {
+      ...health,
+      caseSectionValues: {
+        ...health.caseSectionValues,
+        [section]: { ...health.caseSectionValues?.[section], ...values },
+      },
+    };
+  }
+  function display(key: string): string {
+    const value = values[key];
+    return typeof value === "number" ? String(value) : text(value);
+  }
+  return {
+    ...health,
+    caseValues: { ...health.caseValues, ...values },
+    ...("complaint" in values ? { complaint: display("complaint") } : {}),
+    ...("symptoms" in values
+      ? {
+          symptoms: display("symptoms")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }
+      : {}),
+    ...("onset" in values ? { onset: display("onset") } : {}),
+    ...("duration" in values ? { duration: display("duration") } : {}),
+    ...("treatment" in values ? { treatmentGiven: display("treatment") } : {}),
+    ...("medicine" in values ? { medicine: display("medicine") } : {}),
+    ...("notes" in values ? { notes: display("notes") } : {}),
+    ...("follow_up" in values ? { followUp: display("follow_up") } : {}),
+  };
+}
+
 export type FarmHistoryReview = {
   entryId: string;
   kind: FarmHistoryKind;
@@ -838,6 +1085,7 @@ export type FarmAnimalReview = {
   sections: FarmReviewSection[];
   photos: string[];
   records: FarmHistoryReview[];
+  cases: HealthCase[];
 };
 
 export type FarmReview = {
@@ -1088,6 +1336,169 @@ function reviewUtils(
   });
 }
 
+function caseFiles(value: unknown): HealthCaseFile[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (
+      !isObject(item) ||
+      typeof item.url !== "string" ||
+      !item.url.startsWith("http")
+    )
+      return [];
+    const kind =
+      item.kind === "video" || item.kind === "audio" || item.kind === "file"
+        ? item.kind
+        : "photo";
+    return [{ url: item.url, name: text(item.name, "File"), kind }];
+  });
+}
+
+function caseUpdates(value: unknown): HealthCaseUpdate[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isObject(item)) return [];
+    return [
+      {
+        id: text(item.id, `${Date.now()}`),
+        at: text(item.at),
+        given: text(item.given),
+        medicine: text(item.medicine),
+        notes: text(item.notes),
+        media: caseFiles(item.media),
+      },
+    ];
+  });
+}
+
+function parseHealthCase(value: unknown): HealthCase | null {
+  if (
+    !isObject(value) ||
+    !isObject(value.template) ||
+    value.template.type !== "health-case" ||
+    !isObject(value.values)
+  )
+    return null;
+  const values = value.values;
+  const form = parseForm(value.form);
+  const sections = isObject(values.caseSectionValues)
+    ? values.caseSectionValues
+    : {};
+  const symptoms = Array.isArray(values.symptoms)
+    ? values.symptoms.filter(
+        (item): item is string =>
+          typeof item === "string" && Boolean(item.trim()),
+      )
+    : [];
+  return {
+    entryId: text(value.entryId),
+    animalEntryId: text(value.animalEntryId),
+    animalName: text(values.animalName, "Animal"),
+    status: values.status === "saved" ? "saved" : "draft",
+    openedAt: text(values.openedAt, text(value.submittedAt)),
+    caseTemplate:
+      form && isObject(values.caseValues)
+        ? { form, updatedAt: text(value.template.updatedAt) }
+        : undefined,
+    caseValues: isObject(values.caseValues) ? values.caseValues : undefined,
+    caseSectionValues: {
+      treatment: isObject(sections.treatment) ? sections.treatment : undefined,
+      medicine: isObject(sections.medicine) ? sections.medicine : undefined,
+    },
+    draftStep:
+      typeof values.draftStep === "number" && Number.isInteger(values.draftStep)
+        ? values.draftStep
+        : undefined,
+    complaint: text(values.complaint),
+    symptoms,
+    onset: text(values.onset),
+    duration: text(values.duration),
+    conditionPhotos: caseFiles(values.conditionPhotos),
+    evidence: caseFiles(values.evidence),
+    treatmentGiven: text(values.treatmentGiven),
+    medicine: text(values.medicine),
+    notes: text(values.notes),
+    followUp: text(values.followUp),
+    media: caseFiles(values.media),
+    updates: caseUpdates(values.updates),
+  };
+}
+
+function healthCaseEntry(health: HealthCase): Record<string, unknown> {
+  return {
+    entryId: health.entryId,
+    animalEntryId: health.animalEntryId,
+    submittedAt: health.status === "saved" ? health.openedAt : null,
+    template: {
+      type: "health-case",
+      updatedAt: health.caseTemplate?.updatedAt || health.openedAt,
+    },
+    form: health.caseTemplate?.form ?? {
+      id: "health-case",
+      name: "Health case",
+      description: "",
+      entity: "health-case",
+      steps: [{ id: "case", title: "Case", fields: [] }],
+    },
+    values: {
+      animalName: health.animalName,
+      status: health.status,
+      openedAt: health.openedAt,
+      caseValues: health.caseValues,
+      caseSectionValues: health.caseSectionValues,
+      draftStep: health.status === "draft" ? health.draftStep : undefined,
+      complaint: health.complaint.trim(),
+      symptoms: health.symptoms,
+      onset: health.onset.trim(),
+      duration: health.duration.trim(),
+      conditionPhotos: health.conditionPhotos,
+      evidence: health.evidence,
+      treatmentGiven: health.treatmentGiven.trim(),
+      medicine: health.medicine.trim(),
+      notes: health.notes.trim(),
+      followUp: health.followUp.trim(),
+      media: health.media,
+      updates: health.updates,
+    },
+  };
+}
+
+export async function getHealthCase(
+  farmId: string,
+  entryId: string,
+): Promise<HealthCase> {
+  const { entries } = await readFarmDocument(farmId);
+  const health = entries
+    .map(parseHealthCase)
+    .find((item) => item?.entryId === entryId);
+  if (!health) throw new Error("This case could not be found.");
+  return health;
+}
+
+export async function saveHealthCase(
+  farmId: string,
+  health: HealthCase,
+): Promise<void> {
+  if (!health.animalEntryId) throw new Error("Choose an animal for this case.");
+  if (
+    health.status === "saved" &&
+    !health.caseTemplate &&
+    !health.complaint.trim()
+  )
+    throw new Error("Describe what is wrong with the animal.");
+  const { data, entries } = await readFarmDocument(farmId);
+  const next = healthCaseEntry(health);
+  const index = entries.findIndex(
+    (item) => isObject(item) && item.entryId === health.entryId,
+  );
+  const nextEntries = entries.slice();
+  if (index >= 0) nextEntries[index] = next;
+  else nextEntries.push(next);
+  await saveFarmDocument(farmId, {
+    ...data,
+    farmVitals: { version: 1, entries: nextEntries },
+  });
+}
+
 export async function getFarmReview(farmId: string): Promise<FarmReview> {
   const response = await fetch(
     `${FARM_VITALS_API_URL}/farm-vitals/farms/${encodeURIComponent(farmId)}`,
@@ -1112,38 +1523,41 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     rows: reviewRows(step.fields, values),
     utils: reviewUtils(step.fields, values),
   }));
-  const histories = entries.flatMap((item): (FarmHistoryReview & {
-    animalEntryId: string;
-  })[] => {
-    if (!isObject(item)) return [];
-    const kind = historyKind(item);
-    const animalEntryId =
-      typeof item.animalEntryId === "string" ? item.animalEntryId : "";
-    if (!kind) return [];
-    const historyForm = isObject(item.form) ? parseForm(item.form) : null;
-    const historyValues = isObject(item.values) ? item.values : {};
-    const sections = (historyForm?.steps ?? [])
-      .map((step) => ({
-        title: step.title,
-        rows: reviewRows(step.fields, historyValues),
-      }))
-      .filter((section) => section.rows.length > 0);
-    const summary = sections
-      .flatMap((section) => section.rows)
-      .find((row) => row.value !== "Not provided");
-    return [
-      {
-        animalEntryId,
-        entryId: text(item.entryId, kind),
-        kind,
-        name:
-          summary?.value ??
-          text(historyForm?.name, formTypeTitle(kind)),
-        submittedAt: typeof item.submittedAt === "string" ? item.submittedAt : null,
-        sections,
-      },
-    ];
-  });
+  const histories = entries.flatMap(
+    (
+      item,
+    ): (FarmHistoryReview & {
+      animalEntryId: string;
+    })[] => {
+      if (!isObject(item)) return [];
+      const kind = historyKind(item);
+      const animalEntryId =
+        typeof item.animalEntryId === "string" ? item.animalEntryId : "";
+      if (!kind || kind === "health-case") return [];
+      const historyForm = isObject(item.form) ? parseForm(item.form) : null;
+      const historyValues = isObject(item.values) ? item.values : {};
+      const sections = (historyForm?.steps ?? [])
+        .map((step) => ({
+          title: step.title,
+          rows: reviewRows(step.fields, historyValues),
+        }))
+        .filter((section) => section.rows.length > 0);
+      const summary = sections
+        .flatMap((section) => section.rows)
+        .find((row) => row.value !== "Not provided");
+      return [
+        {
+          animalEntryId,
+          entryId: text(item.entryId, kind),
+          kind,
+          name: summary?.value ?? text(historyForm?.name, formTypeTitle(kind)),
+          submittedAt:
+            typeof item.submittedAt === "string" ? item.submittedAt : null,
+          sections,
+        },
+      ];
+    },
+  );
   const animals = entries.flatMap((item): FarmAnimalReview[] => {
     if (!isObject(item) || !isObject(item.form) || item.form.entity !== "animal")
       return [];
@@ -1151,6 +1565,10 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     const animalValues = isObject(item.values) ? item.values : {};
     const animalId = text(item.entryId, text(animalForm?.id, "animal"));
     const linked = histories.filter((history) => history.animalEntryId === animalId);
+    const cases = entries.flatMap((entry) => {
+      const health = parseHealthCase(entry);
+      return health && health.animalEntryId === animalId ? [health] : [];
+    });
     return [
       {
         entryId: animalId,
@@ -1165,6 +1583,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
           .filter((section) => section.rows.length > 0),
         photos: animalPhotos(animalValues),
         records: linked,
+        cases,
       },
     ];
   });

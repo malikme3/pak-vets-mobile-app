@@ -30,7 +30,8 @@ Main entry is `index.ts` (`expo-router/entry`). Root providers and stack live in
 
 - `/farm-vitals` public Farm Vitals introduction
 - `/create-farm` public farm registration
-- `/farm-dashboard` public submitted-farm review
+- `/farm-board` public Farms dashboard
+- `/farm-dashboard?farmId=…` public farm details
 - `/add-farm-animal` public animal entry for an open farm
 - `/farm-animal` public animal details for an animal on a farm
 - `/farm-photos` public photo gallery for an animal

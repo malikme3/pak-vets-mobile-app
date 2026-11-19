@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import { savedGroupValues, UtilSheet } from "../features/farm-vitals/template-entry";
@@ -18,13 +18,11 @@ import {
   childFormTypes,
   getFarmReview,
   listFormTypes,
-  listSubmittedFarms,
   updateFarmGroup,
   type FarmFormType,
   type FarmReview,
   type FarmReviewSection,
   type FarmReviewUtil,
-  type SubmittedFarm,
 } from "../services/farmVitalsApi";
 
 const colors = {
@@ -108,12 +106,10 @@ function CollapseSection({
 export default function FarmDashboardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ farmId?: string }>();
-  const [farms, setFarms] = useState<SubmittedFarm[]>([]);
+  const farmId = Array.isArray(params.farmId) ? params.farmId[0] : params.farmId;
   const [review, setReview] = useState<FarmReview | null>(null);
   const [formTypes, setFormTypes] = useState<FarmFormType[]>([]);
-  const [reviewId, setReviewId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [opening, setOpening] = useState(false);
+  const [opening, setOpening] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [openUtils, setOpenUtils] = useState<Record<string, boolean>>({});
@@ -123,29 +119,8 @@ export default function FarmDashboardScreen() {
   const { width } = useWindowDimensions();
   const fieldColumns = width >= 840 ? 4 : width >= 560 ? 3 : 2;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setFarms(await listSubmittedFarms());
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Submitted farms could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   const openFarm = useCallback(async (farmId: string, quiet = false) => {
     if (!quiet) setOpening(true);
-    setReviewId(farmId);
     setError(null);
     try {
       const [next, types] = await Promise.all([
@@ -163,12 +138,6 @@ export default function FarmDashboardScreen() {
       if (!quiet) setOpening(false);
     }
   }, []);
-
-  useEffect(() => {
-    const requested = params.farmId;
-    const farmId = Array.isArray(requested) ? requested[0] : requested;
-    if (farmId) void openFarm(farmId);
-  }, [openFarm, params.farmId]);
 
   function toggleSection(key: string, fallback: boolean) {
     setOpenSections((current) => ({
@@ -202,10 +171,11 @@ export default function FarmDashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!reviewId) return;
-      void openFarm(reviewId, true);
-    }, [openFarm, reviewId]),
+      if (farmId) void openFarm(farmId);
+    }, [openFarm, farmId]),
   );
+
+  if (!farmId) return <Redirect href="/farm-board" />;
 
   const sections = review ? visibleSections(review) : [];
   const owner = review ? ownerLine(review) : "";
@@ -217,79 +187,26 @@ export default function FarmDashboardScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => {
-            if (review) {
-              setReview(null);
-              setReviewId(null);
-              return;
-            }
-            router.back();
-          }}
+          onPress={() => router.dismissTo("/farm-board")}
           style={styles.back}
         >
           <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>
-            {review ? "Submitted farms" : "Farm Vitals"}
-          </Text>
+          <Text style={styles.backText}>Farms dashboard</Text>
         </Pressable>
 
-        {loading || opening ? (
+        {opening ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
-            <Text style={styles.help}>
-              {opening ? "Opening farm…" : "Loading farms…"}
-            </Text>
+            <Text style={styles.help}>Opening farm…</Text>
           </View>
         ) : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        {!review && !loading ? (
-          <>
-            <View style={styles.titleRow}>
-              <View style={styles.titleCopy}>
-                <Text accessibilityRole="header" style={styles.title}>
-                  Submitted farms
-                </Text>
-                <Text style={styles.help}>
-                  {farms.length
-                    ? `${farms.length} registered`
-                    : "No farms have been submitted yet."}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Refresh farms"
-                onPress={() => void load()}
-                style={styles.iconButton}
-              >
-                <Feather name="refresh-cw" size={16} color={colors.green} />
-              </Pressable>
-            </View>
-            {farms.map((farm) => {
-              const date = when(farm.submittedAt);
-              return (
-                <Pressable
-                  key={farm.farmId}
-                  accessibilityRole="button"
-                  onPress={() => void openFarm(farm.farmId)}
-                  style={styles.row}
-                >
-                  <View style={styles.mark}>
-                    <Text style={styles.initial}>
-                      {farm.name.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.copy}>
-                    <Text numberOfLines={1} style={styles.rowTitle}>
-                      {farm.name}
-                    </Text>
-                    {date ? <Text style={styles.help}>{date}</Text> : null}
-                  </View>
-                  <Feather name="chevron-right" size={16} color={colors.green} />
-                </Pressable>
-              );
-            })}
-          </>
+        {error ? (
+          <View>
+            <Text style={styles.error}>{error}</Text>
+            <Pressable accessibilityRole="button" onPress={() => void openFarm(farmId)}>
+              <Text style={styles.backText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : null}
 
         {review && !opening ? (
@@ -549,24 +466,6 @@ const styles = StyleSheet.create({
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  titleCopy: { flex: 1, gap: 2 },
-  title: {
-    color: colors.ink,
-    fontSize: 24,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   identity: { flexDirection: "row", alignItems: "center", gap: 12 },
   farmMark: {
     width: 52,
@@ -687,14 +586,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   rowTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
-  mark: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.mint,
-  },
   avatar: {
     width: 36,
     height: 36,
