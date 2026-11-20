@@ -24,11 +24,20 @@ export type FarmTemplateField = {
   rules: FarmFieldRules;
   source?: string;
   showOnDashboard?: boolean;
+  fullWidth?: boolean;
   fields?: FarmTemplateField[];
   promptKey?: string;
 };
 
 type CaseSection = "treatment" | "medicine";
+
+export type FarmDashboardField = {
+  key: string;
+  source?: string;
+  groupKey?: string;
+  filter?: boolean;
+  fullWidth?: boolean;
+};
 
 export type FarmTemplateForm = {
   id: string;
@@ -36,12 +45,7 @@ export type FarmTemplateForm = {
   description: string;
   entity: string;
   status?: string;
-  dashboardFields?: {
-    key: string;
-    source?: string;
-    groupKey?: string;
-    filter?: boolean;
-  }[];
+  dashboardFields?: FarmDashboardField[];
   steps: {
     id: string;
     title: string;
@@ -110,6 +114,7 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       type: text(item.type, "text"),
       helpText: text(item.helpText),
       rules: parseRules(item.rules),
+      fullWidth: item.fullWidth === true,
     };
     if (typeof item.source === "string" && item.source.trim())
       field.source = item.source.trim();
@@ -129,7 +134,7 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
 
 function parseDashboardFields(
   value: unknown,
-): { key: string; source?: string; groupKey?: string; filter?: boolean }[] {
+): FarmDashboardField[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!isObject(item) || typeof item.key !== "string" || !item.key.trim())
@@ -144,6 +149,9 @@ function parseDashboardFields(
           ? { groupKey: item.groupKey.trim() }
           : {}),
         ...(item.filter === true ? { filter: true } : {}),
+        ...(typeof item.fullWidth === "boolean"
+          ? { fullWidth: item.fullWidth }
+          : {}),
       },
     ];
   });
@@ -826,6 +834,7 @@ export type FarmReviewRow = {
   key?: string;
   groupKey?: string;
   filter?: boolean;
+  fullWidth?: boolean;
   label: string;
   value: string;
 };
@@ -1114,27 +1123,42 @@ function nestedValue(value: unknown, key: string): unknown {
   return undefined;
 }
 
-function fieldLabel(fields: FarmTemplateField[], key: string): string {
+function fieldDefinition(
+  fields: FarmTemplateField[],
+  key: string,
+): FarmTemplateField | undefined {
   for (const field of fields) {
-    if (field.key === key) return field.label || field.key;
-    const nested = field.fields ? fieldLabel(field.fields, key) : "";
+    if (field.key === key) return field;
+    const nested = field.fields ? fieldDefinition(field.fields, key) : undefined;
     if (nested) return nested;
   }
-  return "";
+  return undefined;
+}
+
+function fieldLabel(fields: FarmTemplateField[], key: string): string {
+  const field = fieldDefinition(fields, key);
+  return field ? field.label || field.key : "";
 }
 
 function dashboardRows(
   fields: FarmTemplateField[],
   values: Record<string, unknown>,
-  selected: { key: string; groupKey?: string; filter?: boolean }[],
+  selected: FarmDashboardField[],
 ): FarmReviewRow[] {
-  const chosen: { key: string; groupKey?: string; filter?: boolean }[] =
+  const chosen: FarmDashboardField[] =
     selected.length
       ? selected
       : fields
           .filter((field) => field.showOnDashboard === true && !field.source)
           .map((field) => ({ key: field.key }));
   return chosen.flatMap((choice) => {
+    const group = choice.groupKey
+      ? fields.find((field) => field.key === choice.groupKey)
+      : undefined;
+    const definition = fieldDefinition(
+      choice.groupKey ? group?.fields ?? [] : fields,
+      choice.key,
+    );
     const source = choice.groupKey ? values[choice.groupKey] : values;
     const value = choice.groupKey
       ? nestedValue(source, choice.key)
@@ -1145,7 +1169,11 @@ function dashboardRows(
         key: choice.key,
         ...(choice.groupKey ? { groupKey: choice.groupKey } : {}),
         ...(choice.filter ? { filter: true } : {}),
-        label: fieldLabel(fields, choice.key) || choice.key,
+        fullWidth:
+          typeof choice.fullWidth === "boolean"
+            ? choice.fullWidth
+            : definition?.fullWidth === true,
+        label: definition?.label || fieldLabel(fields, choice.key) || choice.key,
         value: shown === "Not provided" ? "" : shown,
       },
     ];

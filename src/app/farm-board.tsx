@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -109,8 +108,6 @@ function matches(farm: FarmDashboardEntry, query: string): boolean {
 
 export default function FarmBoardScreen() {
   const router = useRouter();
-  const { width, fontScale } = useWindowDimensions();
-  const singleColumn = width / fontScale < 340;
   const [farms, setFarms] = useState<FarmDashboardEntry[]>([]);
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
@@ -298,7 +295,7 @@ export default function FarmBoardScreen() {
                       key={`${filterId(row)}-${index}`}
                       style={[
                         styles.fact,
-                        (singleColumn || place.details.length === 1) && styles.factWide,
+                        row.fullWidth === true && styles.factWide,
                       ]}
                     >
                       <Text style={styles.factLabel}>{row.label}</Text>

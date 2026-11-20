@@ -351,30 +351,8 @@ function choiceOptions(field: FarmTemplateField): string[] {
     .filter(Boolean);
 }
 
-function isWideField(field: FarmTemplateField, columns = 2): boolean {
-  const longLabel = columns <= 2 && (field.label?.trim().length ?? 0) > 12;
-  return (
-    isGroup(field) ||
-    field.key === "full_name" ||
-    field.key === "phone" ||
-    field.key === "nic" ||
-    isPakistanPhone(field) ||
-    isPakistanNic(field) ||
-    longLabel ||
-    (field.type === "date" && columns <= 2) ||
-    field.type === "textarea" ||
-    field.type === "upload" ||
-    field.type === "image" ||
-    field.type === "contact" ||
-    field.type === "location" ||
-    choiceOptions(field).length > 0
-  );
-}
-
-function layoutRows(
-  fields: FarmTemplateField[],
-  columns: number,
-): FarmTemplateField[][] {
+function layoutRows(fields: FarmTemplateField[]): FarmTemplateField[][] {
+  const columns = 2;
   const rows: FarmTemplateField[][] = [];
   let compact: FarmTemplateField[] = [];
   const flush = () => {
@@ -384,13 +362,30 @@ function layoutRows(
     }
   };
   for (const field of fields) {
-    if (isWideField(field, columns)) {
+    if (field.fullWidth === true) {
       flush();
       rows.push([field]);
     } else compact.push(field);
   }
   flush();
   return rows;
+}
+
+function FieldRow({
+  fields,
+  children,
+}: {
+  fields: FarmTemplateField[];
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.fieldRow}>
+      {children}
+      {fields.length === 1 && fields[0].fullWidth !== true ? (
+        <View style={styles.fieldSlot} />
+      ) : null}
+    </View>
+  );
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -498,8 +493,8 @@ function FieldControl({
             <Text style={stacked ? styles.help : styles.optional}>{hint}</Text>
           ) : null}
         </View>
-        {layoutRows(field.fields ?? [], columns).map((row) => (
-          <View key={row.map((child) => child.id).join("-")} style={styles.fieldRow}>
+        {layoutRows(field.fields ?? []).map((row) => (
+          <FieldRow key={row.map((child) => child.id).join("-")} fields={row}>
             {row.map((child) => (
               <View key={child.id} style={styles.fieldSlot}>
                 <FieldControl
@@ -516,7 +511,7 @@ function FieldControl({
                 />
               </View>
             ))}
-          </View>
+          </FieldRow>
         ))}
       </View>
     );
@@ -807,10 +802,10 @@ export function UtilSheet({
             contentContainerStyle={styles.sheetBody}
             keyboardShouldPersistTaps="handled"
           >
-            {layoutRows(field.fields ?? [], columns).map((row) => (
-              <View
+            {layoutRows(field.fields ?? []).map((row) => (
+              <FieldRow
                 key={row.map((child) => child.id).join("-")}
-                style={styles.fieldRow}
+                fields={row}
               >
                 {row.map((child) => (
                   <View key={child.id} style={styles.fieldSlot}>
@@ -825,12 +820,15 @@ export function UtilSheet({
                       species={species}
                       embedded={isGroup(child)}
                       onChange={(next) =>
-                        setDraft((current) => ({ ...current, [child.key]: next }))
+                        setDraft((current) => ({
+                          ...current,
+                          [child.key]: next,
+                        }))
                       }
                     />
                   </View>
                 ))}
-              </View>
+              </FieldRow>
             ))}
           </ScrollView>
           {saveError ? <Text style={styles.error}>{saveError}</Text> : null}
@@ -954,11 +952,8 @@ export function TemplateEntryForm({
           {steps.length === 1 ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
-          {layoutRows(directFields, fieldColumns).map((row) => (
-            <View
-              key={row.map((field) => field.id).join("-")}
-              style={styles.fieldRow}
-            >
+          {layoutRows(directFields).map((row) => (
+            <FieldRow key={row.map((field) => field.id).join("-")} fields={row}>
               {row.map((field) => {
                 const onChange = (value: Answer) =>
                   changeAnswer(field.key, value);
@@ -979,31 +974,41 @@ export function TemplateEntryForm({
                   </View>
                 );
               })}
-            </View>
+            </FieldRow>
           ))}
           {utilFields.length ? (
             <View style={styles.utilList}>
-              {utilFields.map((field) => {
-                const saved = hasAnswer(answers[field.key]);
-                return (
-                  <Pressable
-                    key={field.id}
-                    accessibilityRole="button"
-                    onPress={() => setOpenUtil(field.key)}
-                    style={styles.utilButton}
-                  >
-                    <Feather
-                      name={saved ? "check" : "plus"}
-                      size={16}
-                      color={colors.green}
-                    />
-                    <Text style={styles.utilText}>
-                      {saved ? field.label : `Add ${field.label}`}
-                    </Text>
-                    {saved ? <Text style={styles.optional}>Edit</Text> : null}
-                  </Pressable>
-                );
-              })}
+              {layoutRows(utilFields).map((row) => (
+                <FieldRow
+                  key={row.map((field) => field.id).join("-")}
+                  fields={row}
+                >
+                  {row.map((field) => {
+                    const saved = hasAnswer(answers[field.key]);
+                    return (
+                      <View key={field.id} style={styles.fieldSlot}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setOpenUtil(field.key)}
+                          style={styles.utilButton}
+                        >
+                          <Feather
+                            name={saved ? "check" : "plus"}
+                            size={16}
+                            color={colors.green}
+                          />
+                          <Text style={styles.utilText}>
+                            {saved ? field.label : `Add ${field.label}`}
+                          </Text>
+                          {saved ? (
+                            <Text style={styles.optional}>Edit</Text>
+                          ) : null}
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </FieldRow>
+              ))}
             </View>
           ) : null}
         </View>
