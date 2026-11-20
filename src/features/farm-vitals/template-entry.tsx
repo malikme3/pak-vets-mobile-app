@@ -463,7 +463,7 @@ function FieldControl({
   farmId,
   species,
   embedded = false,
-  outlinedLabels = false,
+  outlinedLabels = true,
   onChange,
 }: {
   field: FarmTemplateField;
@@ -898,13 +898,23 @@ export function UtilSheet({
   );
 }
 
+export function fullWidthFields(
+  fields: FarmTemplateField[],
+): FarmTemplateField[] {
+  return fields.map((field) => ({
+    ...field,
+    fullWidth: true,
+    ...(field.fields ? { fields: fullWidthFields(field.fields) } : {}),
+  }));
+}
+
 export function TemplateEntryForm({
   template,
   submitLabel,
   saving,
   initialValues,
   inlineGroups = false,
-  outlinedLabels = false,
+  outlinedLabels = true,
   farmId = "",
   onSubmit,
   renderField,

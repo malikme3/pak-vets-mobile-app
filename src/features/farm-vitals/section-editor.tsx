@@ -1,20 +1,12 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { TemplateEntryForm } from "./template-entry";
+import { TemplateEntryForm, fullWidthFields } from "./template-entry";
 import { farmButton } from "./presentation";
 import {
   updateFarmSection,
   type FarmSectionDraft,
   type FarmTemplateField,
 } from "../../services/farmVitalsApi";
-
-function editFields(fields: FarmTemplateField[]): FarmTemplateField[] {
-  return fields.map((field) => ({
-    ...field,
-    fullWidth: true,
-    ...(field.fields ? { fields: editFields(field.fields) } : {}),
-  }));
-}
 
 export function FarmSectionEditor({
   farmId,
@@ -70,7 +62,7 @@ export function FarmSectionEditor({
               {
                 id: "section",
                 title: "",
-                fields: editFields(fields),
+                fields: fullWidthFields(fields),
               },
             ],
           },

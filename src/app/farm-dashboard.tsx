@@ -1,3 +1,4 @@
+import { HeaderBackground } from "../features/farm-vitals/header-background";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useState, type ReactNode } from "react";
 import {
@@ -91,6 +92,7 @@ function CollapseSection({
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded }}
+          aria-expanded={expanded}
           onPress={onToggle}
           style={styles.sectionHeader}
         >
@@ -162,7 +164,10 @@ export default function FarmDashboardScreen() {
       ]);
       setReview(next);
       setFormTypes(types);
-      if (!quiet) setOpenSections({});
+      if (!quiet) {
+        setOpenSections({});
+        setOpenUtils({});
+      }
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -226,36 +231,55 @@ export default function FarmDashboardScreen() {
 
         {review && !opening ? (
           <>
-            <View style={styles.identity}>
-              <View style={styles.farmMark}>
-                <Feather name="home" size={22} color={colors.green} />
+            <HeaderBackground
+              imageUrl={review.headerBackgroundImageUrl}
+              style={styles.identity}
+            >
+              <View style={styles.identityTop}>
+                <View style={styles.farmMark}>
+                  <Feather name="home" size={21} color={colors.green} />
+                </View>
+                <View style={styles.copy}>
+                  <Text style={styles.profileLabel}>FARM PROFILE</Text>
+                  <Text accessibilityRole="header" style={styles.name}>
+                    {review.name}
+                  </Text>
+                  {owner ? (
+                    <Text style={styles.meta}>Owner · {owner}</Text>
+                  ) : null}
+                </View>
               </View>
-              <View style={styles.copy}>
-                <Text accessibilityRole="header" style={styles.name}>
-                  {review.name}
-                </Text>
-                <Text style={styles.meta}>
-                  {[owner, registered ? `Registered ${registered}` : ""]
-                    .filter(Boolean)
-                    .join(" · ") || "Farm"}
-                </Text>
+              <View style={styles.identityFooter}>
+                {registered ? (
+                  <View style={styles.registered}>
+                    <Feather name="calendar" size={13} color={colors.muted} />
+                    <Text
+                      accessibilityLabel={`Registered ${registered}`}
+                      style={styles.registrationDate}
+                    >
+                      {registered}
+                    </Text>
+                  </View>
+                ) : null}
+                <View
+                  accessible
+                  accessibilityLabel={`${review.animals.length} registered ${review.animals.length === 1 ? "animal" : "animals"}`}
+                  style={styles.animalBadge}
+                >
+                  <Feather name="activity" size={13} color={colors.surface} />
+                  <Text style={styles.animalBadgeText}>
+                    {review.animals.length}{" "}
+                    {review.animals.length === 1 ? "animal" : "animals"}
+                  </Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.stats}>
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{review.animals.length}</Text>
-                <Text style={styles.statLabel}>Animals</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{sections.length}</Text>
-                <Text style={styles.statLabel}>Sections</Text>
-              </View>
-            </View>
+            </HeaderBackground>
             {sections.map((section, index) => {
               const key = `farm-${index}`;
               const directFields =
                 section.edit?.fields.filter((field) => !field.source) ?? [];
-              const expanded = editing === key || (openSections[key] ?? true);
+              const expanded =
+                editing === key || (openSections[key] ?? index === 0);
               return (
                 <CollapseSection
                   key={key}
@@ -263,7 +287,7 @@ export default function FarmDashboardScreen() {
                   count={section.rows.length + (section.utils?.length ?? 0)}
                   expanded={expanded}
                   onToggle={() => {
-                    if (editing !== key) toggleSection(key, true);
+                    if (editing !== key) toggleSection(key, index === 0);
                   }}
                   onEdit={
                     directFields.length ? () => setEditing(key) : undefined
@@ -292,13 +316,14 @@ export default function FarmDashboardScreen() {
                   {(section.utils ?? []).map((util) => {
                     const utilKey = `${key}-${util.key}`;
                     const open =
-                      editing === utilKey || (openUtils[utilKey] ?? true);
+                      editing === utilKey || (openUtils[utilKey] ?? false);
                     return (
                       <View key={utilKey}>
                         <View style={styles.utilHeading}>
                           <Pressable
                             accessibilityRole="button"
                             accessibilityState={{ expanded: open }}
+                            aria-expanded={open}
                             onPress={() => {
                               if (editing !== utilKey)
                                 setOpenUtils((current) => ({
@@ -508,45 +533,62 @@ const styles = StyleSheet.create({
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
-  identity: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    ...farmCard,
-    padding: 14,
-  },
+  identity: { ...farmCard, padding: 14, gap: 12 },
+  identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   farmMark: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.mint,
   },
-  copy: { flex: 1, gap: 2 },
+  copy: { flex: 1, minWidth: 0, gap: 3 },
+  profileLabel: {
+    color: colors.green,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.3,
+  },
   name: {
     color: colors.ink,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "800",
     letterSpacing: -0.4,
   },
-  meta: { color: colors.ink, fontSize: 14, fontWeight: "600" },
-  stats: { flexDirection: "row", gap: 8 },
-  stat: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 1,
-    ...farmCard,
+  meta: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  identityFooter: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  statValue: { color: colors.ink, fontSize: 20, fontWeight: "800" },
-  statLabel: {
+  registered: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  registrationDate: {
     color: colors.muted,
     fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+    lineHeight: 16,
+    flexShrink: 1,
   },
+  animalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.green,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  animalBadgeText: { color: colors.surface, fontSize: 12, fontWeight: "700" },
   card: {
     ...farmCard,
   },

@@ -1,3 +1,4 @@
+import { HeaderBackground } from "../features/farm-vitals/header-background";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -333,7 +334,10 @@ export default function FarmAnimalScreen() {
         ) : null}
         {animal ? (
           <>
-            <View style={styles.identity}>
+            <HeaderBackground
+              imageUrl={animal.headerBackgroundImageUrl}
+              style={styles.identity}
+            >
               <View style={styles.avatar}>
                 {photoPairs[0]?.original ? (
                   <Pressable
@@ -369,7 +373,7 @@ export default function FarmAnimalScreen() {
                 </Text>
                 {added ? <Text style={styles.help}>Added {added}</Text> : null}
               </View>
-            </View>
+            </HeaderBackground>
             <Pressable
               accessibilityRole="button"
               disabled={addingPhotos}

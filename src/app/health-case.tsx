@@ -1,3 +1,5 @@
+import { CaseFlowHeader } from "../features/farm-vitals/case-flow-header";
+import { OutlinedField } from "../features/farm-vitals/outlined-field";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import {
   useCallback,
@@ -8,6 +10,7 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Image,
   Modal,
   Pressable,
@@ -29,6 +32,7 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import {
   getActiveHealthCaseTemplate,
+  getActiveTemplate,
   getFarmReview,
   getHealthCase,
   healthCaseAnswers,
@@ -126,6 +130,23 @@ function blankCase(animalEntryId: string, animalName: string): HealthCase {
   };
 }
 
+function refreshFieldWidths(
+  fields: FarmTemplateField[],
+  latest: FarmTemplateField[],
+): FarmTemplateField[] {
+  return fields.map((field) => {
+    const saved = latest.find((item) => item.key === field.key);
+    if (!saved) return field;
+    return {
+      ...field,
+      fullWidth: saved.fullWidth === true,
+      ...(field.fields && saved.fields
+        ? { fields: refreshFieldWidths(field.fields, saved.fields) }
+        : {}),
+    };
+  });
+}
+
 export default function HealthCaseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -164,6 +185,60 @@ export default function HealthCaseScreen() {
   const choosingAnimal = needsAnimal && step === 0;
   const reviewing = template !== null && step === steps.length - 1;
 
+  const layoutStepId = activeStep?.id;
+  const layoutType = activeStep
+    ? (activeStep.caseSection ?? "health-case")
+    : null;
+  useEffect(() => {
+    if (loading || !layoutStepId || !layoutType) return;
+    const type = layoutType;
+    let active = true;
+    let request = 0;
+    async function refreshLayout() {
+      const sequence = ++request;
+      try {
+        const latest = await getActiveTemplate(type);
+        if (!active || sequence !== request) return;
+        const latestFields = latest.form.steps.flatMap((item) => item.fields);
+        const applyWidths = (form: ActiveFarmTemplate["form"]) => ({
+          ...form,
+          steps: form.steps.map((item) =>
+            item.id === layoutStepId
+              ? {
+                  ...item,
+                  fields: refreshFieldWidths(item.fields, latestFields),
+                }
+              : item,
+          ),
+        });
+        setTemplate((current) =>
+          current ? { ...current, form: applyWidths(current.form) } : current,
+        );
+        setHealth((current) =>
+          current.caseTemplate
+            ? {
+                ...current,
+                caseTemplate: {
+                  ...current.caseTemplate,
+                  form: applyWidths(current.caseTemplate.form),
+                },
+              }
+            : current,
+        );
+      } catch {
+        // Keep the loaded layout and draft available when offline.
+      }
+    }
+    void refreshLayout();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshLayout();
+    });
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [loading, layoutStepId, layoutType]);
+
   const load = useCallback(async () => {
     if (!farmId) {
       setLoading(false);
@@ -175,10 +250,17 @@ export default function HealthCaseScreen() {
     drafts.current = {};
     setError(null);
     try {
-      const [review, active, saved] = await Promise.all([
+      const saved = entryId ? await getHealthCase(farmId, entryId) : null;
+      if (saved?.status === "saved") {
+        router.replace({
+          pathname: "/health-case-detail",
+          params: { farmId, entryId: saved.entryId },
+        });
+        return;
+      }
+      const [review, active] = await Promise.all([
         getFarmReview(farmId),
         getActiveHealthCaseTemplate(),
-        entryId ? getHealthCase(farmId, entryId) : null,
       ]);
       const animal = review.animals.find(
         (item) => item.entryId === animalEntryId,
@@ -216,7 +298,7 @@ export default function HealthCaseScreen() {
     } finally {
       setLoading(false);
     }
-  }, [animalEntryId, entryId, farmId]);
+  }, [animalEntryId, entryId, farmId, router]);
 
   useEffect(() => {
     void load();
@@ -464,30 +546,25 @@ export default function HealthCaseScreen() {
           <Feather name="arrow-left" size={18} color={colors.green} />
           <Text style={styles.backText}>{step > 0 ? "Back" : farmName}</Text>
         </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          {entryId ? "Edit case" : "Add case"}
-        </Text>
-        <View style={styles.progress}>
-          {steps.map((label, index) => (
-            <View key={index} style={styles.progressItem}>
-              <View style={[styles.dot, index <= step ? styles.dotOn : null]} />
-              <Text
-                style={[
-                  styles.progressText,
-                  index === step ? styles.progressCurrent : null,
-                ]}
-              >
-                {label}
-              </Text>
-            </View>
-          ))}
-        </View>
-        {health.animalName ? (
-          <Text style={styles.summaryLine}>
-            {health.animalName}
-            {health.openedAt ? ` · ${when(health.openedAt)}` : ""}
-          </Text>
-        ) : null}
+        <CaseFlowHeader
+          title={entryId ? "Resume draft" : "Add case"}
+          animalName={health.animalName}
+          farmName={farmName}
+          date={health.openedAt ? when(health.openedAt) : ""}
+          steps={template ? steps : []}
+          step={step}
+          description={
+            choosingAnimal
+              ? "Select the animal this case is for."
+              : reviewing
+                ? "Check the details below before saving this case."
+                : activeStep?.caseSection === "treatment"
+                  ? "Record the treatment provided and any instructions."
+                  : activeStep?.caseSection === "medicine"
+                    ? "Add medicine details, dosage, and administration instructions."
+                    : "Describe the reported problem and initial observations."
+          }
+        />
         {loading ? <ActivityIndicator color={colors.green} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {choosingAnimal && template && !loading ? (
@@ -540,6 +617,7 @@ export default function HealthCaseScreen() {
                 steps: [
                   {
                     ...activeStep,
+                    title: "",
                     fields: activeStep.fields.map((field) =>
                       !activeStep.caseSection && attachmentTarget(field)
                         ? { ...field, rules: {} }
@@ -569,11 +647,9 @@ export default function HealthCaseScreen() {
                   (item) => item.key === field.key,
                 )?.rules.required;
                 return (
-                  <View style={styles.block}>
-                    <Text style={styles.label}>
-                      {field.label}
-                      {required ? " *" : ""}
-                    </Text>
+                  <OutlinedField
+                    label={`${field.label}${required ? " *" : ""}`}
+                  >
                     {field.helpText ? (
                       <Text style={styles.help}>{field.helpText}</Text>
                     ) : null}
@@ -596,7 +672,7 @@ export default function HealthCaseScreen() {
                       files={health[target]}
                       onRemove={(url) => removeFile(target, url)}
                     />
-                  </View>
+                  </OutlinedField>
                 );
               }
               return null;
@@ -605,18 +681,13 @@ export default function HealthCaseScreen() {
         ) : null}
         {reviewing ? (
           <View style={styles.card}>
-            <Text style={styles.animalName}>
-              {health.animalName || "Animal"}
-            </Text>
-            <Text style={styles.help}>
-              {farmName}
-              {health.openedAt ? ` · ${when(health.openedAt)}` : ""}
+            <Text accessibilityRole="header" style={styles.animalName}>
+              Case summary
             </Text>
             {summary.map(([label, value], index) => (
-              <View key={index} style={styles.fact}>
-                <Text style={styles.factLabel}>{label}</Text>
+              <OutlinedField key={index} label={label}>
                 <Text style={styles.factValue}>{value}</Text>
-              </View>
+              </OutlinedField>
             ))}
             {template?.form.steps.map((item, index) => (
               <Pressable
@@ -817,14 +888,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 24, fontWeight: "800" },
-  progress: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  progressItem: { alignItems: "center", gap: 4 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.border },
-  dotOn: { backgroundColor: colors.green },
-  progressText: { color: colors.muted, fontSize: 11, fontWeight: "600" },
-  progressCurrent: { color: colors.ink },
-  summaryLine: { color: colors.ink, fontSize: 14, fontWeight: "700" },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   block: { gap: 10 },

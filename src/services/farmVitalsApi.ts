@@ -751,7 +751,7 @@ export async function getActiveTemplate(
   type: string,
 ): Promise<ActiveFarmTemplate> {
   const response = await fetch(
-    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}?active=true`,
+    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}?active=true&refresh=${Date.now()}`,
     { headers: { Accept: "application/json" } },
   );
   if (type === "health-case" && response.status === 404)
@@ -1093,7 +1093,10 @@ export function updateHealthCaseAnswers(
       ...health,
       caseSectionValues: {
         ...health.caseSectionValues,
-        [section]: { ...health.caseSectionValues?.[section], ...values },
+        [section]: mergeFarmValues(
+          health.caseSectionValues?.[section] ?? {},
+          values,
+        ),
       },
     };
   }
@@ -1103,7 +1106,7 @@ export function updateHealthCaseAnswers(
   }
   return {
     ...health,
-    caseValues: { ...health.caseValues, ...values },
+    caseValues: mergeFarmValues(health.caseValues ?? {}, values),
     ...("complaint" in values ? { complaint: display("complaint") } : {}),
     ...("symptoms" in values
       ? {
@@ -1131,6 +1134,7 @@ export type FarmHistoryReview = {
 };
 
 export type FarmAnimalReview = {
+  headerBackgroundImageUrl?: string;
   entryId: string;
   name: string;
   species: string;
@@ -1142,6 +1146,7 @@ export type FarmAnimalReview = {
 };
 
 export type FarmReview = {
+  headerBackgroundImageUrl?: string;
   farmId: string;
   name: string;
   submittedAt: string | null;
@@ -1558,6 +1563,7 @@ export async function getHealthCase(
 export async function saveHealthCase(
   farmId: string,
   health: HealthCase,
+  expected?: HealthCase,
 ): Promise<void> {
   if (!health.animalEntryId) throw new Error("Choose an animal for this case.");
   if (
@@ -1571,12 +1577,40 @@ export async function saveHealthCase(
   const index = entries.findIndex(
     (item) => isObject(item) && item.entryId === health.entryId,
   );
+  if (
+    expected &&
+    JSON.stringify(index >= 0 ? parseHealthCase(entries[index]) : null) !==
+      JSON.stringify(expected)
+  )
+    throw new Error(
+      "This case changed while you were editing. Cancel and reopen it before saving.",
+    );
   const nextEntries = entries.slice();
-  if (index >= 0) nextEntries[index] = next;
-  else nextEntries.push(next);
+  if (index >= 0) {
+    const current = isObject(entries[index]) ? entries[index] : {};
+    nextEntries[index] = {
+      ...current,
+      ...next,
+      ...(expected
+        ? {
+            form: current.form,
+            template: current.template,
+            submittedAt: current.submittedAt,
+          }
+        : {}),
+      values: {
+        ...(isObject(current.values) ? current.values : {}),
+        ...(isObject(next.values) ? next.values : {}),
+      },
+    };
+  } else nextEntries.push(next);
   await saveFarmDocument(farmId, {
     ...data,
-    farmVitals: { version: 1, entries: nextEntries },
+    farmVitals: {
+      ...(isObject(data.farmVitals) ? data.farmVitals : {}),
+      version: 1,
+      entries: nextEntries,
+    },
   });
 }
 
@@ -1594,6 +1628,44 @@ async function detailFields(
         : field;
     }),
   );
+}
+
+function headerImageUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const url = new URL(value.trim());
+    return ["http:", "https:"].includes(url.protocol) &&
+      !url.username &&
+      !url.password
+      ? value.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+async function templateHeaderImage(
+  type: "farm" | "animal",
+): Promise<string | undefined> {
+  try {
+    const response = await fetch(
+      `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${type}?active=true&refresh=${Date.now()}`,
+      { headers: { Accept: "application/json" } },
+    );
+    const payload = await readJson(response);
+    if (
+      !isObject(payload) ||
+      !isObject(payload.data) ||
+      !isObject(payload.data.data) ||
+      !isObject(payload.data.data.adminConfig)
+    )
+      return undefined;
+    const forms = payload.data.data.adminConfig.forms;
+    return Array.isArray(forms) && isObject(forms[0])
+      ? headerImageUrl(forms[0].headerBackgroundImageUrl)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function getFarmReview(farmId: string): Promise<FarmReview> {
@@ -1616,6 +1688,10 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     );
   const form = isObject(entry) ? parseForm(entry.form) : null;
   const values = isObject(entry) && isObject(entry.values) ? entry.values : {};
+  const [farmHeaderImage, animalHeaderImage] = await Promise.all([
+    templateHeaderImage("farm"),
+    templateHeaderImage("animal"),
+  ]);
   const sources = new Map<string, FarmTemplateField[]>();
   const sections = await Promise.all(
     (form?.steps ?? []).map(async (step) => {
@@ -1683,6 +1759,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     return [
       {
         entryId: animalId,
+        headerBackgroundImageUrl: animalHeaderImage,
         name: namedText(animalValues, text(animalForm?.name, "Animal")),
         species: animalSpecies(animalValues),
         submittedAt:
@@ -1701,6 +1778,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
   });
   return {
     farmId: text(record.farmId, farmId),
+    headerBackgroundImageUrl: farmHeaderImage,
     name: namedText(values, text(form?.name, "Farm")),
     submittedAt:
       isObject(entry) && typeof entry.submittedAt === "string"
