@@ -1,3 +1,4 @@
+import { farmCard } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -147,5 +148,5 @@ const styles = StyleSheet.create({
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  success: { gap: 6 },
+  success: { gap: 6, ...farmCard, padding: 14 },
 });

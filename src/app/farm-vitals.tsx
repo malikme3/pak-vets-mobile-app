@@ -1,3 +1,4 @@
+import { farmButton } from "../features/farm-vitals/presentation";
 import type { ComponentProps } from "react";
 import {
   Image,
@@ -262,6 +263,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     borderRadius: 14,
     backgroundColor: colors.green,
+    ...farmButton,
   },
   actionWide: { maxWidth: 360 },
   secondaryAction: {
@@ -272,9 +274,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 22,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.green,
     backgroundColor: "#FFFFFF",
+    ...farmButton,
   },
   secondaryActionText: {
     color: colors.green,

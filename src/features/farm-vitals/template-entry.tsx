@@ -1,3 +1,4 @@
+import { farmBorder, farmCard, farmButton } from "./presentation";
 import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -165,7 +166,11 @@ function patternExample(pattern: string): string | null {
 
 function ruleNumber(value: number | string | undefined): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value)))
+  if (
+    typeof value === "string" &&
+    value.trim() &&
+    Number.isFinite(Number(value))
+  )
     return Number(value);
   return null;
 }
@@ -507,7 +512,9 @@ function FieldControl({
                   farmId={farmId}
                   species={species}
                   embedded={isGroup(child)}
-                  onChange={(next) => onChange({ ...nested, [child.key]: next })}
+                  onChange={(next) =>
+                    onChange({ ...nested, [child.key]: next })
+                  }
                 />
               </View>
             ))}
@@ -903,8 +910,9 @@ export function TemplateEntryForm({
     ? (activeStep?.fields.filter(isUtilGroup) ?? [])
     : [];
   const openField =
-    steps.flatMap((step) => step.fields).find((field) => field.key === openUtil) ??
-    null;
+    steps
+      .flatMap((step) => step.fields)
+      .find((field) => field.key === openUtil) ?? null;
 
   function changeAnswer(key: string, value: Answer) {
     const next = { ...answers, [key]: value };
@@ -1061,10 +1069,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#E4EBE3",
     borderRadius: 12,
     backgroundColor: colors.surface,
+    ...farmButton,
   },
   utilText: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "700" },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
@@ -1116,6 +1123,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F3F6F2",
+    ...farmButton,
   },
   modalCancelText: { color: colors.ink, fontSize: 16, fontWeight: "700" },
   modalSave: {
@@ -1125,6 +1133,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.green,
+    ...farmButton,
   },
   sheetBody: { gap: 12, paddingTop: 8, paddingBottom: 8 },
   step: { gap: 16, width: "100%" },
@@ -1140,10 +1149,7 @@ const styles = StyleSheet.create({
   group: {
     gap: 12,
     padding: 14,
-    borderWidth: 1,
-    borderColor: "#E4EBE3",
-    borderRadius: 18,
-    backgroundColor: colors.surface,
+    ...farmCard,
   },
   embedded: { gap: 8, width: "100%" },
   groupHead: {
@@ -1153,7 +1159,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   groupHeadStack: { gap: 4, width: "100%" },
-  groupLabel: { flexShrink: 1, color: colors.ink, fontSize: 15, fontWeight: "700" },
+  groupLabel: {
+    flexShrink: 1,
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+  },
   embeddedLabel: {
     flexShrink: 1,
     color: colors.ink,
@@ -1167,7 +1178,7 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 48,
     borderWidth: 1.5,
-    borderColor: "#8FA397",
+    borderColor: farmBorder,
     borderRadius: 12,
     backgroundColor: "#FFFFFF",
     color: colors.ink,
@@ -1217,11 +1228,11 @@ const styles = StyleSheet.create({
   fileButton: {
     alignSelf: "stretch",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.green,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    ...farmButton,
+    backgroundColor: colors.surface,
   },
   fileButtonText: { color: colors.green, fontWeight: "700" },
   action: {
@@ -1230,6 +1241,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
+    ...farmButton,
   },
   actionText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   pressed: { opacity: 0.7 },

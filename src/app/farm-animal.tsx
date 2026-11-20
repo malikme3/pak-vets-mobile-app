@@ -1,3 +1,4 @@
+import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -124,31 +125,31 @@ function HistoryList({
           <Feather name="plus" size={16} color="#FFFFFF" />
         </Pressable>
       </View>
-      {open
-        ? records.length
-          ? records.map((record) => (
-              <Pressable
-                key={record.entryId}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${record.name}`}
-                onPress={() => onOpen(record.entryId)}
-                style={styles.historyRow}
-              >
-                <View style={styles.historyCopy}>
-                  <Text numberOfLines={1} style={styles.historyName}>
-                    {record.name}
-                  </Text>
-                  {when(record.submittedAt) ? (
-                    <Text style={styles.help}>{when(record.submittedAt)}</Text>
-                  ) : null}
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.green} />
-              </Pressable>
-            ))
-          : (
-            <Text style={styles.empty}>None yet.</Text>
-          )
-        : null}
+      {open ? (
+        records.length ? (
+          records.map((record) => (
+            <Pressable
+              key={record.entryId}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${record.name}`}
+              onPress={() => onOpen(record.entryId)}
+              style={styles.historyRow}
+            >
+              <View style={styles.historyCopy}>
+                <Text numberOfLines={1} style={styles.historyName}>
+                  {record.name}
+                </Text>
+                {when(record.submittedAt) ? (
+                  <Text style={styles.help}>{when(record.submittedAt)}</Text>
+                ) : null}
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.green} />
+            </Pressable>
+          ))
+        ) : (
+          <Text style={styles.empty}>None yet.</Text>
+        )
+      ) : null}
     </View>
   );
 }
@@ -169,32 +170,37 @@ export default function FarmAnimalScreen() {
   const [missingAi, setMissingAi] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (quiet = false) => {
-    if (!farmId || !entryId) {
-      setLoading(false);
-      setError("Open this animal from its farm.");
-      return;
-    }
-    if (!quiet) setLoading(true);
-    setError(null);
-    try {
-      const [review, types] = await Promise.all([
-        getFarmReview(farmId),
-        listFormTypes(),
-      ]);
-      const match = review.animals.find((item) => item.entryId === entryId);
-      if (!match) throw new Error("This animal is no longer on the farm.");
-      setFarmName(review.name);
-      setAnimal(match);
-      setFormTypes(types);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "This animal could not be opened.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [entryId, farmId]);
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!farmId || !entryId) {
+        setLoading(false);
+        setError("Open this animal from its farm.");
+        return;
+      }
+      if (!quiet) setLoading(true);
+      setError(null);
+      try {
+        const [review, types] = await Promise.all([
+          getFarmReview(farmId),
+          listFormTypes(),
+        ]);
+        const match = review.animals.find((item) => item.entryId === entryId);
+        if (!match) throw new Error("This animal is no longer on the farm.");
+        setFarmName(review.name);
+        setAnimal(match);
+        setFormTypes(types);
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "This animal could not be opened.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [entryId, farmId],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -235,7 +241,9 @@ export default function FarmAnimalScreen() {
   const tag = rows.find(
     (row) => provided(row) && /tag|animal id|^id$/i.test(row.label),
   );
-  const highlights = rows.filter((row) => provided(row) && isHighlight(row.label));
+  const highlights = rows.filter(
+    (row) => provided(row) && isHighlight(row.label),
+  );
   const facts = rows.filter(
     (row) =>
       provided(row) &&
@@ -282,7 +290,9 @@ export default function FarmAnimalScreen() {
       await load(true);
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "The photos could not be added.",
+        cause instanceof Error
+          ? cause.message
+          : "The photos could not be added.",
       );
     } finally {
       setAddingPhotos(false);
@@ -444,8 +454,14 @@ export default function FarmAnimalScreen() {
                         />
                       ) : (
                         <View style={[styles.photo, styles.photoPending]}>
-                          <Feather name="image" size={18} color={colors.muted} />
-                          <Text style={styles.photoPendingText}>No AI photo</Text>
+                          <Feather
+                            name="image"
+                            size={18}
+                            color={colors.muted}
+                          />
+                          <Text style={styles.photoPendingText}>
+                            No AI photo
+                          </Text>
                         </View>
                       )}
                       <View style={styles.photoBadge}>
@@ -465,7 +481,10 @@ export default function FarmAnimalScreen() {
                   return (
                     <View
                       key={row.label}
-                      style={[styles.chip, { backgroundColor: tone.background }]}
+                      style={[
+                        styles.chip,
+                        { backgroundColor: tone.background },
+                      ]}
                     >
                       <Text style={styles.chipLabel}>{row.label}</Text>
                       <Text style={[styles.chipValue, { color: tone.color }]}>
@@ -493,7 +512,9 @@ export default function FarmAnimalScreen() {
               <HistoryList
                 key={type.key}
                 title={type.label}
-                records={animal.records.filter((record) => record.kind === type.key)}
+                records={animal.records.filter(
+                  (record) => record.kind === type.key,
+                )}
                 onAdd={() =>
                   router.push({
                     pathname: "/add-farm-history",
@@ -534,7 +555,13 @@ const styles = StyleSheet.create({
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  identity: { flexDirection: "row", alignItems: "center", gap: 14 },
+  identity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    ...farmCard,
+    padding: 14,
+  },
   avatar: {
     width: 72,
     height: 72,
@@ -547,7 +574,12 @@ const styles = StyleSheet.create({
   avatarImage: { width: 72, height: 72 },
   identityCopy: { flex: 1, gap: 2 },
   initial: { color: colors.green, fontSize: 28, fontWeight: "800" },
-  name: { color: colors.ink, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
+  name: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
   meta: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   actionText: {
     color: "#FFFFFF",
@@ -563,17 +595,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    ...farmButton,
   },
   postButton: {
     minHeight: 48,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.green,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    ...farmButton,
   },
   postText: { color: colors.green, fontSize: 13, fontWeight: "700" },
   photos: { gap: 10 },
@@ -637,6 +669,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.green,
+    ...farmButton,
   },
   count: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   empty: {
@@ -654,6 +687,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    ...farmCard,
   },
   historyCopy: { flex: 1, gap: 2 },
   historyName: { color: colors.ink, fontSize: 15, fontWeight: "700" },
@@ -673,11 +707,7 @@ const styles = StyleSheet.create({
   },
   chipValue: { fontSize: 14, fontWeight: "700" },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
+    ...farmCard,
   },
   fact: {
     flexDirection: "row",

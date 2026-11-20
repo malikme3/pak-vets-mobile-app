@@ -1,3 +1,8 @@
+import {
+  farmBorder,
+  farmCard,
+  farmButton,
+} from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -423,12 +428,9 @@ const styles = StyleSheet.create({
   },
   successText: { color: colors.green, fontWeight: "800" },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: 14,
     gap: 6,
+    ...farmCard,
   },
   sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   body: { color: colors.ink, fontSize: 15, lineHeight: 21 },
@@ -437,7 +439,7 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 46,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: farmBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     color: colors.ink,
@@ -450,6 +452,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
+    ...farmButton,
   },
   primaryText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
   link: {

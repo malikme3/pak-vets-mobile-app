@@ -1,3 +1,4 @@
+import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -197,6 +198,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    ...farmButton,
   },
   actionText: { color: colors.surface, fontSize: 15, fontWeight: "700" },
   row: {
@@ -204,10 +206,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
+    ...farmCard,
   },
   copy: { flex: 1, gap: 4 },
   caseTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },

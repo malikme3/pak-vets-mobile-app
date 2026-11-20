@@ -1,3 +1,8 @@
+import {
+  farmBorder,
+  farmCard,
+  farmButton,
+} from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -78,7 +83,10 @@ function savedLabel(value: string): string {
   });
 }
 
-function photoFileName(asset: ImagePicker.ImagePickerAsset, index: number): string {
+function photoFileName(
+  asset: ImagePicker.ImagePickerAsset,
+  index: number,
+): string {
   const mime = asset.mimeType?.toLowerCase() ?? "";
   const extension = mime.includes("png")
     ? "png"
@@ -137,7 +145,11 @@ export default function FarmPostScreen() {
       setSpecies(animal.species);
       setDrafts(await listSocialPosts(farmId, entryId).catch(() => []));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "This animal could not be opened.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "This animal could not be opened.",
+      );
     } finally {
       setLoading(false);
     }
@@ -149,7 +161,9 @@ export default function FarmPostScreen() {
     }, [load]),
   );
 
-  const placeholder = [farmName, animalName, species, postDate].filter(Boolean).join(" · ");
+  const placeholder = [farmName, animalName, species, postDate]
+    .filter(Boolean)
+    .join(" · ");
 
   async function addPhotos(source: "camera" | "library") {
     if (photos.length >= 4) return;
@@ -158,7 +172,10 @@ export default function FarmPostScreen() {
     try {
       const result =
         source === "camera"
-          ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 })
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ["images"],
+              quality: 0.8,
+            })
           : await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ["images"],
               allowsMultipleSelection: true,
@@ -255,7 +272,11 @@ export default function FarmPostScreen() {
       setDescription(post.description);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The post could not be prepared.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The post could not be prepared.",
+      );
     } finally {
       setPreparing(false);
     }
@@ -305,7 +326,11 @@ export default function FarmPostScreen() {
       demoteMark.current = "";
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "This saved post could not be opened.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "This saved post could not be opened.",
+      );
     } finally {
       setPreparing(false);
     }
@@ -347,7 +372,9 @@ export default function FarmPostScreen() {
   async function saveDraft(status: SocialPostStatus) {
     const movingBack =
       status === "draft" &&
-      (postStatus === "ready" || postStatus === "shared" || postStatus === "scheduled");
+      (postStatus === "ready" ||
+        postStatus === "shared" ||
+        postStatus === "scheduled");
     setSaving(true);
     setSavingAs(status);
     setError(null);
@@ -362,7 +389,9 @@ export default function FarmPostScreen() {
             : "Saved as a draft.",
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The post could not be saved.");
+      setError(
+        cause instanceof Error ? cause.message : "The post could not be saved.",
+      );
     } finally {
       setSaving(false);
       setSavingAs("");
@@ -376,7 +405,11 @@ export default function FarmPostScreen() {
       setDrafts((current) => current.filter((item) => item.postId !== id));
       if (draftId === id) setDraftId("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The saved post could not be removed.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The saved post could not be removed.",
+      );
     }
   }
 
@@ -397,7 +430,8 @@ export default function FarmPostScreen() {
       }
       await Clipboard.setStringAsync(caption);
       const available = await Sharing.isAvailableAsync();
-      if (!available) throw new Error("Sharing is not available on this phone.");
+      if (!available)
+        throw new Error("Sharing is not available on this phone.");
       const file = await File.downloadFileAsync(
         image,
         new File(Paths.cache, `farm-post-${Date.now()}.jpg`),
@@ -410,11 +444,19 @@ export default function FarmPostScreen() {
       try {
         await persist("shared", fileUrl, line);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "The shared status could not be saved.");
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "The shared status could not be saved.",
+        );
       }
       setNotice("Caption copied. In Facebook, paste it under the photo.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The post could not be shared.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The post could not be shared.",
+      );
     } finally {
       setSharing(false);
     }
@@ -428,7 +470,12 @@ export default function FarmPostScreen() {
 
   useEffect(() => {
     if (!edited || saving || sharing || !draftId) return;
-    if (postStatus !== "ready" && postStatus !== "shared" && postStatus !== "scheduled") return;
+    if (
+      postStatus !== "ready" &&
+      postStatus !== "shared" &&
+      postStatus !== "scheduled"
+    )
+      return;
     if (demoteMark.current === currentMark) return;
     demoteMark.current = currentMark;
     void saveDraft("draft");
@@ -436,7 +483,8 @@ export default function FarmPostScreen() {
 
   const ready = Boolean(posterUri);
   const taglineChanged = tagline.trim() !== printedTagline;
-  const copyChanged = tagline.trim() !== SAMPLE_TAGLINE || note.trim() !== SAMPLE_NOTE;
+  const copyChanged =
+    tagline.trim() !== SAMPLE_TAGLINE || note.trim() !== SAMPLE_NOTE;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -446,7 +494,11 @@ export default function FarmPostScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.back}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          style={styles.back}
+        >
           <Feather name="arrow-left" size={18} color={colors.green} />
           <Text style={styles.backText}>{animalName || "Animal"}</Text>
         </Pressable>
@@ -482,11 +534,15 @@ export default function FarmPostScreen() {
                   multiline
                   style={styles.bandInput}
                 />
-                <Text style={styles.bandDetail}>{placeholder || "Farm details"}</Text>
+                <Text style={styles.bandDetail}>
+                  {placeholder || "Farm details"}
+                </Text>
               </View>
             </View>
             {taglineChanged ? (
-              <Text style={styles.notice}>The new tagline is printed on the photo when you share.</Text>
+              <Text style={styles.notice}>
+                The new tagline is printed on the photo when you share.
+              </Text>
             ) : null}
             <Text style={styles.label}>Caption</Text>
             <TextInput
@@ -511,11 +567,20 @@ export default function FarmPostScreen() {
               style={[styles.secondary, draftHeld ? styles.chosen : null]}
             >
               {savingAs === "draft" ? (
-                <ActivityIndicator color={draftHeld ? "#FFFFFF" : colors.green} />
+                <ActivityIndicator
+                  color={draftHeld ? "#FFFFFF" : colors.green}
+                />
               ) : (
                 <>
-                  {draftHeld ? <Feather name="check" size={16} color="#FFFFFF" /> : null}
-                  <Text style={[styles.secondaryText, draftHeld ? styles.chosenText : null]}>
+                  {draftHeld ? (
+                    <Feather name="check" size={16} color="#FFFFFF" />
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.secondaryText,
+                      draftHeld ? styles.chosenText : null,
+                    ]}
+                  >
                     {draftHeld ? "Draft" : "Save draft"}
                   </Text>
                 </>
@@ -536,11 +601,20 @@ export default function FarmPostScreen() {
               style={[styles.secondary, readyHeld ? styles.chosen : null]}
             >
               {savingAs === "ready" ? (
-                <ActivityIndicator color={readyHeld ? "#FFFFFF" : colors.green} />
+                <ActivityIndicator
+                  color={readyHeld ? "#FFFFFF" : colors.green}
+                />
               ) : (
                 <>
-                  {readyHeld ? <Feather name="check" size={16} color="#FFFFFF" /> : null}
-                  <Text style={[styles.secondaryText, readyHeld ? styles.chosenText : null]}>
+                  {readyHeld ? (
+                    <Feather name="check" size={16} color="#FFFFFF" />
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.secondaryText,
+                      readyHeld ? styles.chosenText : null,
+                    ]}
+                  >
                     Ready to share
                   </Text>
                 </>
@@ -548,7 +622,13 @@ export default function FarmPostScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              disabled={sharing || saving || preparing || !description.trim() || !tagline.trim()}
+              disabled={
+                sharing ||
+                saving ||
+                preparing ||
+                !description.trim() ||
+                !tagline.trim()
+              }
               onPress={() => void share()}
               style={styles.primary}
             >
@@ -590,7 +670,9 @@ export default function FarmPostScreen() {
                       </Text>
                       <Text style={styles.draftDate}>
                         {STATUS_LABEL[draft.status]}
-                        {savedLabel(draft.updatedAt) ? ` · ${savedLabel(draft.updatedAt)}` : ""}
+                        {savedLabel(draft.updatedAt)
+                          ? ` · ${savedLabel(draft.updatedAt)}`
+                          : ""}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -614,7 +696,9 @@ export default function FarmPostScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Remove photo"
                     onPress={() => {
-                      setPhotos((current) => current.filter((item) => item.uri !== photo.uri));
+                      setPhotos((current) =>
+                        current.filter((item) => item.uri !== photo.uri),
+                      );
                       clearPost();
                     }}
                     style={styles.remove}
@@ -625,11 +709,19 @@ export default function FarmPostScreen() {
               ))}
               {photos.length < 4 ? (
                 <View style={styles.adders}>
-                  <Pressable accessibilityRole="button" onPress={() => void addPhotos("camera")} style={styles.adder}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void addPhotos("camera")}
+                    style={styles.adder}
+                  >
                     <Feather name="camera" size={18} color={colors.green} />
                     <Text style={styles.adderText}>Camera</Text>
                   </Pressable>
-                  <Pressable accessibilityRole="button" onPress={() => void addPhotos("library")} style={styles.adder}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void addPhotos("library")}
+                    style={styles.adder}
+                  >
                     <Feather name="image" size={18} color={colors.green} />
                     <Text style={styles.adderText}>Library</Text>
                   </Pressable>
@@ -661,13 +753,18 @@ export default function FarmPostScreen() {
             </View>
             <View style={styles.card}>
               <Text style={styles.label}>Printed on the photo</Text>
-              <Text style={styles.placeholder}>{placeholder || "Farm details"}</Text>
+              <Text style={styles.placeholder}>
+                {placeholder || "Farm details"}
+              </Text>
             </View>
             <Pressable
               accessibilityRole="button"
               disabled={preparing || loading || !copyChanged || !tagline.trim()}
               onPress={() => void prepare()}
-              style={[styles.primary, (!copyChanged || !tagline.trim()) && styles.primaryDisabled]}
+              style={[
+                styles.primary,
+                (!copyChanged || !tagline.trim()) && styles.primaryDisabled,
+              ]}
             >
               {preparing ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -685,15 +782,31 @@ export default function FarmPostScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 20, paddingBottom: 36, gap: 12 },
-  back: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start", minHeight: 36 },
+  back: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    minHeight: 36,
+  },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
+  title: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   notice: { color: colors.green, fontSize: 13, fontWeight: "600" },
   photoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   thumbWrap: { width: 84, height: 84 },
-  thumb: { width: 84, height: 84, borderRadius: 12, backgroundColor: colors.mint },
+  thumb: {
+    width: 84,
+    height: 84,
+    borderRadius: 12,
+    backgroundColor: colors.mint,
+  },
   remove: {
     position: "absolute",
     top: 4,
@@ -710,12 +823,11 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
+    ...farmButton,
   },
   adderText: { color: colors.green, fontSize: 11, fontWeight: "700" },
   label: { color: colors.ink, fontSize: 13, fontWeight: "700" },
@@ -723,7 +835,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: farmBorder,
     backgroundColor: colors.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -732,12 +844,9 @@ const styles = StyleSheet.create({
   },
   note: { minHeight: 96, textAlignVertical: "top" },
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     padding: 14,
     gap: 4,
+    ...farmCard,
   },
   placeholder: { color: colors.muted, fontSize: 14 },
   primary: {
@@ -748,19 +857,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    ...farmButton,
   },
   primaryDisabled: { opacity: 0.4 },
   primaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   secondary: {
     minHeight: 48,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    ...farmButton,
   },
   secondaryText: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   chosen: { backgroundColor: colors.green, borderColor: colors.green },
@@ -769,17 +878,19 @@ const styles = StyleSheet.create({
   drafts: { gap: 8 },
   draftRow: {
     minHeight: 64,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     flexDirection: "row",
     alignItems: "center",
+    ...farmCard,
   },
   draftMain: { flex: 1, paddingHorizontal: 14, paddingVertical: 12, gap: 2 },
   draftTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   draftDate: { color: colors.muted, fontSize: 12 },
-  draftRemove: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  draftRemove: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   posterCard: {
     width: "100%",
     borderRadius: 16,

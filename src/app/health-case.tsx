@@ -1,3 +1,4 @@
+import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import {
   useCallback,
   useEffect,
@@ -831,12 +832,12 @@ const styles = StyleSheet.create({
   secondary: {
     minHeight: 44,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    ...farmButton,
+    backgroundColor: "#FFFFFF",
   },
   secondaryText: { color: colors.green, fontWeight: "700" },
   animal: {
@@ -844,10 +845,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     padding: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    ...farmCard,
   },
   animalOn: { borderColor: colors.green, backgroundColor: colors.mint },
   avatar: {
@@ -864,12 +862,9 @@ const styles = StyleSheet.create({
   copy: { flex: 1 },
   animalName: { color: colors.ink, fontSize: 16, fontWeight: "800" },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: 14,
     gap: 8,
+    ...farmCard,
   },
   fact: { gap: 2 },
   factLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
@@ -901,6 +896,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
     alignItems: "center",
     justifyContent: "center",
+    ...farmButton,
   },
   primaryText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
   draft: {

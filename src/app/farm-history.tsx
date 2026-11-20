@@ -1,3 +1,4 @@
+import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -72,7 +73,9 @@ export default function FarmHistoryScreen() {
       setHistory(match.item);
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "This history could not be opened.",
+        cause instanceof Error
+          ? cause.message
+          : "This history could not be opened.",
       );
     } finally {
       setLoading(false);
@@ -172,7 +175,7 @@ const styles = StyleSheet.create({
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  heading: { gap: 2 },
+  heading: { gap: 2, ...farmCard, padding: 14 },
   kicker: {
     color: colors.green,
     fontSize: 12,
@@ -180,26 +183,27 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
-  name: { color: colors.ink, fontSize: 28, fontWeight: "800", letterSpacing: -0.4 },
+  name: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
   edit: {
     alignSelf: "flex-start",
     minHeight: 40,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.green,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    ...farmButton,
+    backgroundColor: "#FFFFFF",
   },
   editText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
     paddingTop: 12,
+    ...farmCard,
   },
   sectionTitle: {
     color: colors.ink,

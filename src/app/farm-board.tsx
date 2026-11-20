@@ -1,7 +1,13 @@
+import {
+  farmBorder,
+  farmCard,
+  farmButton,
+} from "../features/farm-vitals/presentation";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import * as Location from "expo-location";
+import { distanceKm, type Coordinates } from "../utils/coordinates";
+import { formatDistance } from "../utils/formatDistance";
 import {
   listFarmDashboard,
   type FarmDashboardEntry,
@@ -53,8 +62,9 @@ function ownerLine(farm: FarmDashboardEntry): FarmDashboardEntry["rows"] {
 
 function farmNameRow(farm: FarmDashboardEntry) {
   return (
-    farm.rows.find((row) => row.key === "farm_name" || row.key === "farmName") ??
-    farm.rows.find((row) => /farm name/i.test(row.label))
+    farm.rows.find(
+      (row) => row.key === "farm_name" || row.key === "farmName",
+    ) ?? farm.rows.find((row) => /farm name/i.test(row.label))
   );
 }
 
@@ -101,13 +111,20 @@ function matches(farm: FarmDashboardEntry, query: string): boolean {
     if (row !== name || needle.length < 4) return false;
     return (
       withinOneEdit(searchable, needle) ||
-      searchable.split(/[^\p{L}\p{N}]+/u).some((word) => withinOneEdit(word, needle))
+      searchable
+        .split(/[^\p{L}\p{N}]+/u)
+        .some((word) => withinOneEdit(word, needle))
     );
   });
 }
 
 export default function FarmBoardScreen() {
   const router = useRouter();
+  const [radiusKm, setRadiusKm] = useState<5 | 25 | 50>(5);
+  const [radiusOpen, setRadiusOpen] = useState(false);
+  const [nearbyOrigin, setNearbyOrigin] = useState<Coordinates | null>(null);
+  const [findingNearby, setFindingNearby] = useState(false);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [farms, setFarms] = useState<FarmDashboardEntry[]>([]);
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
@@ -153,7 +170,81 @@ export default function FarmBoardScreen() {
   const canSearch = searchableFields.length > 0;
   const canSubmitSearch = canSearch && query.trim().length >= 3 && !searched;
   const searchQuery = canSearch ? appliedQuery : "";
-  const shown = farms.filter((farm) => matches(farm, searchQuery));
+  const located = farms.map((farm) => ({
+    ...farm,
+    distance:
+      nearbyOrigin && farm.location
+        ? distanceKm(nearbyOrigin, farm.location)
+        : null,
+  }));
+  const shown = located.filter(
+    (farm) =>
+      matches(farm, searchQuery) &&
+      (!nearbyOrigin || (farm.distance !== null && farm.distance <= radiusKm)),
+  );
+  if (nearbyOrigin)
+    shown.sort(
+      (left, right) =>
+        (left.distance ?? Infinity) - (right.distance ?? Infinity),
+    );
+  const missingGps = farms.filter((farm) => !farm.location).length;
+
+  async function searchNearby() {
+    if (findingNearby) return;
+    Keyboard.dismiss();
+    setRadiusOpen(false);
+    setFindingNearby(true);
+    setNearbyError(null);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setNearbyError(
+          "Allow location access in your device settings to search nearby farms.",
+        );
+        return;
+      }
+      const positionOptions = {
+        accuracy: Location.Accuracy.Balanced,
+        ...(Platform.OS === "web" ? { maximumAge: 0 } : {}),
+      };
+      const position = await Promise.race([
+        Location.getCurrentPositionAsync(positionOptions),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Location took too long. Check that location services are on and try again.",
+                ),
+              ),
+            20000,
+          );
+        }),
+      ]);
+      const origin = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+      if (
+        !Number.isFinite(origin.latitude) ||
+        !Number.isFinite(origin.longitude) ||
+        Math.abs(origin.latitude) > 90 ||
+        Math.abs(origin.longitude) > 180
+      )
+        throw new Error(
+          "Your location could not be determined. Please try again.",
+        );
+      setNearbyOrigin(origin);
+    } catch {
+      setNearbyError(
+        "Could not get your location. Check location permissions and GPS, then try again.",
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+      setFindingNearby(false);
+    }
+  }
 
   function submitSearch() {
     if (!canSubmitSearch) return;
@@ -214,12 +305,126 @@ export default function FarmBoardScreen() {
               !canSubmitSearch && !searched && styles.searchDisabled,
             ]}
           >
-            <Feather name={searched ? "check" : "search"} size={16} color="#FFFFFF" />
+            <Feather
+              name={searched ? "check" : "search"}
+              size={16}
+              color="#FFFFFF"
+            />
             <Text style={styles.searchButtonText}>Search</Text>
           </Pressable>
         </View>
+        <View style={styles.nearbyPanel}>
+          <View style={styles.nearbyRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search nearby farms"
+              disabled={loading || findingNearby}
+              onPress={() => void searchNearby()}
+              style={[
+                styles.nearbyButton,
+                (loading || findingNearby) && styles.searchDisabled,
+              ]}
+            >
+              {findingNearby ? (
+                <ActivityIndicator size="small" color={colors.green} />
+              ) : (
+                <Feather name="crosshair" size={17} color={colors.green} />
+              )}
+              <Text
+                numberOfLines={1}
+                style={[styles.nearbyButtonText, styles.nearbyButtonLabel]}
+              >
+                {findingNearby ? "Getting location…" : "Search nearby"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose nearby radius"
+              accessibilityState={{ expanded: radiusOpen }}
+              aria-expanded={radiusOpen}
+              onPress={() => setRadiusOpen((current) => !current)}
+              style={styles.radiusPicker}
+            >
+              <Text style={styles.nearbyButtonText}>{radiusKm} km</Text>
+              <Feather
+                name={radiusOpen ? "chevron-up" : "chevron-down"}
+                size={14}
+                color={colors.green}
+              />
+            </Pressable>
+            {nearbyOrigin ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear nearby search"
+                disabled={findingNearby}
+                onPress={() => {
+                  setNearbyOrigin(null);
+                  setNearbyError(null);
+                  setRadiusOpen(false);
+                }}
+                style={styles.clearNearby}
+              >
+                <Feather name="x" size={17} color={colors.muted} />
+              </Pressable>
+            ) : null}
+          </View>
+          {radiusOpen ? (
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Nearby search radius"
+              style={styles.radiusRow}
+            >
+              {([5, 25, 50] as const).map((radius) => (
+                <Pressable
+                  key={radius}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: radiusKm === radius }}
+                  aria-checked={radiusKm === radius}
+                  accessibilityLabel={`${radius} km radius`}
+                  onPress={() => {
+                    setRadiusKm(radius);
+                    setRadiusOpen(false);
+                  }}
+                  style={[
+                    styles.radiusOption,
+                    radiusKm === radius && styles.radiusSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.radiusText,
+                      radiusKm === radius && styles.radiusSelectedText,
+                    ]}
+                  >
+                    {radius} km
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          {nearbyOrigin ? (
+            <Text style={styles.help}>
+              {shown.length} {shown.length === 1 ? "farm" : "farms"} within{" "}
+              {radiusKm} km{searchQuery ? " matching your search" : ""} ·
+              Nearest first
+            </Text>
+          ) : null}
+          {nearbyOrigin && missingGps > 0 ? (
+            <Text style={styles.help}>
+              {missingGps} {missingGps === 1 ? "farm has" : "farms have"} no
+              available GPS and {missingGps === 1 ? "is" : "are"} excluded.
+            </Text>
+          ) : null}
+          {nearbyError ? (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {nearbyError}
+            </Text>
+          ) : null}
+        </View>
         {!loading && !error && farms.length > 0 && !canSearch ? (
-          <Text style={styles.help}>No fields are enabled for filtering in the farm template.</Text>
+          <Text style={styles.help}>
+            No fields are enabled for filtering in the farm template.
+          </Text>
         ) : null}
         {canSearch ? (
           <Text style={styles.help}>
@@ -235,9 +440,11 @@ export default function FarmBoardScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {!loading && !error && !shown.length ? (
           <Text style={styles.help}>
-            {searchQuery
-              ? "No farms match that search."
-              : "No dashboard fields are turned on yet."}
+            {nearbyOrigin
+              ? `No farms found within ${radiusKm} km${searchQuery ? " matching your search" : ""}. Try a larger radius or clear nearby search.`
+              : searchQuery
+                ? "No farms match that search."
+                : "No dashboard fields are turned on yet."}
           </Text>
         ) : null}
         {shown.map((farm) => {
@@ -258,7 +465,10 @@ export default function FarmBoardScreen() {
                   params: { farmId: farm.farmId },
                 })
               }
-              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              style={({ pressed }) => [
+                styles.card,
+                pressed && styles.cardPressed,
+              ]}
             >
               <View style={styles.landing}>
                 <View style={styles.farmIcon} accessible={false}>
@@ -266,13 +476,20 @@ export default function FarmBoardScreen() {
                 </View>
                 <View style={styles.landingCopy}>
                   <Text style={styles.farmName}>{place.title}</Text>
+                  {nearbyOrigin && farm.distance !== null ? (
+                    <Text style={styles.distanceLabel}>
+                      {formatDistance(farm.distance)} away
+                    </Text>
+                  ) : null}
                   {place.highlights.length ? (
                     <Text style={styles.subline}>
                       {place.highlights.map((row, index) => (
                         <Text
                           key={filterId(row)}
                           style={
-                            /phone|mobile/i.test(`${row.key ?? ""} ${row.label}`)
+                            /phone|mobile/i.test(
+                              `${row.key ?? ""} ${row.label}`,
+                            )
                               ? styles.subPhone
                               : undefined
                           }
@@ -285,7 +502,11 @@ export default function FarmBoardScreen() {
                   ) : null}
                 </View>
                 <View style={styles.openIcon} accessible={false}>
-                  <Feather name="chevron-right" size={18} color={colors.green} />
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={colors.green}
+                  />
                 </View>
               </View>
               {place.details.length ? (
@@ -338,7 +559,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: farmBorder,
     borderRadius: 14,
     backgroundColor: colors.surface,
     paddingHorizontal: 14,
@@ -353,6 +574,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    ...farmButton,
   },
   registerButton: {
     alignSelf: "stretch",
@@ -364,21 +586,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    ...farmButton,
   },
+  nearbyPanel: { gap: 6 },
+  nearbyRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  nearbyButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    gap: 8,
+    borderRadius: 12,
+    backgroundColor: colors.mint,
+    ...farmButton,
+  },
+  nearbyButtonLabel: { flexShrink: 1 },
+  radiusPicker: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    ...farmButton,
+  },
+  nearbyButtonText: { color: colors.green, fontSize: 14, fontWeight: "700" },
+  radiusRow: { flexDirection: "row", gap: 8 },
+  radiusOption: {
+    backgroundColor: colors.surface,
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    ...farmButton,
+  },
+  radiusSelected: { backgroundColor: colors.green, borderColor: colors.green },
+  radiusText: { color: colors.muted, fontWeight: "600", fontSize: 14 },
+  radiusSelectedText: { color: colors.surface },
+  clearNearby: {
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    ...farmButton,
+  },
+  distanceLabel: { color: colors.green, fontSize: 12, fontWeight: "600" },
   searchDisabled: { opacity: 0.5 },
   searchButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#CAD9CF",
-    shadowColor: colors.ink,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
     padding: 14,
     gap: 12,
+    ...farmCard,
   },
   cardPressed: { borderColor: colors.green, backgroundColor: "#F4FAF6" },
   landing: { flexDirection: "row", alignItems: "center", gap: 10 },
