@@ -871,7 +871,14 @@ export type FarmReviewUtil = {
   rows: FarmReviewRow[];
   field: FarmTemplateField;
 };
+export type FarmSectionDraft = {
+  fields: FarmTemplateField[];
+  values: Record<string, unknown>;
+  revision: string;
+};
+
 export type FarmReviewSection = {
+  edit?: FarmSectionDraft;
   title: string;
   rows: FarmReviewRow[];
   utils?: FarmReviewUtil[];
@@ -1615,6 +1622,7 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
       const fields = await detailFields(step.fields, sources);
       return {
         title: step.title,
+        edit: { fields, values, revision: JSON.stringify(entry) },
         rows: reviewRows(fields, values, true),
         utils: reviewUtils(fields, values),
       };
@@ -1764,12 +1772,6 @@ async function appendFarmEntry(
   });
 }
 
-export type FarmEditDraft = {
-  template: ActiveFarmTemplate;
-  values: Record<string, unknown>;
-  revision: string;
-};
-
 function latestFarmEntry(entries: unknown[]): number {
   for (let index = entries.length - 1; index >= 0; index--) {
     const item = entries[index];
@@ -1777,77 +1779,6 @@ function latestFarmEntry(entries: unknown[]): number {
       return index;
   }
   return -1;
-}
-
-function retainSavedFields(
-  current: FarmTemplateField[],
-  saved: FarmTemplateField[],
-): FarmTemplateField[] {
-  const currentKeys = new Set(current.map((field) => field.key));
-  return [
-    ...current.map((field) => {
-      const previous = saved.find((item) => item.key === field.key);
-      return field.fields && previous?.fields
-        ? { ...field, fields: retainSavedFields(field.fields, previous.fields) }
-        : field;
-    }),
-    ...saved.filter((field) => !currentKeys.has(field.key)),
-  ];
-}
-
-export async function getFarmEditDraft(farmId: string): Promise<FarmEditDraft> {
-  const [{ entries }, template] = await Promise.all([
-    readFarmDocument(farmId),
-    getActiveFarmTemplate(),
-  ]);
-  const entry = entries[latestFarmEntry(entries)];
-  if (!isObject(entry))
-    throw new Error("This farm could not be opened for editing.");
-  const savedForm = parseForm(entry.form);
-  const currentKeys = new Set(
-    template.form.steps.flatMap((step) =>
-      step.fields.map((field) => field.key),
-    ),
-  );
-  const savedFields = savedForm?.steps.flatMap((step) => step.fields) ?? [];
-  const form = {
-    ...template.form,
-    steps: [
-      ...template.form.steps.map((step) => ({
-        ...step,
-        fields: retainSavedFields(
-          step.fields,
-          savedFields.filter((field) =>
-            step.fields.some((current) => current.key === field.key),
-          ),
-        ),
-      })),
-      ...(savedForm?.steps ?? []).flatMap((step) => {
-        const fields = step.fields.filter(
-          (field) => !currentKeys.has(field.key),
-        );
-        return fields.length
-          ? [{ ...step, id: `saved-${step.id}`, fields }]
-          : [];
-      }),
-    ],
-  };
-  return {
-    template: {
-      ...template,
-      form: {
-        ...form,
-        steps: await Promise.all(
-          form.steps.map(async (step) => ({
-            ...step,
-            fields: await detailFields(step.fields, new Map()),
-          })),
-        ),
-      },
-    },
-    values: isObject(entry.values) ? entry.values : {},
-    revision: JSON.stringify(entry),
-  };
 }
 
 function mergeFarmValues(
@@ -1865,26 +1796,28 @@ function mergeFarmValues(
   return merged;
 }
 
-export async function updateFarmRecord(
+export async function updateFarmSection(
   farmId: string,
-  draft: FarmEditDraft,
-  values: Record<string, unknown>,
+  revision: string,
+  keys: string[],
+  changes: Record<string, unknown>,
 ): Promise<void> {
   const { data, entries } = await readFarmDocument(farmId);
   const index = latestFarmEntry(entries);
   const current = entries[index];
-  if (!isObject(current) || JSON.stringify(current) !== draft.revision)
+  if (!isObject(current) || JSON.stringify(current) !== revision)
     throw new Error(
-      "This farm changed while you were editing. Reopen the farm before saving.",
+      "This farm changed while you were editing. Cancel and reload the farm before saving.",
     );
+  const scoped = Object.fromEntries(
+    Object.entries(changes).filter(([key]) => keys.includes(key)),
+  );
   const nextEntries = entries.slice();
   nextEntries[index] = {
     ...current,
-    form: draft.template.form,
-    template: { type: "farm", updatedAt: draft.template.updatedAt },
     values: mergeFarmValues(
       isObject(current.values) ? current.values : {},
-      values,
+      scoped,
     ),
   };
   await saveFarmDocument(farmId, {
@@ -1894,30 +1827,6 @@ export async function updateFarmRecord(
       version: 1,
       entries: nextEntries,
     },
-  });
-}
-
-export async function updateFarmGroup(
-  farmId: string,
-  key: string,
-  groupValues: Record<string, unknown>,
-): Promise<void> {
-  const { data, entries } = await readFarmDocument(farmId);
-  let index = -1;
-  entries.forEach((item, itemIndex) => {
-    if (isObject(item) && isObject(item.form) && item.form.entity === "farm")
-      index = itemIndex;
-  });
-  if (index < 0) throw new Error("This farm could not be updated.");
-  const current = entries[index];
-  if (!isObject(current)) throw new Error("This farm could not be updated.");
-  const values = isObject(current.values) ? { ...current.values } : {};
-  values[key] = groupValues;
-  const nextEntries = entries.slice();
-  nextEntries[index] = { ...current, values };
-  await saveFarmDocument(farmId, {
-    ...data,
-    farmVitals: { version: 1, entries: nextEntries },
   });
 }
 

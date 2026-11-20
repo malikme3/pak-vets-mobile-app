@@ -17,6 +17,7 @@ import {
   useRouter,
 } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   childFormTypes,
@@ -72,32 +73,68 @@ function CollapseSection({
   count,
   expanded,
   onToggle,
+  onEdit,
+  editDisabled,
   children,
 }: {
   title: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  onEdit?: () => void;
+  editDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
     <View style={styles.card}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        onPress={onToggle}
-        style={styles.sectionHeader}
-      >
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <Text style={styles.count}>{count}</Text>
-        <Feather
-          name={expanded ? "chevron-up" : "chevron-down"}
-          size={16}
-          color={colors.green}
-        />
-      </Pressable>
+      <View style={styles.sectionHeading}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={onToggle}
+          style={styles.sectionHeader}
+        >
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.count}>{count}</Text>
+          <Feather
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.green}
+          />
+        </Pressable>
+        {onEdit ? (
+          <EditSectionButton
+            title={title}
+            disabled={editDisabled}
+            onPress={onEdit}
+          />
+        ) : null}
+      </View>
       {expanded ? children : null}
     </View>
+  );
+}
+
+function EditSectionButton({
+  title,
+  disabled,
+  onPress,
+}: {
+  title: string;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${title}`}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.editSection, disabled && { opacity: 0.45 }]}
+    >
+      <Feather name="edit-2" size={14} color={colors.green} />
+      <Text style={styles.editText}>Edit</Text>
+    </Pressable>
   );
 }
 
@@ -112,6 +149,7 @@ export default function FarmDashboardScreen() {
   const [opening, setOpening] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<string | null>(null);
   const [openUtils, setOpenUtils] = useState<Record<string, boolean>>({});
 
   const openFarm = useCallback(async (farmId: string, quiet = false) => {
@@ -203,18 +241,6 @@ export default function FarmDashboardScreen() {
                 </Text>
               </View>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Edit farm"
-              onPress={() =>
-                router.push({ pathname: "/edit-farm", params: { farmId } })
-              }
-              style={styles.editFarm}
-            >
-              <Feather name="edit-2" size={16} color={colors.green} />
-              <Text style={styles.utilText}>Edit farm details</Text>
-              <Feather name="chevron-right" size={16} color={colors.green} />
-            </Pressable>
             <View style={styles.stats}>
               <View style={styles.stat}>
                 <Text style={styles.statValue}>{review.animals.length}</Text>
@@ -227,65 +253,104 @@ export default function FarmDashboardScreen() {
             </View>
             {sections.map((section, index) => {
               const key = `farm-${index}`;
-              const expanded = openSections[key] ?? true;
+              const directFields =
+                section.edit?.fields.filter((field) => !field.source) ?? [];
+              const expanded = editing === key || (openSections[key] ?? true);
               return (
                 <CollapseSection
                   key={key}
                   title={section.title}
                   count={section.rows.length + (section.utils?.length ?? 0)}
                   expanded={expanded}
-                  onToggle={() => toggleSection(key, true)}
+                  onToggle={() => {
+                    if (editing !== key) toggleSection(key, true);
+                  }}
+                  onEdit={
+                    directFields.length ? () => setEditing(key) : undefined
+                  }
+                  editDisabled={editing !== null}
                 >
-                  {section.rows.map((row) => (
-                    <View key={`${key}-${row.label}`} style={styles.fact}>
-                      <Text style={styles.factLabel}>{row.label}</Text>
-                      <Text style={styles.factValue}>{row.value}</Text>
-                    </View>
-                  ))}
+                  {editing === key && section.edit ? (
+                    <FarmSectionEditor
+                      farmId={farmId}
+                      draft={section.edit}
+                      fields={directFields}
+                      onCancel={() => setEditing(null)}
+                      onSaved={async () => {
+                        setEditing(null);
+                        await openFarm(farmId, true);
+                      }}
+                    />
+                  ) : (
+                    section.rows.map((row, rowIndex) => (
+                      <View key={`${key}-${rowIndex}`} style={styles.fact}>
+                        <Text style={styles.factLabel}>{row.label}</Text>
+                        <Text style={styles.factValue}>{row.value}</Text>
+                      </View>
+                    ))
+                  )}
                   {(section.utils ?? []).map((util) => {
-                    const utilKey = `${key}-${util.label}`;
-                    const open = openUtils[utilKey] ?? true;
+                    const utilKey = `${key}-${util.key}`;
+                    const open =
+                      editing === utilKey || (openUtils[utilKey] ?? true);
                     return (
                       <View key={utilKey}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityState={{ expanded: open }}
-                          onPress={() => {
-                            setOpenUtils((current) => ({
-                              ...current,
-                              [utilKey]: !open,
-                            }));
-                          }}
-                          style={styles.utilButton}
-                        >
-                          <Feather
-                            name={util.filled ? "check" : "plus"}
-                            size={16}
-                            color={colors.green}
+                        <View style={styles.utilHeading}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: open }}
+                            onPress={() => {
+                              if (editing !== utilKey)
+                                setOpenUtils((current) => ({
+                                  ...current,
+                                  [utilKey]: !open,
+                                }));
+                            }}
+                            style={styles.utilToggle}
+                          >
+                            <Feather
+                              name={util.filled ? "check" : "plus"}
+                              size={16}
+                              color={colors.green}
+                            />
+                            <Text style={styles.utilText}>{util.label}</Text>
+                            <Feather
+                              name={open ? "chevron-up" : "chevron-down"}
+                              size={16}
+                              color={colors.muted}
+                            />
+                          </Pressable>
+                          {section.edit ? (
+                            <EditSectionButton
+                              title={util.label}
+                              disabled={editing !== null}
+                              onPress={() => setEditing(utilKey)}
+                            />
+                          ) : null}
+                        </View>
+                        {editing === utilKey && section.edit ? (
+                          <FarmSectionEditor
+                            farmId={farmId}
+                            draft={section.edit}
+                            fields={[util.field]}
+                            onCancel={() => setEditing(null)}
+                            onSaved={async () => {
+                              setEditing(null);
+                              await openFarm(farmId, true);
+                            }}
                           />
-                          <Text style={styles.utilText}>{util.label}</Text>
-                          <Feather
-                            name={open ? "chevron-up" : "chevron-down"}
-                            size={16}
-                            color={colors.muted}
-                          />
-                        </Pressable>
-                        {open
-                          ? util.rows.map((row) => (
-                              <View
-                                key={`${utilKey}-${row.label}`}
-                                style={styles.fact}
-                              >
-                                <Text style={styles.factLabel}>
-                                  {row.label}
-                                </Text>
-                                <Text style={styles.factValue}>
-                                  {row.value}
-                                </Text>
-                              </View>
-                            ))
-                          : null}
-                        {open && !util.rows.length ? (
+                        ) : open ? (
+                          util.rows.map((row, rowIndex) => (
+                            <View
+                              key={`${utilKey}-${rowIndex}`}
+                              style={styles.fact}
+                            >
+                              <Text style={styles.factLabel}>{row.label}</Text>
+                              <Text style={styles.factValue}>{row.value}</Text>
+                            </View>
+                          ))
+                        ) : null}
+                        {open && !util.rows.length && editing !== utilKey ? (
                           <Text style={styles.utilEmpty}>Nothing saved.</Text>
                         ) : null}
                       </View>
@@ -466,16 +531,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   meta: { color: colors.ink, fontSize: 14, fontWeight: "600" },
-  editFarm: {
-    ...farmButton,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    minHeight: 44,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   stats: { flexDirection: "row", gap: 8 },
   stat: {
     flex: 1,
@@ -496,6 +551,8 @@ const styles = StyleSheet.create({
     ...farmCard,
   },
   sectionHeader: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -522,17 +579,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
   },
-  utilButton: {
+  sectionHeading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    paddingRight: 10,
+    gap: 6,
+  },
+  editSection: {
+    ...farmButton,
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+  },
+  editText: { color: colors.green, fontSize: 13, fontWeight: "700" },
+  utilHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginHorizontal: 14,
     marginVertical: 8,
+  },
+  utilToggle: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     minHeight: 44,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: colors.background,
-    ...farmButton,
   },
   utilText: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: "700" },
   utilEmpty: {

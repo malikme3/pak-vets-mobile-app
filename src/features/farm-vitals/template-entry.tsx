@@ -463,6 +463,7 @@ function FieldControl({
   farmId,
   species,
   embedded = false,
+  outlinedLabels = false,
   onChange,
 }: {
   field: FarmTemplateField;
@@ -474,8 +475,10 @@ function FieldControl({
   farmId: string;
   species: string;
   embedded?: boolean;
+  outlinedLabels?: boolean;
   onChange: (value: Answer) => void;
 }) {
+  const [focused, setFocused] = useState(false);
   const [showDate, setShowDate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -511,6 +514,7 @@ function FieldControl({
                   columns={columns}
                   farmId={farmId}
                   species={species}
+                  outlinedLabels={outlinedLabels}
                   embedded={isGroup(child)}
                   onChange={(next) =>
                     onChange({ ...nested, [child.key]: next })
@@ -589,10 +593,16 @@ function FieldControl({
         ? new Date(`${field.rules.max}T00:00:00`)
         : undefined;
     return (
-      <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
+      <View style={[styles.field, outlinedLabels && styles.outlinedField]}>
+        <Text
+          numberOfLines={outlinedLabels ? 1 : undefined}
+          style={[styles.label, outlinedLabels && styles.outlinedLabel]}
+        >
+          {label}
+        </Text>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={label}
           onPress={() => setShowDate(true)}
           style={styles.input}
         >
@@ -664,8 +674,22 @@ function FieldControl({
   const phone = isPakistanPhone(field);
   const nic = isPakistanNic(field);
   return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+    <View
+      style={[
+        styles.field,
+        outlinedLabels && !fileField && styles.outlinedField,
+      ]}
+    >
+      <Text
+        numberOfLines={outlinedLabels && !fileField ? 1 : undefined}
+        style={[
+          styles.label,
+          outlinedLabels && !fileField && styles.outlinedLabel,
+          outlinedLabels && focused && styles.outlinedLabelFocused,
+        ]}
+      >
+        {label}
+      </Text>
       {fileField ? (
         <Pressable
           accessibilityRole="button"
@@ -683,6 +707,7 @@ function FieldControl({
         </Pressable>
       ) : (
         <TextInput
+          accessibilityLabel={label}
           value={text}
           onChangeText={(next) =>
             onChange(
@@ -694,9 +719,11 @@ function FieldControl({
             )
           }
           onFocus={() => {
+            setFocused(true);
             if (phone && !text) onChange("+92-");
           }}
           onBlur={() => {
+            setFocused(false);
             if (phone && (text === "+92-" || text === "+92")) onChange("");
           }}
           placeholder={
@@ -714,7 +741,11 @@ function FieldControl({
           }
           multiline={field.type === "textarea"}
           maxLength={phone ? 16 : nic ? 15 : field.rules.maxLength}
-          style={[styles.input, field.type === "textarea" && styles.textarea]}
+          style={[
+            styles.input,
+            field.type === "textarea" && styles.textarea,
+            outlinedLabels && focused && styles.outlinedInputFocused,
+          ]}
         />
       )}
       {text && fileField ? (
@@ -872,6 +903,8 @@ export function TemplateEntryForm({
   submitLabel,
   saving,
   initialValues,
+  inlineGroups = false,
+  outlinedLabels = false,
   farmId = "",
   onSubmit,
   renderField,
@@ -881,6 +914,8 @@ export function TemplateEntryForm({
   submitLabel: string;
   saving: boolean;
   initialValues?: Record<string, unknown>;
+  inlineGroups?: boolean;
+  outlinedLabels?: boolean;
   farmId?: string;
   onDraftChange?: (answers: Record<string, unknown>) => void;
   renderField?: (field: FarmTemplateField) => ReactNode;
@@ -900,7 +935,8 @@ export function TemplateEntryForm({
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openUtil, setOpenUtil] = useState<string | null>(null);
-  const separateUtils = steps.some((step) => step.fields.some(isUtilGroup));
+  const separateUtils =
+    !inlineGroups && steps.some((step) => step.fields.some(isUtilGroup));
   const activeIndex = Math.min(stepIndex, Math.max(steps.length - 1, 0));
   const activeStep = steps[activeIndex];
   const directFields = separateUtils
@@ -957,7 +993,7 @@ export function TemplateEntryForm({
       ) : null}
       {activeStep ? (
         <View style={styles.step}>
-          {steps.length === 1 ? (
+          {steps.length === 1 && activeStep.title ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
           {layoutRows(directFields).map((row) => (
@@ -976,6 +1012,7 @@ export function TemplateEntryForm({
                         columns={fieldColumns}
                         farmId={farmId}
                         species={selectedSpecies(answers)}
+                        outlinedLabels={outlinedLabels}
                         onChange={onChange}
                       />
                     )}
@@ -1146,6 +1183,22 @@ const styles = StyleSheet.create({
   },
   fieldSlot: { flex: 1, minWidth: 0 },
   field: { gap: 6, width: "100%" },
+  outlinedField: { paddingTop: 8 },
+  outlinedLabel: {
+    position: "absolute",
+    top: 0,
+    left: 12,
+    zIndex: 1,
+    maxWidth: "90%",
+    paddingHorizontal: 5,
+    backgroundColor: colors.surface,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    color: colors.muted,
+  },
+  outlinedLabelFocused: { color: "#3E7EAA" },
+  outlinedInputFocused: { borderColor: "#3E7EAA", borderWidth: 2 },
   group: {
     gap: 12,
     padding: 14,
