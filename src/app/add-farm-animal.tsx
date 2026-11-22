@@ -115,7 +115,9 @@ export default function AddFarmAnimalScreen() {
           <TemplateEntryForm
             template={template}
             showDescription={false}
-            submitLabel="Add Animal"
+            submitLabel={
+              kind === "animal" ? "Add Animal" : "Add " + formTypeTitle(kind)
+            }
             saving={saving}
             farmId={farmId}
             onSubmit={submit}
