@@ -1,3 +1,4 @@
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { HeaderBackground } from "../features/farm-vitals/header-background";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useState } from "react";
@@ -104,20 +105,10 @@ export default function AnimalCaseDashboard() {
         keyExtractor={(item) => item.entryId}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.back()}
-              style={styles.back}
-            >
-              <Feather name="arrow-left" size={18} color={colors.green} />
-              <Text style={styles.link}>Animal</Text>
-            </Pressable>
-            <View style={styles.pageHeading}>
-              <Text style={styles.eyebrow}>ANIMAL HEALTH</Text>
-              <Text accessibilityRole="header" style={styles.title}>
-                Case dashboard
-              </Text>
-            </View>
+            <FlowPageHeading
+              onBack={() => router.back()}
+              title="Case dashboard"
+            />
             {animal ? (
               <>
                 <HeaderBackground

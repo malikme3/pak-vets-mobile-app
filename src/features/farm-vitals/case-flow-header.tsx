@@ -1,9 +1,10 @@
 import { StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
+import { FlowPageHeading } from "./flow-page-heading";
 import { farmCard } from "./presentation";
 
 type Props = {
-  title: string;
+  onBack: () => void;
   animalName: string;
   farmName: string;
   date: string;
@@ -13,7 +14,7 @@ type Props = {
 };
 
 export function CaseFlowHeader({
-  title,
+  onBack,
   animalName,
   farmName,
   date,
@@ -24,21 +25,7 @@ export function CaseFlowHeader({
   const current = Math.min(step, Math.max(steps.length - 1, 0));
   return (
     <View style={styles.header}>
-      <View style={styles.titleRow}>
-        <View style={styles.copy}>
-          <Text style={styles.eyebrow}>ANIMAL HEALTH</Text>
-          <Text accessibilityRole="header" style={styles.title}>
-            {title}
-          </Text>
-        </View>
-        {steps.length > 1 ? (
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepBadgeText}>
-              Step {current + 1} of {steps.length}
-            </Text>
-          </View>
-        ) : null}
-      </View>
+      <FlowPageHeading onBack={onBack} title="Add Case" />
       <View style={styles.card}>
         <View style={styles.identity}>
           <View style={styles.icon}>
@@ -109,29 +96,8 @@ export function CaseFlowHeader({
   );
 }
 const styles = StyleSheet.create({
-  header: { gap: 14 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  copy: { flex: 1, minWidth: 0 },
-  eyebrow: {
-    color: "#1E7F5C",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-  title: {
-    color: "#173D32",
-    fontSize: 26,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-  },
-  stepBadge: {
-    backgroundColor: "#E7F5EE",
-    borderRadius: 20,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  stepBadgeText: { color: "#1E7F5C", fontSize: 11, fontWeight: "700" },
+  header: { gap: 8 },
+  copy: { flex: 1, minWidth: 0, gap: 2 },
   card: { ...farmCard, padding: 14, gap: 10 },
   identity: { flexDirection: "row", alignItems: "center", gap: 10 },
   icon: {

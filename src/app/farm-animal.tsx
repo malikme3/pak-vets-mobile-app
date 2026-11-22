@@ -1,3 +1,4 @@
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { HeaderBackground } from "../features/farm-vitals/header-background";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
@@ -310,14 +311,7 @@ export default function FarmAnimalScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>{farmName}</Text>
-        </Pressable>
+        <FlowPageHeading onBack={() => router.back()} title="Animal details" />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />

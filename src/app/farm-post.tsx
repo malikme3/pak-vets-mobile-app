@@ -23,6 +23,7 @@ import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import { File, Paths } from "expo-file-system";
 import Feather from "@expo/vector-icons/Feather";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
   animalPhotoPromptKey,
   deleteSocialPost,
@@ -494,17 +495,7 @@ export default function FarmPostScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>{animalName || "Animal"}</Text>
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          {ready ? "Review post" : "Prepare post"}
-        </Text>
+        <FlowPageHeading onBack={() => router.back()} title="Prepare post" />
         <Text style={styles.help}>
           {ready
             ? shownStatus === "ready"

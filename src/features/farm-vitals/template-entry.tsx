@@ -915,6 +915,7 @@ export function TemplateEntryForm({
   initialValues,
   inlineGroups = false,
   outlinedLabels = true,
+  showDescription = true,
   farmId = "",
   onSubmit,
   renderField,
@@ -926,6 +927,7 @@ export function TemplateEntryForm({
   initialValues?: Record<string, unknown>;
   inlineGroups?: boolean;
   outlinedLabels?: boolean;
+  showDescription?: boolean;
   farmId?: string;
   onDraftChange?: (answers: Record<string, unknown>) => void;
   renderField?: (field: FarmTemplateField) => ReactNode;
@@ -988,7 +990,7 @@ export function TemplateEntryForm({
 
   return (
     <View style={styles.form}>
-      {template.form.description ? (
+      {showDescription && template.form.description ? (
         <Text style={styles.help}>{template.form.description}</Text>
       ) : null}
       {steps.length > 1 ? (

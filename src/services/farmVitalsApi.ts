@@ -72,7 +72,7 @@ function text(value: unknown, fallback = ""): string {
 }
 
 export function formTypeTitle(type: string): string {
-  if (type === "health-case") return "Initial Symptoms";
+  if (type === "health-case") return "Case";
   if (type === "medical-history") return "Medical History";
   if (type === "production-history") return "Production History";
   return type
@@ -755,7 +755,7 @@ export async function getActiveTemplate(
     { headers: { Accept: "application/json" } },
   );
   if (type === "health-case" && response.status === 404)
-    throw new Error("No active Initial Symptoms template is available.");
+    throw new Error("No active Case template is available.");
   const section = caseSection(type);
   if (section && response.status === 404) {
     const missing: unknown = await response
@@ -802,6 +802,7 @@ export async function getActiveTemplate(
   for (const step of form.steps) {
     steps.push({
       ...step,
+      caseSection: type === "health-case" ? undefined : step.caseSection,
       fields: await expandSources(hydrateFields(step.fields, presets), sources),
     });
   }
@@ -814,36 +815,9 @@ export async function getActiveTemplate(
   };
 }
 
-export async function getActiveHealthCaseTemplate(): Promise<ActiveFarmTemplate> {
-  const sections = [
-    { type: "health-case", title: "Initial Symptoms" },
-    { type: "treatment", title: "Treatment" },
-    { type: "medicine", title: "Medicine" },
-  ] as const;
-  const templates = await Promise.all(
-    sections.map(({ type, title }) =>
-      getActiveTemplate(type).catch((error: unknown) => {
-        const reason =
-          error instanceof Error ? error.message : "Request failed.";
-        throw new Error(`Could not load the ${title} template. ${reason}`);
-      }),
-    ),
-  );
-  const [initial] = templates;
-  return {
-    ...initial,
-    form: {
-      ...initial.form,
-      steps: sections.map(({ type, title }, index) => ({
-        id: type,
-        title,
-        caseSection: caseSection(type),
-        fields: templates[index].form.steps.flatMap((step) => step.fields),
-      })),
-    },
-  };
+export function getActiveHealthCaseTemplate(): Promise<ActiveFarmTemplate> {
+  return getActiveTemplate("health-case");
 }
-
 export function getActiveFarmTemplate(): Promise<ActiveFarmTemplate> {
   return getActiveTemplate("farm");
 }
@@ -1520,7 +1494,7 @@ function healthCaseEntry(health: HealthCase): Record<string, unknown> {
     },
     form: health.caseTemplate?.form ?? {
       id: "health-case",
-      name: "Health case",
+      name: "Case",
       description: "",
       entity: "health-case",
       steps: [{ id: "case", title: "Case", fields: [] }],

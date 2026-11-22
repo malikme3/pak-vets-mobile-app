@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   createFarmRecord,
@@ -77,20 +78,10 @@ export default function CreateFarmScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.dismissTo("/farm-board")}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Farms dashboard</Text>
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          Register farm
-        </Text>
-        <Text style={styles.subtitle}>
-          {template?.form.name ?? "Enter the farm details."}
-        </Text>
+        <FlowPageHeading
+          onBack={() => router.dismissTo("/farm-board")}
+          title="Add farm"
+        />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -108,7 +99,8 @@ export default function CreateFarmScreen() {
         {template && !farmId ? (
           <TemplateEntryForm
             template={template}
-            submitLabel="Create farm"
+            showDescription={false}
+            submitLabel="Add farm"
             saving={saving}
             onSubmit={submit}
           />
@@ -132,7 +124,7 @@ export default function CreateFarmScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: 20, paddingBottom: 32, gap: 12 },
+  scroll: { padding: 16, paddingBottom: 32, gap: 10 },
   back: {
     flexDirection: "row",
     alignItems: "center",
@@ -140,8 +132,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 28, fontWeight: "800" },
-  subtitle: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
   stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },

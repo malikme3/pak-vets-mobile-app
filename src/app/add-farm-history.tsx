@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   addAnimalHistory,
@@ -137,20 +138,10 @@ export default function AddFarmHistoryScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Animal</Text>
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          {entryId ? `Edit ${title}` : `Add ${title}`}
-        </Text>
-        <Text style={styles.subtitle}>
-          {template?.form.name ?? `Enter the ${title.toLowerCase()}.`}
-        </Text>
+        <FlowPageHeading
+          onBack={() => router.back()}
+          title={entryId ? "Edit record" : "Add record"}
+        />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -194,7 +185,7 @@ export default function AddFarmHistoryScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: 24, paddingBottom: 40, gap: 16 },
+  scroll: { padding: 16, paddingBottom: 32, gap: 10 },
   back: {
     flexDirection: "row",
     alignItems: "center",
@@ -202,8 +193,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 32, fontWeight: "800" },
-  subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
   stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },

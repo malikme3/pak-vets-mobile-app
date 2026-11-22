@@ -26,7 +26,7 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="create-farm"
-                options={{ title: "Register Farm", headerShown: false }}
+                options={{ title: "Add farm", headerShown: false }}
               />
               <Stack.Screen
                 name="farm-dashboard"

@@ -20,6 +20,7 @@ import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import * as Location from "expo-location";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { distanceKm, type Coordinates } from "../utils/coordinates";
 import { formatDistance } from "../utils/formatDistance";
 import {
@@ -260,24 +261,18 @@ export default function FarmBoardScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
+        <FlowPageHeading
+          onBack={() => router.dismissTo("/farm-vitals")}
+          title="Farm dashboard"
+        />
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Farm Vitals</Text>
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          Farms dashboard
-        </Text>
-        <Pressable
-          accessibilityRole="button"
+          accessibilityLabel="Add farm"
           onPress={() => router.push("/create-farm")}
           style={styles.registerButton}
         >
           <Feather name="plus" size={18} color={colors.surface} />
-          <Text style={styles.searchButtonText}>Register Farm</Text>
+          <Text style={styles.searchButtonText}>Add farm</Text>
         </Pressable>
         <View style={styles.searchRow}>
           <TextInput

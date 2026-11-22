@@ -1,3 +1,4 @@
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { HeaderBackground } from "../features/farm-vitals/header-background";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useState, type ReactNode } from "react";
@@ -202,14 +203,10 @@ export default function FarmDashboardScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.dismissTo("/farm-board")}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Farms dashboard</Text>
-        </Pressable>
+        <FlowPageHeading
+          onBack={() => router.dismissTo("/farm-board")}
+          title="Farm details"
+        />
 
         {opening ? (
           <View style={styles.status}>

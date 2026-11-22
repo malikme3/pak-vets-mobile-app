@@ -186,9 +186,7 @@ export default function HealthCaseScreen() {
   const reviewing = template !== null && step === steps.length - 1;
 
   const layoutStepId = activeStep?.id;
-  const layoutType = activeStep
-    ? (activeStep.caseSection ?? "health-case")
-    : null;
+  const layoutType = activeStep ? "health-case" : null;
   useEffect(() => {
     if (loading || !layoutStepId || !layoutType) return;
     const type = layoutType;
@@ -479,9 +477,7 @@ export default function HealthCaseScreen() {
       setError("Choose an animal.");
       return;
     }
-    const attachments = activeStep?.caseSection
-      ? []
-      : (activeStep?.fields ?? []);
+    const attachments = activeStep?.fields ?? [];
     const missing = attachments.find((field) => {
       const target = attachmentTarget(field);
       return target && field.rules.required && !health[target].length;
@@ -496,7 +492,7 @@ export default function HealthCaseScreen() {
       if (attachmentTarget(field)) delete submitted[field.key];
     }
     const next = {
-      ...updateHealthCaseAnswers(health, submitted, activeStep?.caseSection),
+      ...updateHealthCaseAnswers(health, submitted),
       draftStep: nextStep - firstFormStep,
     };
     if (next.status === "draft") {
@@ -537,17 +533,8 @@ export default function HealthCaseScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          disabled={Boolean(busy)}
-          onPress={() => (step > 0 ? goToStep(step - 1) : router.back())}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>{step > 0 ? "Back" : farmName}</Text>
-        </Pressable>
         <CaseFlowHeader
-          title={entryId ? "Resume draft" : "Add case"}
+          onBack={() => (step > 0 ? goToStep(step - 1) : router.back())}
           animalName={health.animalName}
           farmName={farmName}
           date={health.openedAt ? when(health.openedAt) : ""}
@@ -558,11 +545,7 @@ export default function HealthCaseScreen() {
               ? "Select the animal this case is for."
               : reviewing
                 ? "Check the details below before saving this case."
-                : activeStep?.caseSection === "treatment"
-                  ? "Record the treatment provided and any instructions."
-                  : activeStep?.caseSection === "medicine"
-                    ? "Add medicine details, dosage, and administration instructions."
-                    : "Describe the reported problem and initial observations."
+                : "Complete the Case details using the fields in the template."
           }
         />
         {loading ? <ActivityIndicator color={colors.green} /> : null}
@@ -619,19 +602,14 @@ export default function HealthCaseScreen() {
                     ...activeStep,
                     title: "",
                     fields: activeStep.fields.map((field) =>
-                      !activeStep.caseSection && attachmentTarget(field)
-                        ? { ...field, rules: {} }
-                        : field,
+                      attachmentTarget(field) ? { ...field, rules: {} } : field,
                     ),
                   },
                 ],
               },
             }}
             farmId={farmId}
-            initialValues={
-              drafts.current[step] ??
-              healthCaseValues(health, activeStep.caseSection)
-            }
+            initialValues={drafts.current[step] ?? healthCaseValues(health)}
             onDraftChange={(answers) => {
               drafts.current[step] = answers;
             }}
@@ -639,9 +617,7 @@ export default function HealthCaseScreen() {
             saving={Boolean(busy)}
             onSubmit={continueStep}
             renderField={(field) => {
-              const target = activeStep.caseSection
-                ? undefined
-                : attachmentTarget(field);
+              const target = attachmentTarget(field);
               if (target) {
                 const required = activeStep.fields.find(
                   (item) => item.key === field.key,

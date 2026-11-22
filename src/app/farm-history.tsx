@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
   formTypeTitle,
   getFarmReview,
@@ -95,14 +96,7 @@ export default function FarmHistoryScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>{animalName}</Text>
-        </Pressable>
+        <FlowPageHeading onBack={() => router.back()} title="Record details" />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -119,26 +113,26 @@ export default function FarmHistoryScreen() {
         ) : null}
         {history ? (
           <>
-            <View style={styles.heading}>
-              <Text style={styles.kicker}>{title}</Text>
-              <Text accessibilityRole="header" style={styles.name}>
-                {history.name}
+            <View style={styles.recordIdentity}>
+              <Text style={styles.name}>{history.name}</Text>
+              <Text style={styles.help}>
+                {[title, added].filter(Boolean).join(" · ")}
               </Text>
-              {added ? <Text style={styles.help}>{added}</Text> : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${history.name}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/add-farm-history",
+                    params: { farmId, entryId, kind: history.kind },
+                  })
+                }
+                style={styles.edit}
+              >
+                <Feather name="edit-2" size={15} color={colors.green} />
+                <Text style={styles.editText}>Edit</Text>
+              </Pressable>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: "/add-farm-history",
-                  params: { farmId, entryId, kind: history.kind },
-                })
-              }
-              style={styles.edit}
-            >
-              <Feather name="edit-2" size={16} color={colors.green} />
-              <Text style={styles.editText}>Edit</Text>
-            </Pressable>
             {history.sections.map((section) => (
               <View key={section.title} style={styles.card}>
                 <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -175,14 +169,7 @@ const styles = StyleSheet.create({
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  heading: { gap: 2, ...farmCard, padding: 14 },
-  kicker: {
-    color: colors.green,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
+  recordIdentity: { gap: 6, ...farmCard, padding: 14 },
   name: {
     color: colors.ink,
     fontSize: 28,

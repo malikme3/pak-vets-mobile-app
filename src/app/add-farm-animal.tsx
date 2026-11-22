@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   addAnimalRecord,
@@ -32,7 +33,9 @@ export default function AddFarmAnimalScreen() {
   const params = useLocalSearchParams<{ farmId?: string; kind?: string }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const kind =
-    typeof params.kind === "string" && params.kind.trim() ? params.kind : "animal";
+    typeof params.kind === "string" && params.kind.trim()
+      ? params.kind
+      : "animal";
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,20 +91,12 @@ export default function AddFarmAnimalScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Farm</Text>
-        </Pressable>
-        <Text accessibilityRole="header" style={styles.title}>
-          Add {formTypeTitle(kind)}
-        </Text>
-        <Text style={styles.subtitle}>
-          {template?.form.name ?? `Enter the ${formTypeTitle(kind).toLowerCase()} details.`}
-        </Text>
+        <FlowPageHeading
+          onBack={() => router.back()}
+          title={
+            kind === "animal" ? "Add Animal" : `Add ${formTypeTitle(kind)}`
+          }
+        />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -119,6 +114,7 @@ export default function AddFarmAnimalScreen() {
         {template ? (
           <TemplateEntryForm
             template={template}
+            showDescription={false}
             submitLabel="Add Animal"
             saving={saving}
             farmId={farmId}
@@ -132,7 +128,7 @@ export default function AddFarmAnimalScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: 24, paddingBottom: 40, gap: 16 },
+  scroll: { padding: 16, paddingBottom: 32, gap: 10 },
   back: {
     flexDirection: "row",
     alignItems: "center",
@@ -140,8 +136,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
-  title: { color: colors.ink, fontSize: 32, fontWeight: "800" },
-  subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },

@@ -1,4 +1,5 @@
 import { CaseFeatureEditor } from "../features/farm-vitals/case-feature-editor";
+import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import * as DocumentPicker from "expo-document-picker";
 import { OutlinedTextInput } from "../features/farm-vitals/outlined-field";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
@@ -344,14 +345,7 @@ export default function HealthCaseDetailScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}
-        >
-          <Feather name="arrow-left" size={18} color={colors.green} />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
+        <FlowPageHeading onBack={() => router.back()} title="Case details" />
         {params.saved === "1" ? (
           <View style={styles.success}>
             <Feather name="check-circle" size={18} color={colors.green} />
@@ -360,36 +354,24 @@ export default function HealthCaseDetailScreen() {
         ) : null}
         {loading ? <ActivityIndicator color={colors.green} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {health?.status === "draft" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Resume draft"
+            onPress={() =>
+              router.push({
+                pathname: "/health-case",
+                params: { farmId, entryId: health.entryId },
+              })
+            }
+            style={styles.editButton}
+          >
+            <Feather name="edit-2" size={14} color={colors.green} />
+            <Text style={styles.editText}>Resume draft</Text>
+          </Pressable>
+        ) : null}
         {health ? (
           <>
-            <View style={styles.pageHeading}>
-              <View style={styles.flex}>
-                <Text style={styles.eyebrow}>ANIMAL HEALTH</Text>
-                <Text accessibilityRole="header" style={styles.title}>
-                  Case details
-                </Text>
-              </View>
-              {health.status === "draft" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    health.status === "draft" ? "Resume draft" : "Edit case"
-                  }
-                  onPress={() =>
-                    router.push({
-                      pathname: "/health-case",
-                      params: { farmId, entryId: health.entryId },
-                    })
-                  }
-                  style={styles.editButton}
-                >
-                  <Feather name="edit-2" size={15} color={colors.green} />
-                  <Text style={styles.editText}>
-                    {health.status === "draft" ? "Resume" : "Edit"}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
             <View style={styles.hero}>
               <View style={styles.heroTop}>
                 <View style={styles.animalIcon}>
