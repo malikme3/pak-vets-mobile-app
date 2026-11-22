@@ -259,7 +259,8 @@ export default function FarmBoardScreen() {
       <StatusBar style="dark" />
       <ScrollView
         contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        keyboardShouldPersistTaps="always"
       >
         <FlowPageHeading
           onBack={() => router.dismissTo("/farm-vitals")}
@@ -287,6 +288,7 @@ export default function FarmBoardScreen() {
             placeholder="Search farms"
             placeholderTextColor={colors.muted}
             returnKeyType="search"
+            blurOnSubmit={false}
             style={styles.searchInput}
             accessibilityLabel="Search farms"
           />

@@ -798,12 +798,29 @@ export async function getActiveTemplate(
     );
   const presets = await getInputPresets().catch(() => new Map());
   const sources = new Map<string, FarmTemplateField[]>();
+  const dashboardWidths = new Map<string, boolean>(
+    (form.dashboardFields ?? [])
+      .filter((field) => typeof field.fullWidth === "boolean")
+      .map((field): [string, boolean] => [field.key, field.fullWidth === true]),
+  );
+  const applyDashboardWidths = (
+    fields: FarmTemplateField[],
+  ): FarmTemplateField[] =>
+    fields.map((field) => ({
+      ...field,
+      ...(dashboardWidths.has(field.key)
+        ? { fullWidth: dashboardWidths.get(field.key) }
+        : {}),
+      ...(field.fields ? { fields: applyDashboardWidths(field.fields) } : {}),
+    }));
   const steps = [];
   for (const step of form.steps) {
     steps.push({
       ...step,
       caseSection: type === "health-case" ? undefined : step.caseSection,
-      fields: await expandSources(hydrateFields(step.fields, presets), sources),
+      fields: applyDashboardWidths(
+        await expandSources(hydrateFields(step.fields, presets), sources),
+      ),
     });
   }
   return {

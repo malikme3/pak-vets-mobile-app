@@ -62,6 +62,14 @@ function when(value: string): string {
 function leaf(key: string, label: string, type = "text"): FarmTemplateField {
   return { id: key, key, label, type, rules: {}, helpText: "" };
 }
+function hasSource(fields: FarmTemplateField[], source: string): boolean {
+  return fields.some(
+    (field) =>
+      field.source === source ||
+      (field.fields ? hasSource(field.fields, source) : false),
+  );
+}
+
 function clinicalSections(health: HealthCase) {
   const template = health.caseTemplate;
   if (template)
@@ -168,6 +176,10 @@ export default function HealthCaseDetailScreen() {
   const [medicine, setMedicine] = useState("");
   const [notes, setNotes] = useState("");
   const [media, setMedia] = useState<HealthCaseFile[]>([]);
+  const treatmentConfigured =
+    health?.caseTemplate?.form.steps.some((step) =>
+      hasSource(step.fields, "treatment"),
+    ) ?? false;
 
   const load = useCallback(async () => {
     if (!farmId || !entryId) {
@@ -404,22 +416,28 @@ export default function HealthCaseDetailScreen() {
                 </View>
               ) : null}
               <View style={styles.summaryRow}>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryNumber}>
-                    {health.updates.length}
-                  </Text>
-                  <Text style={styles.help}>Treatment updates</Text>
-                </View>
-                <View style={styles.summaryDivider} />
+                {treatmentConfigured ? (
+                  <>
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryNumber}>
+                        {health.updates.length}
+                      </Text>
+                      <Text style={styles.help}>Treatment updates</Text>
+                    </View>
+                    <View style={styles.summaryDivider} />
+                  </>
+                ) : null}
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryNumber}>
                     {health.conditionPhotos.length +
                       health.evidence.length +
                       health.media.length +
-                      health.updates.reduce(
-                        (count, update) => count + update.media.length,
-                        0,
-                      )}
+                      (treatmentConfigured
+                        ? health.updates.reduce(
+                            (count, update) => count + update.media.length,
+                            0,
+                          )
+                        : 0)}
                   </Text>
                   <Text style={styles.help}>Attachments</Text>
                 </View>
@@ -577,182 +595,195 @@ export default function HealthCaseDetailScreen() {
                 </>
               ) : null}
             </View>
-            <View style={styles.blockHeading}>
-              <Feather name="clock" size={18} color={colors.green} />
-              <Text accessibilityRole="header" style={styles.sectionTitle}>
-                Treatment history
-              </Text>
-              <Text style={styles.historyCount}>{health.updates.length}</Text>
-            </View>
-            {health.updates.length ? (
-              [...health.updates].reverse().map((update, index) => (
-                <View key={update.id} style={styles.timelineRow}>
-                  <View style={styles.timelineRail}>
-                    <View style={styles.timelineDot} />
-                    {index < health.updates.length - 1 ? (
-                      <View style={styles.timelineLine} />
-                    ) : null}
-                  </View>
-                  <View style={[styles.card, styles.timelineCard]}>
-                    <Text style={styles.timelineCaption}>
-                      {index === 0 ? "LATEST UPDATE" : "TREATMENT UPDATE"}
-                    </Text>
-                    <View style={styles.featureHeading}>
-                      <Text style={[styles.updateDate, styles.flex]}>
-                        {when(update.at)}
-                      </Text>
-                      <FeatureEdit
-                        title={`update ${when(update.at)}`}
-                        disabled={editing !== null || adding || saving}
-                        onPress={() => setEditing(`update-${update.id}`)}
-                      />
+            {treatmentConfigured ? (
+              <>
+                <View style={styles.blockHeading}>
+                  <Feather name="clock" size={18} color={colors.green} />
+                  <Text accessibilityRole="header" style={styles.sectionTitle}>
+                    Treatment history
+                  </Text>
+                  <Text style={styles.historyCount}>
+                    {health.updates.length}
+                  </Text>
+                </View>
+                {health.updates.length ? (
+                  [...health.updates].reverse().map((update, index) => (
+                    <View key={update.id} style={styles.timelineRow}>
+                      <View style={styles.timelineRail}>
+                        <View style={styles.timelineDot} />
+                        {index < health.updates.length - 1 ? (
+                          <View style={styles.timelineLine} />
+                        ) : null}
+                      </View>
+                      <View style={[styles.card, styles.timelineCard]}>
+                        <Text style={styles.timelineCaption}>
+                          {index === 0 ? "LATEST UPDATE" : "TREATMENT UPDATE"}
+                        </Text>
+                        <View style={styles.featureHeading}>
+                          <Text style={[styles.updateDate, styles.flex]}>
+                            {when(update.at)}
+                          </Text>
+                          <FeatureEdit
+                            title={`update ${when(update.at)}`}
+                            disabled={editing !== null || adding || saving}
+                            onPress={() => setEditing(`update-${update.id}`)}
+                          />
+                        </View>
+                        {editing === `update-${update.id}` ? (
+                          <CaseFeatureEditor
+                            farmId={farmId}
+                            fields={[
+                              leaf("given", "Treatment", "textarea"),
+                              leaf(
+                                "medicine",
+                                "Medicine and dosage",
+                                "textarea",
+                              ),
+                              leaf("notes", "Progress notes", "textarea"),
+                            ]}
+                            values={{
+                              given: update.given,
+                              medicine: update.medicine,
+                              notes: update.notes,
+                            }}
+                            onCancel={() => setEditing(null)}
+                            onSave={async (values) => {
+                              await saveFeature({
+                                ...health,
+                                updates: health.updates.map((item) =>
+                                  item.id === update.id
+                                    ? {
+                                        ...item,
+                                        given: String(values.given ?? ""),
+                                        medicine: String(values.medicine ?? ""),
+                                        notes: String(values.notes ?? ""),
+                                      }
+                                    : item,
+                                ),
+                              });
+                            }}
+                          />
+                        ) : (
+                          <>
+                            {update.given ? (
+                              <Section title="Treatment" body={update.given} />
+                            ) : null}
+                            {update.medicine ? (
+                              <Section
+                                title="Medicine and dosage"
+                                body={update.medicine}
+                              />
+                            ) : null}
+                            {update.notes ? (
+                              <Section
+                                title="Progress notes"
+                                body={update.notes}
+                              />
+                            ) : null}
+                            {update.media.length ? (
+                              <Files
+                                onOpen={(file) => void openAttachment(file)}
+                                title="Photos"
+                                files={update.media}
+                              />
+                            ) : null}
+                          </>
+                        )}
+                      </View>
                     </View>
-                    {editing === `update-${update.id}` ? (
-                      <CaseFeatureEditor
-                        farmId={farmId}
-                        fields={[
-                          leaf("given", "Treatment", "textarea"),
-                          leaf("medicine", "Medicine and dosage", "textarea"),
-                          leaf("notes", "Progress notes", "textarea"),
-                        ]}
-                        values={{
-                          given: update.given,
-                          medicine: update.medicine,
-                          notes: update.notes,
-                        }}
-                        onCancel={() => setEditing(null)}
-                        onSave={async (values) => {
-                          await saveFeature({
-                            ...health,
-                            updates: health.updates.map((item) =>
-                              item.id === update.id
-                                ? {
-                                    ...item,
-                                    given: String(values.given ?? ""),
-                                    medicine: String(values.medicine ?? ""),
-                                    notes: String(values.notes ?? ""),
-                                  }
-                                : item,
-                            ),
-                          });
-                        }}
-                      />
-                    ) : (
-                      <>
-                        {update.given ? (
-                          <Section title="Treatment" body={update.given} />
-                        ) : null}
-                        {update.medicine ? (
-                          <Section
-                            title="Medicine and dosage"
-                            body={update.medicine}
-                          />
-                        ) : null}
-                        {update.notes ? (
-                          <Section title="Progress notes" body={update.notes} />
-                        ) : null}
-                        {update.media.length ? (
-                          <Files
-                            onOpen={(file) => void openAttachment(file)}
-                            title="Photos"
-                            files={update.media}
-                          />
-                        ) : null}
-                      </>
-                    )}
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Feather name="clock" size={22} color={colors.muted} />
+                    <View style={styles.flex}>
+                      <Text style={styles.emptyTitle}>
+                        No treatment updates yet
+                      </Text>
+                      <Text style={styles.help}>
+                        Updates added to this case will appear here.
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Feather name="clock" size={22} color={colors.muted} />
-                <View style={styles.flex}>
-                  <Text style={styles.emptyTitle}>
-                    No treatment updates yet
-                  </Text>
-                  <Text style={styles.help}>
-                    Updates added to this case will appear here.
-                  </Text>
-                </View>
-              </View>
-            )}
-            {adding ? (
-              <View style={styles.card}>
-                <Text accessibilityRole="header" style={styles.cardTitle}>
-                  Add treatment update
-                </Text>
-                <Text style={styles.help}>
-                  Record the treatment, medicine, or progress for this case.
-                </Text>
-                <OutlinedTextInput
-                  value={given}
-                  onChangeText={setGiven}
-                  label="Treatment"
-                  placeholderTextColor={colors.muted}
-                />
-                <OutlinedTextInput
-                  value={medicine}
-                  onChangeText={setMedicine}
-                  label="Medicine and dosage"
-                  placeholderTextColor={colors.muted}
-                />
-                <OutlinedTextInput
-                  value={notes}
-                  onChangeText={setNotes}
-                  label="Progress notes"
-                  placeholderTextColor={colors.muted}
-                  multiline
-                  style={styles.notes}
-                />
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={saving}
-                  onPress={() => void addPhoto()}
-                >
-                  <Text style={styles.link}>Add photo</Text>
-                </Pressable>
-                {media.length ? (
-                  <Files
-                    onOpen={(file) => void openAttachment(file)}
-                    title="Update photos"
-                    files={media}
-                  />
+                )}
+                {adding ? (
+                  <View style={styles.card}>
+                    <Text accessibilityRole="header" style={styles.cardTitle}>
+                      Add treatment update
+                    </Text>
+                    <Text style={styles.help}>
+                      Record the treatment, medicine, or progress for this case.
+                    </Text>
+                    <OutlinedTextInput
+                      value={given}
+                      onChangeText={setGiven}
+                      label="Treatment"
+                      placeholderTextColor={colors.muted}
+                    />
+                    <OutlinedTextInput
+                      value={medicine}
+                      onChangeText={setMedicine}
+                      label="Medicine and dosage"
+                      placeholderTextColor={colors.muted}
+                    />
+                    <OutlinedTextInput
+                      value={notes}
+                      onChangeText={setNotes}
+                      label="Progress notes"
+                      placeholderTextColor={colors.muted}
+                      multiline
+                      style={styles.notes}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={saving}
+                      onPress={() => void addPhoto()}
+                    >
+                      <Text style={styles.link}>Add photo</Text>
+                    </Pressable>
+                    {media.length ? (
+                      <Files
+                        onOpen={(file) => void openAttachment(file)}
+                        title="Update photos"
+                        files={media}
+                      />
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={saving}
+                      onPress={() => void addUpdate()}
+                      style={styles.primary}
+                    >
+                      <Text style={styles.primaryText}>
+                        {saving ? "Saving…" : "Save update"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={saving}
+                      onPress={() => {
+                        setAdding(false);
+                        setGiven("");
+                        setMedicine("");
+                        setNotes("");
+                        setMedia([]);
+                        setError(null);
+                      }}
+                      style={styles.cancelButton}
+                    >
+                      <Text style={styles.editText}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                ) : health.status === "saved" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={editing !== null || saving}
+                    onPress={() => setAdding(true)}
+                    style={styles.primary}
+                  >
+                    <Text style={styles.primaryText}>Add treatment update</Text>
+                  </Pressable>
                 ) : null}
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={saving}
-                  onPress={() => void addUpdate()}
-                  style={styles.primary}
-                >
-                  <Text style={styles.primaryText}>
-                    {saving ? "Saving…" : "Save update"}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={saving}
-                  onPress={() => {
-                    setAdding(false);
-                    setGiven("");
-                    setMedicine("");
-                    setNotes("");
-                    setMedia([]);
-                    setError(null);
-                  }}
-                  style={styles.cancelButton}
-                >
-                  <Text style={styles.editText}>Cancel</Text>
-                </Pressable>
-              </View>
-            ) : health.status === "saved" ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={editing !== null || saving}
-                onPress={() => setAdding(true)}
-                style={styles.primary}
-              >
-                <Text style={styles.primaryText}>Add treatment update</Text>
-              </Pressable>
+              </>
             ) : null}
           </>
         ) : null}
