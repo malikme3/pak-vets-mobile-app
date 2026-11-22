@@ -1,13 +1,14 @@
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
-import { HeaderBackground } from "../features/farm-vitals/header-background";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
 import { useCallback, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,12 +20,16 @@ import {
   useRouter,
 } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import * as ImagePicker from "expo-image-picker";
 import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   childFormTypes,
   getFarmReview,
   listFormTypes,
+  readableFarmImage,
+  saveFarmProfileImages,
+  uploadFarmImage,
   type FarmFormType,
   type FarmReview,
   type FarmReviewSection,
@@ -66,6 +71,47 @@ function ownerLine(review: FarmReview): string {
       );
       if (row && /owner|contact/i.test(util.label)) return row.value;
     }
+  }
+  return "";
+}
+
+function ownerPhone(review: FarmReview): string {
+  for (const section of review.sections) {
+    for (const util of section.utils ?? []) {
+      const row = util.rows.find(
+        (item) =>
+          /phone|mobile/i.test(item.label) && item.value !== "Not provided",
+      );
+      if (row && /owner|contact/i.test(util.label)) return row.value;
+    }
+  }
+  return "";
+}
+
+function displayPhone(value: string): string {
+  return value.replace(/^\+92-/i, "");
+}
+
+function locationCity(review: FarmReview): string {
+  for (const section of review.sections) {
+    for (const util of section.utils ?? []) {
+      const row = util.rows.find(
+        (item) => /city/i.test(item.label) && item.value !== "Not provided",
+      );
+      if (row && /location/i.test(util.label)) return row.value;
+    }
+  }
+  return "";
+}
+
+function farmCategory(review: FarmReview): string {
+  for (const section of review.sections) {
+    const row = section.rows.find(
+      (item) =>
+        /category|classification/i.test(item.label) &&
+        item.value !== "Not provided",
+    );
+    if (row) return row.value;
   }
   return "";
 }
@@ -143,6 +189,7 @@ function EditSectionButton({
 
 export default function FarmDashboardScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
   const params = useLocalSearchParams<{ farmId?: string }>();
   const farmId = Array.isArray(params.farmId)
     ? params.farmId[0]
@@ -154,6 +201,16 @@ export default function FarmDashboardScreen() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [openUtils, setOpenUtils] = useState<Record<string, boolean>>({});
+  const [profilePhotoSaving, setProfilePhotoSaving] = useState<
+    "farm" | "owner" | null
+  >(null);
+  const [profilePhotoUrls, setProfilePhotoUrls] = useState({
+    farm: "",
+    owner: "",
+  });
+  const [profilePhotoError, setProfilePhotoError] = useState<string | null>(
+    null,
+  );
 
   const openFarm = useCallback(async (farmId: string, quiet = false) => {
     if (!quiet) setOpening(true);
@@ -164,6 +221,15 @@ export default function FarmDashboardScreen() {
         listFormTypes(),
       ]);
       setReview(next);
+      const [farmPhotoUrl, ownerPhotoUrl] = await Promise.all([
+        next.farmPhotoUrl
+          ? readableFarmImage(next.farmPhotoUrl).catch(() => "")
+          : Promise.resolve(""),
+        next.ownerPhotoUrl
+          ? readableFarmImage(next.ownerPhotoUrl).catch(() => "")
+          : Promise.resolve(""),
+      ]);
+      setProfilePhotoUrls({ farm: farmPhotoUrl, owner: ownerPhotoUrl });
       setFormTypes(types);
       if (!quiet) {
         setOpenSections({});
@@ -179,6 +245,49 @@ export default function FarmDashboardScreen() {
       if (!quiet) setOpening(false);
     }
   }, []);
+
+  async function changeProfilePhoto(kind: "farm" | "owner") {
+    if (!review || profilePhotoSaving) return;
+    setProfilePhotoError(null);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: kind === "owner" ? [1, 1] : [16, 9],
+        quality: 0.82,
+      });
+      const asset = result.assets?.[0];
+      if (result.canceled || !asset?.uri) return;
+      setProfilePhotoSaving(kind);
+      const extension =
+        /\.([a-z0-9]+)$/i.exec(asset.fileName ?? "")?.[1] ??
+        (asset.mimeType?.split("/")[1] === "jpeg"
+          ? "jpg"
+          : (asset.mimeType?.split("/")[1] ?? "jpg"));
+      const photoUrl = await uploadFarmImage(
+        asset.uri,
+        `${kind}-profile-${Date.now()}.${extension}`,
+        farmId,
+        "farm",
+      );
+      const readableUrl = await readableFarmImage(photoUrl);
+      const changes =
+        kind === "farm"
+          ? { farmPhotoUrl: photoUrl }
+          : { ownerPhotoUrl: photoUrl };
+      await saveFarmProfileImages(farmId, changes);
+      setReview((current) => (current ? { ...current, ...changes } : current));
+      setProfilePhotoUrls((current) => ({ ...current, [kind]: readableUrl }));
+    } catch (cause) {
+      setProfilePhotoError(
+        cause instanceof Error
+          ? cause.message
+          : "The photo could not be saved.",
+      );
+    } finally {
+      setProfilePhotoSaving(null);
+    }
+  }
 
   function toggleSection(key: string, fallback: boolean) {
     setOpenSections((current) => ({
@@ -197,7 +306,11 @@ export default function FarmDashboardScreen() {
 
   const sections = review ? visibleSections(review) : [];
   const owner = review ? ownerLine(review) : "";
+  const phone = review ? ownerPhone(review) : "";
+  const city = review ? locationCity(review) : "";
+  const category = review ? farmCategory(review) : "";
   const registered = review ? when(review.submittedAt) : "";
+  const coverHeight = Math.min(156, Math.max(118, screenWidth * 0.34));
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -228,49 +341,148 @@ export default function FarmDashboardScreen() {
 
         {review && !opening ? (
           <>
-            <HeaderBackground
-              imageUrl={review.headerBackgroundImageUrl}
-              style={styles.identity}
-            >
-              <View style={styles.identityTop}>
-                <View style={styles.farmMark}>
-                  <Feather name="home" size={21} color={colors.green} />
-                </View>
-                <View style={styles.copy}>
-                  <Text style={styles.profileLabel}>FARM PROFILE</Text>
-                  <Text accessibilityRole="header" style={styles.name}>
-                    {review.name}
-                  </Text>
-                  {owner ? (
-                    <Text style={styles.meta}>Owner · {owner}</Text>
-                  ) : null}
-                </View>
+            <View style={styles.profileCard}>
+              <View style={[styles.cover, { height: coverHeight }]}>
+                {profilePhotoUrls.farm ? (
+                  <Image
+                    source={{ uri: profilePhotoUrls.farm }}
+                    resizeMode="cover"
+                    style={styles.coverImage}
+                  />
+                ) : (
+                  <View style={styles.coverPlaceholder}>
+                    <Feather name="image" size={28} color={colors.green} />
+                  </View>
+                )}
+                <View style={styles.coverOverlay} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    review.farmPhotoUrl
+                      ? "Change farm cover photo"
+                      : "Add farm cover photo"
+                  }
+                  disabled={profilePhotoSaving !== null}
+                  onPress={() => void changeProfilePhoto("farm")}
+                  style={styles.coverEdit}
+                >
+                  {profilePhotoSaving === "farm" ? (
+                    <ActivityIndicator color={colors.surface} />
+                  ) : (
+                    <Feather name="camera" size={17} color={colors.surface} />
+                  )}
+                </Pressable>
               </View>
-              <View style={styles.identityFooter}>
-                {registered ? (
-                  <View style={styles.registered}>
-                    <Feather name="calendar" size={13} color={colors.muted} />
-                    <Text
-                      accessibilityLabel={`Registered ${registered}`}
-                      style={styles.registrationDate}
+              <View style={styles.profileColumns}>
+                <View style={styles.ownerColumn}>
+                  <View style={styles.ownerPhotoWrap}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        review.ownerPhotoUrl
+                          ? "Change owner photo"
+                          : "Add owner photo"
+                      }
+                      disabled={profilePhotoSaving !== null}
+                      onPress={() => void changeProfilePhoto("owner")}
+                      style={styles.ownerPhoto}
                     >
-                      {registered}
+                      {profilePhotoUrls.owner ? (
+                        <Image
+                          source={{ uri: profilePhotoUrls.owner }}
+                          resizeMode="cover"
+                          style={styles.ownerImage}
+                        />
+                      ) : (
+                        <Feather name="user" size={28} color={colors.green} />
+                      )}
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Upload owner photo"
+                      disabled={profilePhotoSaving !== null}
+                      onPress={() => void changeProfilePhoto("owner")}
+                      style={styles.ownerPhotoEdit}
+                    >
+                      {profilePhotoSaving === "owner" ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.surface}
+                        />
+                      ) : (
+                        <Feather
+                          name="camera"
+                          size={12}
+                          color={colors.surface}
+                        />
+                      )}
+                    </Pressable>
+                  </View>
+                  <Text numberOfLines={2} style={styles.ownerName}>
+                    {owner || "Owner not provided"}
+                  </Text>
+                  <View style={styles.detailLine}>
+                    <Feather name="phone" size={13} color={colors.green} />
+                    <Text
+                      numberOfLines={1}
+                      style={phone ? styles.detailText : styles.detailMissing}
+                    >
+                      {phone ? displayPhone(phone) : "Phone not provided"}
                     </Text>
                   </View>
-                ) : null}
-                <View
-                  accessible
-                  accessibilityLabel={`${review.animals.length} registered ${review.animals.length === 1 ? "animal" : "animals"}`}
-                  style={styles.animalBadge}
-                >
-                  <Feather name="activity" size={13} color={colors.surface} />
-                  <Text style={styles.animalBadgeText}>
-                    {review.animals.length}{" "}
-                    {review.animals.length === 1 ? "animal" : "animals"}
+                  {registered ? (
+                    <Text style={styles.registrationDate}>
+                      Registered {registered}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.farmColumn}>
+                  <Text style={styles.profileLabel}>FARM</Text>
+                  <Text
+                    accessibilityRole="header"
+                    numberOfLines={2}
+                    style={styles.farmName}
+                  >
+                    {review.name}
                   </Text>
+                  <View style={styles.detailLine}>
+                    <Feather name="map-pin" size={14} color={colors.green} />
+                    <Text
+                      numberOfLines={1}
+                      style={city ? styles.detailText : styles.detailMissing}
+                    >
+                      {city || "Location not set"}
+                    </Text>
+                  </View>
+                  <View style={styles.profileBadges}>
+                    <View style={styles.animalCount}>
+                      <Feather name="activity" size={14} color={colors.green} />
+                      <Text style={styles.animalCountText}>
+                        {review.animals.length}{" "}
+                        {review.animals.length === 1 ? "animal" : "animals"}
+                      </Text>
+                    </View>
+                    <View style={styles.categoryBadge}>
+                      <Text
+                        numberOfLines={1}
+                        style={
+                          category
+                            ? styles.categoryText
+                            : styles.categoryMissing
+                        }
+                      >
+                        {category || "Category not set"}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
-            </HeaderBackground>
+            </View>
+            {profilePhotoError ? (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {profilePhotoError}
+              </Text>
+            ) : null}
             {sections.map((section, index) => {
               const key = `farm-${index}`;
               const directFields =
@@ -394,6 +606,17 @@ export default function FarmDashboardScreen() {
                 <View key={type.key} style={styles.childSection}>
                   <View style={styles.animalHead}>
                     <Text style={styles.sectionTitle}>{title}</Text>
+                    {type.key === "animal" ? (
+                      <View
+                        accessible
+                        accessibilityLabel={`${review.animals.length} total ${review.animals.length === 1 ? "animal" : "animals"}`}
+                        style={styles.animalTotalBadge}
+                      >
+                        <Text style={styles.animalTotalText}>
+                          {review.animals.length}
+                        </Text>
+                      </View>
+                    ) : null}
                     <Pressable
                       accessibilityRole="button"
                       onPress={() =>
@@ -530,62 +753,188 @@ const styles = StyleSheet.create({
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
-  identity: { ...farmCard, padding: 14, gap: 12 },
-  identityTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  farmMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
+  profileCard: {
+    ...farmCard,
+    overflow: "hidden",
+    padding: 0,
+    gap: 0,
+    backgroundColor: colors.surface,
+  },
+  cover: {
+    width: "100%",
+    overflow: "hidden",
+    backgroundColor: colors.mint,
+  },
+  coverImage: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
+  coverPlaceholder: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#DFEEE7",
+  },
+  coverOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(23,61,50,0.08)",
+  },
+  coverEdit: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(23,61,50,0.82)",
+  },
+  profileColumns: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+    paddingHorizontal: 0,
+    paddingBottom: 4,
+  },
+  profileBadges: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 2,
+  },
+  ownerColumn: {
+    flex: 0.4,
+    minWidth: 0,
+    padding: 9,
+    borderWidth: 1,
+    borderColor: "#DCE9E1",
+    borderRadius: 16,
+    backgroundColor: "#FBFDFB",
+    shadowColor: "#173D32",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  ownerPhotoWrap: {
+    position: "relative",
+    alignSelf: "flex-start",
+    marginTop: -42,
+    marginLeft: -2,
+    marginBottom: 8,
+  },
+  ownerPhoto: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.mint,
+    borderWidth: 4,
+    borderColor: colors.surface,
+    overflow: "hidden",
+    elevation: 3,
   },
-  copy: { flex: 1, minWidth: 0, gap: 3 },
+  ownerImage: { width: "100%", height: "100%" },
+  ownerPhotoEdit: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.green,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  ownerName: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 19,
+    marginBottom: 5,
+  },
+  farmColumn: {
+    flex: 0.6,
+    minWidth: 0,
+    alignSelf: "stretch",
+    padding: 9,
+    paddingTop: 14,
+    gap: 7,
+    borderWidth: 1,
+    borderColor: "#DCE9E1",
+    borderRadius: 16,
+    backgroundColor: "#FBFDFB",
+    shadowColor: "#173D32",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 2,
+  },
   profileLabel: {
     color: colors.green,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 1.3,
+    letterSpacing: 1.1,
   },
-  name: {
+  farmName: {
     color: colors.ink,
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: "800",
-    letterSpacing: -0.4,
+    lineHeight: 21,
   },
-  meta: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  identityFooter: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  registered: {
+  detailLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    flexShrink: 1,
+    minWidth: 0,
   },
-  registrationDate: {
+  detailText: { flex: 1, minWidth: 0, color: colors.muted, fontSize: 12 },
+  detailMissing: {
+    flex: 1,
+    minWidth: 0,
     color: colors.muted,
     fontSize: 11,
-    lineHeight: 16,
-    flexShrink: 1,
+    fontStyle: "italic",
   },
-  animalBadge: {
+  animalCount: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 6,
-    backgroundColor: colors.green,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 20,
+    marginTop: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.mint,
   },
-  animalBadgeText: { color: colors.surface, fontSize: 12, fontWeight: "700" },
+  animalCountText: { color: colors.green, fontSize: 12, fontWeight: "700" },
+  categoryBadge: {
+    alignSelf: "flex-start",
+    maxWidth: "68%",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: colors.mint,
+  },
+  categoryText: { color: colors.green, fontSize: 11, fontWeight: "700" },
+  categoryMissing: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
+  },
+  registrationDate: { color: colors.muted, fontSize: 10 },
+  copy: { flex: 1, minWidth: 0, gap: 3 },
   card: {
     ...farmCard,
   },
@@ -665,6 +1014,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   childSection: { gap: 12 },
+  animalTotalBadge: {
+    minWidth: 26,
+    height: 26,
+    paddingHorizontal: 8,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.mint,
+  },
+  animalTotalText: { color: colors.green, fontSize: 12, fontWeight: "800" },
   add: {
     flexDirection: "row",
     alignItems: "center",

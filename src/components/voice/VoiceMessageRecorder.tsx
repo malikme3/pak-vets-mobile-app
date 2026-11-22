@@ -378,6 +378,15 @@ export function VoiceMessageRecorder({
 
   return (
     <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={
+        isProcessing
+          ? "Transcribing audio"
+          : recordingStatus === "recording"
+            ? "Stop voice recording"
+            : "Start voice recording"
+      }
+      accessibilityState={{ disabled: disabled || isProcessing }}
       style={[
         styles.micButton,
         {

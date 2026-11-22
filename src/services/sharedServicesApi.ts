@@ -551,9 +551,7 @@ export async function processStructuredImage(
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const responseData = error.response?.data as
-        | { error?: { message?: string }; message?: string }
-        | string
-        | undefined;
+        { error?: { message?: string }; message?: string } | string | undefined;
       const responseMessage =
         typeof responseData === "string"
           ? responseData
@@ -575,4 +573,25 @@ export async function processStructuredImage(
       throw error;
     }
   }
+}
+
+export async function enhanceFieldText(
+  text: string,
+  fieldLabel: string,
+): Promise<string> {
+  const response = await axios.post<{
+    success: boolean;
+    data?: { enhancedText?: string };
+    error?: { message?: string };
+  }>(`${getSharedServicesApiUrl()}/text/enhance`, {
+    text,
+    fieldLabel,
+  });
+  const enhancedText = response.data.data?.enhancedText?.trim();
+  if (!response.data.success || !enhancedText) {
+    throw new Error(
+      response.data.error?.message || "The text could not be enhanced.",
+    );
+  }
+  return enhancedText;
 }

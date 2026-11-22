@@ -3,9 +3,10 @@ import {
   farmCard,
   farmButton,
 } from "../features/farm-vitals/presentation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Keyboard,
   Platform,
   Pressable,
@@ -25,6 +26,7 @@ import { distanceKm, type Coordinates } from "../utils/coordinates";
 import { formatDistance } from "../utils/formatDistance";
 import {
   listFarmDashboard,
+  readableFarmImage,
   type FarmDashboardEntry,
 } from "../services/farmVitalsApi";
 
@@ -72,6 +74,7 @@ function farmNameRow(farm: FarmDashboardEntry) {
 function landing(farm: FarmDashboardEntry): {
   title: string;
   highlights: FarmDashboardEntry["rows"];
+  badges: FarmDashboardEntry["rows"];
   details: FarmDashboardEntry["rows"];
 } {
   const name = farmNameRow(farm);
@@ -79,10 +82,70 @@ function landing(farm: FarmDashboardEntry): {
   return {
     title: name?.value.trim() || farm.name,
     highlights,
+    badges: farm.rows.filter((row) => row.value.trim() && row.badgeView),
     details: farm.rows.filter(
-      (row) => row.value.trim() && row !== name && !highlights.includes(row),
+      (row) =>
+        row.value.trim() &&
+        row.tileView &&
+        row !== name &&
+        !highlights.includes(row),
     ),
   };
+}
+
+function FarmCardCover({
+  farm,
+  initial,
+}: {
+  farm: FarmDashboardEntry;
+  initial: string;
+}) {
+  const [images, setImages] = useState({ farm: "", owner: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      farm.farmPhotoUrl
+        ? readableFarmImage(farm.farmPhotoUrl).catch(() => "")
+        : Promise.resolve(""),
+      farm.ownerPhotoUrl
+        ? readableFarmImage(farm.ownerPhotoUrl).catch(() => "")
+        : Promise.resolve(""),
+    ]).then(([farmImage, ownerImage]) => {
+      if (!cancelled) setImages({ farm: farmImage, owner: ownerImage });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [farm.farmPhotoUrl, farm.ownerPhotoUrl]);
+
+  return (
+    <View style={styles.tileCover}>
+      {images.farm ? (
+        <Image
+          source={{ uri: images.farm }}
+          resizeMode="cover"
+          style={styles.tileCoverImage}
+        />
+      ) : (
+        <View style={styles.tileCoverFallback}>
+          <Feather name="home" size={17} color={colors.green} />
+        </View>
+      )}
+      <View style={styles.tileCoverShade} />
+      <View style={styles.tileOwnerPhoto}>
+        {images.owner ? (
+          <Image
+            source={{ uri: images.owner }}
+            resizeMode="cover"
+            style={styles.tileOwnerImage}
+          />
+        ) : (
+          <Text style={styles.tileOwnerInitial}>{initial || "F"}</Text>
+        )}
+      </View>
+    </View>
+  );
 }
 
 function filterId(row: FarmDashboardEntry["rows"][number]): string {
@@ -127,6 +190,9 @@ export default function FarmBoardScreen() {
   const [findingNearby, setFindingNearby] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [farms, setFarms] = useState<FarmDashboardEntry[]>([]);
+  const [expandedFarms, setExpandedFarms] = useState<Record<string, boolean>>(
+    {},
+  );
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [searched, setSearched] = useState(false);
@@ -446,83 +512,136 @@ export default function FarmBoardScreen() {
         ) : null}
         {shown.map((farm) => {
           const place = landing(farm);
+          const expanded = expandedFarms[farm.farmId] === true;
+          const owner = place.highlights.find((row) => /name/i.test(row.label));
+          const phone = place.highlights.find((row) =>
+            /phone|mobile/i.test(`${row.key ?? ""} ${row.label}`),
+          );
+          const classification = farm.rows.find((row) =>
+            /category|classification/i.test(row.label),
+          );
+          const ownerInitial =
+            owner?.value.trim().slice(0, 1) || place.title.slice(0, 1);
+          const openFarm = () =>
+            router.push({
+              pathname: "/farm-dashboard",
+              params: { farmId: farm.farmId },
+            });
           return (
-            <Pressable
-              key={farm.farmId}
-              accessibilityRole="button"
-              accessibilityLabel={[
-                place.title,
-                ...place.highlights.map((row) => row.value),
-                ...place.details.map((row) => `${row.label}, ${row.value}`),
-              ].join(". ")}
-              accessibilityHint="Opens the farm"
-              onPress={() =>
-                router.push({
-                  pathname: "/farm-dashboard",
-                  params: { farmId: farm.farmId },
-                })
-              }
-              style={({ pressed }) => [
-                styles.card,
-                pressed && styles.cardPressed,
-              ]}
-            >
+            <View key={farm.farmId} style={styles.card}>
+              <FarmCardCover farm={farm} initial={ownerInitial} />
               <View style={styles.landing}>
-                <View style={styles.farmIcon} accessible={false}>
-                  <Feather name="home" size={19} color={colors.green} />
-                </View>
-                <View style={styles.landingCopy}>
-                  <Text style={styles.farmName}>{place.title}</Text>
-                  {nearbyOrigin && farm.distance !== null ? (
-                    <Text style={styles.distanceLabel}>
-                      {formatDistance(farm.distance)} away
-                    </Text>
-                  ) : null}
-                  {place.highlights.length ? (
-                    <Text style={styles.subline}>
-                      {place.highlights.map((row, index) => (
-                        <Text
-                          key={filterId(row)}
-                          style={
-                            /phone|mobile/i.test(
-                              `${row.key ?? ""} ${row.label}`,
-                            )
-                              ? styles.subPhone
-                              : undefined
-                          }
-                        >
-                          {index ? "  ·  " : ""}
-                          {row.value}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${place.title}${owner ? `, owner ${owner.value}` : ""}. Open farm`}
+                  onPress={openFarm}
+                  style={styles.landingMain}
+                >
+                  <View style={styles.landingCopy}>
+                    <View style={styles.farmTitleRow}>
+                      <Text numberOfLines={1} style={styles.farmName}>
+                        {place.title}
+                      </Text>
+                      <View
+                        accessible
+                        accessibilityLabel={`${farm.animalCount} total ${farm.animalCount === 1 ? "animal" : "animals"}`}
+                        style={styles.tileAnimalBadge}
+                      >
+                        <Text style={styles.tileAnimalCount}>
+                          {farm.animalCount}{" "}
+                          {farm.animalCount === 1 ? "animal" : "animals"}
                         </Text>
-                      ))}
+                      </View>
+                      {classification ? (
+                        <View
+                          accessible
+                          accessibilityLabel={`Farm classification ${classification.value}`}
+                          style={styles.tileClassificationBadge}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={styles.tileClassificationText}
+                          >
+                            {classification.value}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text numberOfLines={1} style={styles.subline}>
+                      {owner?.value ?? "Owner not provided"}
+                      {expanded && phone ? (
+                        <Text style={styles.subPhone}>
+                          {" "}
+                          · {phone.value.replace(/^\+92-/i, "")}
+                        </Text>
+                      ) : null}
                     </Text>
-                  ) : null}
-                </View>
-                <View style={styles.openIcon} accessible={false}>
+                    {place.badges.length ? (
+                      <View style={styles.dashboardBadges}>
+                        {place.badges.map((row, index) => (
+                          <View
+                            key={`dashboard-badge-${filterId(row)}-${index}`}
+                            style={styles.dashboardBadge}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={styles.dashboardBadgeText}
+                            >
+                              {row.label}: {row.value}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${place.title} details`}
+                  accessibilityState={{ expanded }}
+                  onPress={() =>
+                    setExpandedFarms((current) => ({
+                      ...current,
+                      [farm.farmId]: !expanded,
+                    }))
+                  }
+                  style={styles.openIcon}
+                >
                   <Feather
-                    name="chevron-right"
+                    name={expanded ? "chevron-up" : "chevron-down"}
                     size={18}
                     color={colors.green}
                   />
-                </View>
+                </Pressable>
               </View>
-              {place.details.length ? (
-                <View style={styles.facts}>
-                  {place.details.map((row, index) => (
-                    <View
-                      key={`${filterId(row)}-${index}`}
-                      style={[
-                        styles.fact,
-                        row.fullWidth === true && styles.factWide,
-                      ]}
-                    >
-                      <Text style={styles.factLabel}>{row.label}</Text>
-                      <Text style={styles.factValue}>{row.value}</Text>
+              {expanded ? (
+                <>
+                  {nearbyOrigin && farm.distance !== null ? (
+                    <Text style={styles.expandedDistance}>
+                      {formatDistance(farm.distance)} away
+                    </Text>
+                  ) : null}
+                  {place.details.length ? (
+                    <View style={styles.facts}>
+                      {place.details
+                        .filter((row) => row !== classification)
+                        .map((row, index) => (
+                          <View
+                            key={`${filterId(row)}-${index}`}
+                            style={[
+                              styles.fact,
+                              row.fullWidth === true && styles.factWide,
+                            ]}
+                          >
+                            <Text style={styles.factLabel}>{row.label}</Text>
+                            <Text style={styles.factValue}>{row.value}</Text>
+                          </View>
+                        ))}
                     </View>
-                  ))}
-                </View>
+                  ) : null}
+                </>
               ) : null}
-            </Pressable>
+            </View>
           );
         })}
       </ScrollView>
@@ -635,30 +754,113 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     ...farmButton,
   },
-  distanceLabel: { color: colors.green, fontSize: 12, fontWeight: "600" },
+  expandedDistance: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: "600",
+    paddingHorizontal: 12,
+    paddingBottom: 6,
+  },
   searchDisabled: { opacity: 0.5 },
   searchButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
   card: {
-    padding: 14,
-    gap: 12,
+    padding: 0,
+    gap: 0,
+    overflow: "hidden",
     ...farmCard,
   },
-  cardPressed: { borderColor: colors.green, backgroundColor: "#F4FAF6" },
-  landing: { flexDirection: "row", alignItems: "center", gap: 10 },
-  farmIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+  tileCover: {
+    height: 70,
+    position: "relative",
+    backgroundColor: colors.mint,
+  },
+  tileCoverImage: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  tileCoverFallback: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E3F0E9",
+  },
+  tileCoverShade: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(23,61,50,0.08)",
+  },
+  tileOwnerPhoto: {
+    position: "absolute",
+    left: 12,
+    bottom: -24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.mint,
+    borderWidth: 3,
+    borderColor: colors.surface,
+    overflow: "hidden",
+    elevation: 2,
   },
-  landingCopy: { flex: 1, gap: 3 },
+  tileOwnerImage: { width: "100%", height: "100%" },
+  tileOwnerInitial: { color: colors.green, fontSize: 15, fontWeight: "800" },
+  landing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 78,
+    paddingRight: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+    minHeight: 56,
+  },
+  landingMain: { flex: 1, minWidth: 0 },
+  landingCopy: { flex: 1, gap: 2, minWidth: 0 },
+  farmTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   farmName: {
+    flex: 1,
+    minWidth: 0,
     color: colors.ink,
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: -0.2,
+  },
+  tileAnimalBadge: {
+    flexShrink: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.mint,
+  },
+  tileAnimalCount: { color: colors.green, fontSize: 10, fontWeight: "700" },
+  tileClassificationBadge: {
+    flexShrink: 1,
+    maxWidth: 78,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 11,
+    backgroundColor: "#F1F5F1",
+  },
+  tileClassificationText: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "700",
   },
   subline: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   subPhone: { color: colors.green, fontWeight: "700" },
@@ -670,11 +872,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.field,
   },
+  dashboardBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  dashboardBadge: {
+    maxWidth: "100%",
+    borderRadius: 999,
+    backgroundColor: colors.mint,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  dashboardBadgeText: {
+    color: colors.green,
+    fontSize: 11,
+    fontWeight: "700",
+  },
   facts: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 8,
+    rowGap: 6,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
   },
   fact: {
     width: "49%",

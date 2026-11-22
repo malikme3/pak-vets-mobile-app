@@ -26,6 +26,8 @@ export type FarmTemplateField = {
   source?: string;
   showOnDashboard?: boolean;
   fullWidth?: boolean;
+  aiEnhance?: boolean;
+  voiceInput?: boolean;
   fields?: FarmTemplateField[];
   promptKey?: string;
 };
@@ -38,6 +40,10 @@ export type FarmDashboardField = {
   groupKey?: string;
   filter?: boolean;
   fullWidth?: boolean;
+  badgeView?: boolean;
+  tileView?: boolean;
+  aiEnhance?: boolean;
+  voiceInput?: boolean;
 };
 
 export type FarmTemplateForm = {
@@ -117,6 +123,9 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       rules: parseRules(item.rules),
       fullWidth: item.fullWidth === true,
     };
+    if (typeof item.aiEnhance === "boolean") field.aiEnhance = item.aiEnhance;
+    if (typeof item.voiceInput === "boolean")
+      field.voiceInput = item.voiceInput;
     if (typeof item.source === "string" && item.source.trim())
       field.source = item.source.trim();
     if (item.showOnDashboard === true || item.showOnDashboard === false)
@@ -147,9 +156,21 @@ function parseDashboardFields(value: unknown): FarmDashboardField[] {
         ...(typeof item.groupKey === "string" && item.groupKey.trim()
           ? { groupKey: item.groupKey.trim() }
           : {}),
-        ...(item.filter === true ? { filter: true } : {}),
+        ...(typeof item.filter === "boolean" ? { filter: item.filter } : {}),
         ...(typeof item.fullWidth === "boolean"
           ? { fullWidth: item.fullWidth }
+          : {}),
+        ...(typeof item.badgeView === "boolean"
+          ? { badgeView: item.badgeView }
+          : {}),
+        ...(typeof item.tileView === "boolean"
+          ? { tileView: item.tileView }
+          : {}),
+        ...(typeof item.aiEnhance === "boolean"
+          ? { aiEnhance: item.aiEnhance }
+          : {}),
+        ...(typeof item.voiceInput === "boolean"
+          ? { voiceInput: item.voiceInput }
           : {}),
       },
     ];
@@ -747,6 +768,47 @@ async function getInputPresets(): Promise<Map<string, CatalogField[]>> {
   return presets;
 }
 
+function applyDashboardFieldOptions(
+  fields: FarmTemplateField[],
+  options: FarmDashboardField[],
+  sourceContext?: { source: string; groupKey: string },
+): FarmTemplateField[] {
+  return fields.map((field) => {
+    const exactOption = options.find(
+      (item) =>
+        item.key === field.key &&
+        (sourceContext
+          ? item.source === sourceContext.source &&
+            item.groupKey === sourceContext.groupKey
+          : !item.source && !item.groupKey),
+    );
+    const keyMatches = options.filter((item) => item.key === field.key);
+    const option =
+      exactOption ?? (keyMatches.length === 1 ? keyMatches[0] : undefined);
+    const nextSourceContext = field.source
+      ? { source: field.source, groupKey: field.key }
+      : sourceContext;
+    return {
+      ...field,
+      ...(typeof option?.aiEnhance === "boolean"
+        ? { aiEnhance: option.aiEnhance }
+        : {}),
+      ...(typeof option?.voiceInput === "boolean"
+        ? { voiceInput: option.voiceInput }
+        : {}),
+      ...(field.fields
+        ? {
+            fields: applyDashboardFieldOptions(
+              field.fields,
+              options,
+              nextSourceContext,
+            ),
+          }
+        : {}),
+    };
+  });
+}
+
 export async function getActiveTemplate(
   type: string,
 ): Promise<ActiveFarmTemplate> {
@@ -818,8 +880,11 @@ export async function getActiveTemplate(
     steps.push({
       ...step,
       caseSection: type === "health-case" ? undefined : step.caseSection,
-      fields: applyDashboardWidths(
-        await expandSources(hydrateFields(step.fields, presets), sources),
+      fields: applyDashboardFieldOptions(
+        applyDashboardWidths(
+          await expandSources(hydrateFields(step.fields, presets), sources),
+        ),
+        form.dashboardFields ?? [],
       ),
     });
   }
@@ -852,6 +917,10 @@ export type FarmReviewRow = {
   groupKey?: string;
   filter?: boolean;
   fullWidth?: boolean;
+  badgeView?: boolean;
+  tileView?: boolean;
+  aiEnhance?: boolean;
+  voiceInput?: boolean;
   label: string;
   value: string;
 };
@@ -1138,6 +1207,8 @@ export type FarmAnimalReview = {
 
 export type FarmReview = {
   headerBackgroundImageUrl?: string;
+  farmPhotoUrl?: string;
+  ownerPhotoUrl?: string;
   farmId: string;
   name: string;
   submittedAt: string | null;
@@ -1149,6 +1220,9 @@ export type FarmReview = {
 export type FarmDashboardEntry = {
   farmId: string;
   name: string;
+  farmPhotoUrl?: string;
+  ownerPhotoUrl?: string;
+  animalCount: number;
   submittedAt: string | null;
   rows: FarmReviewRow[];
   location?: Coordinates;
@@ -1211,6 +1285,13 @@ function dashboardRows(
         key: choice.key,
         ...(choice.groupKey ? { groupKey: choice.groupKey } : {}),
         ...(choice.filter ? { filter: true } : {}),
+        badgeView: choice.badgeView === true,
+        tileView:
+          typeof choice.tileView === "boolean"
+            ? choice.tileView
+            : choice.badgeView !== true,
+        aiEnhance: choice.aiEnhance === true,
+        voiceInput: choice.voiceInput === true,
         fullWidth:
           typeof choice.fullWidth === "boolean"
             ? choice.fullWidth
@@ -1223,17 +1304,24 @@ function dashboardRows(
   });
 }
 
-async function farmEntryValues(
-  farmId: string,
-): Promise<Record<string, unknown>> {
+async function farmEntryValues(farmId: string): Promise<{
+  values: Record<string, unknown>;
+  farmPhotoUrl?: string;
+  ownerPhotoUrl?: string;
+  animalCount: number;
+}> {
   const response = await fetch(
     `${FARM_VITALS_API_URL}/farm-vitals/farms/${encodeURIComponent(farmId)}`,
     { headers: { Accept: "application/json" } },
   );
   const payload = await readJson(response);
-  if (!isObject(payload) || !isObject(payload.data)) return {};
+  if (!isObject(payload) || !isObject(payload.data))
+    return { values: {}, animalCount: 0 };
   const data = isObject(payload.data.data) ? payload.data.data : {};
   const vitals = isObject(data.farmVitals) ? data.farmVitals : {};
+  const profileImages = isObject(vitals.profileImages)
+    ? vitals.profileImages
+    : {};
   const entries = Array.isArray(vitals.entries) ? vitals.entries : [];
   const entry = [...entries]
     .reverse()
@@ -1241,7 +1329,20 @@ async function farmEntryValues(
       (item) =>
         isObject(item) && isObject(item.form) && item.form.entity === "farm",
     );
-  return isObject(entry) && isObject(entry.values) ? entry.values : {};
+  const animalCount = entries.filter(
+    (item) =>
+      isObject(item) && isObject(item.form) && item.form.entity === "animal",
+  ).length;
+  return {
+    values: isObject(entry) && isObject(entry.values) ? entry.values : {},
+    animalCount,
+    ...(text(profileImages.farmPhotoUrl)
+      ? { farmPhotoUrl: text(profileImages.farmPhotoUrl) }
+      : {}),
+    ...(text(profileImages.ownerPhotoUrl)
+      ? { ownerPhotoUrl: text(profileImages.ownerPhotoUrl) }
+      : {}),
+  };
 }
 
 export async function listFarmDashboard(): Promise<FarmDashboardEntry[]> {
@@ -1254,10 +1355,14 @@ export async function listFarmDashboard(): Promise<FarmDashboardEntry[]> {
   return Promise.all(
     farms.map(async (farm) => {
       try {
-        const values = await farmEntryValues(farm.farmId);
+        const entry = await farmEntryValues(farm.farmId);
+        const values = entry.values;
         return {
           farmId: farm.farmId,
           name: namedText(values, farm.name),
+          farmPhotoUrl: entry.farmPhotoUrl,
+          ownerPhotoUrl: entry.ownerPhotoUrl,
+          animalCount: entry.animalCount,
           submittedAt: farm.submittedAt,
           rows: dashboardRows(fields, values, selected),
           location: readCoordinates(
@@ -1271,6 +1376,7 @@ export async function listFarmDashboard(): Promise<FarmDashboardEntry[]> {
         return {
           farmId: farm.farmId,
           name: farm.name,
+          animalCount: 0,
           submittedAt: farm.submittedAt,
           rows: [],
         };
@@ -1670,6 +1776,9 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
   const record = payload.data;
   const data = isObject(record.data) ? record.data : {};
   const vitals = isObject(data.farmVitals) ? data.farmVitals : {};
+  const profileImages = isObject(vitals.profileImages)
+    ? vitals.profileImages
+    : {};
   const entries = Array.isArray(vitals.entries) ? vitals.entries : [];
   const entry = [...entries]
     .reverse()
@@ -1769,6 +1878,8 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
   });
   return {
     farmId: text(record.farmId, farmId),
+    farmPhotoUrl: text(profileImages.farmPhotoUrl) || undefined,
+    ownerPhotoUrl: text(profileImages.ownerPhotoUrl) || undefined,
     headerBackgroundImageUrl: farmHeaderImage,
     name: namedText(values, text(form?.name, "Farm")),
     submittedAt:
@@ -1808,6 +1919,26 @@ async function readFarmDocument(farmId: string): Promise<{
     entries:
       isObject(vitals) && Array.isArray(vitals.entries) ? vitals.entries : [],
   };
+}
+
+export async function saveFarmProfileImages(
+  farmId: string,
+  images: Partial<{ farmPhotoUrl: string; ownerPhotoUrl: string }>,
+): Promise<void> {
+  const { data, entries } = await readFarmDocument(farmId);
+  const vitals = isObject(data.farmVitals) ? data.farmVitals : {};
+  const currentImages = isObject(vitals.profileImages)
+    ? vitals.profileImages
+    : {};
+  await saveFarmDocument(farmId, {
+    ...data,
+    farmVitals: {
+      ...vitals,
+      version: 1,
+      entries,
+      profileImages: { ...currentImages, ...images },
+    },
+  });
 }
 
 async function saveFarmDocument(

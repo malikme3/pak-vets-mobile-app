@@ -27,8 +27,8 @@ export function FlowPageHeading({ onBack, title }: Props) {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Farm Vitals home"
-          onPress={() => router.replace("/farm-vitals")}
+          accessibilityLabel="Go to app home"
+          onPress={() => router.replace("/")}
           style={({ pressed }) => [
             styles.homeButton,
             pressed && styles.pressed,
@@ -36,6 +36,7 @@ export function FlowPageHeading({ onBack, title }: Props) {
         >
           <Feather name="home" size={17} color="#1E7F5C" />
         </Pressable>
+        <View accessibilityElementsHidden style={styles.navigationSpacer} />
       </View>
       <View style={styles.titleRow}>
         <View style={styles.titleChip}>
@@ -55,8 +56,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    position: "relative",
   },
   backButton: {
+    flex: 1,
     minHeight: 36,
     flexDirection: "row",
     alignItems: "center",
@@ -74,6 +77,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  navigationSpacer: { flex: 1, height: 34 },
   titleRow: {
     width: "100%",
     alignSelf: "stretch",

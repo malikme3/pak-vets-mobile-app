@@ -18,6 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Feather from "@expo/vector-icons/Feather";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
+import { VoiceMessageRecorder } from "../../components/voice/VoiceMessageRecorder";
+import { enhanceFieldText } from "../../services/sharedServicesApi";
 import {
   uploadFarmImage,
   type ActiveFarmTemplate,
@@ -482,11 +484,34 @@ function FieldControl({
   const [showDate, setShowDate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
+  const [enhancementSuggestion, setEnhancementSuggestion] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const required = forceRequired || field.rules.required === true;
   const error = errors[path];
   const text = typeof value === "string" ? value : "";
   const options = choiceOptions(field);
   const label = `${field.label || "Field"}${required ? " *" : ""}`;
+  const supportsTextAssist = field.type === "text" || field.type === "textarea";
+  async function requestEnhancement() {
+    if (!field.aiEnhance || !supportsTextAssist || !text.trim() || enhancing)
+      return;
+    setEnhancing(true);
+    setEnhanceError(null);
+    setEnhancementSuggestion("");
+    try {
+      setEnhancementSuggestion(await enhanceFieldText(text, field.label));
+    } catch (cause) {
+      setEnhanceError(
+        cause instanceof Error
+          ? cause.message
+          : "The text could not be enhanced.",
+      );
+    } finally {
+      setEnhancing(false);
+    }
+  }
   if (isGroup(field)) {
     const nested = typeof value === "object" ? value : {};
     const hint = field.helpText.replace(/\.+$/, "").trim();
@@ -748,6 +773,78 @@ function FieldControl({
           ]}
         />
       )}
+      {supportsTextAssist && (field.aiEnhance || field.voiceInput) ? (
+        <View style={styles.fieldAssistRow}>
+          {field.aiEnhance ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Enhance ${field.label} with AI`}
+              disabled={enhancing || !text.trim()}
+              onPress={() => void requestEnhancement()}
+              style={[
+                styles.fieldAssistButton,
+                (enhancing || !text.trim()) && styles.fieldAssistDisabled,
+              ]}
+            >
+              {enhancing ? (
+                <ActivityIndicator size="small" color={colors.green} />
+              ) : (
+                <Feather name="zap" size={15} color={colors.green} />
+              )}
+              <Text style={styles.fieldAssistText}>
+                {enhancing ? "Enhancing…" : "AI Enhance"}
+              </Text>
+            </Pressable>
+          ) : null}
+          {field.voiceInput ? (
+            <View style={styles.voiceInputButton}>
+              <VoiceMessageRecorder
+                buttonSize={34}
+                buttonColor={colors.green}
+                onTranscriptReady={(transcript) => {
+                  onChange(transcript);
+                  setEnhancementSuggestion("");
+                  setVoiceError(null);
+                }}
+                onError={(cause) => setVoiceError(cause.message)}
+              />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+      {enhancementSuggestion ? (
+        <View style={styles.enhancementCard}>
+          <Text style={styles.enhancementTitle}>Review AI suggestion</Text>
+          <Text style={styles.enhancementText}>{enhancementSuggestion}</Text>
+          <View style={styles.enhancementActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setEnhancementSuggestion("")}
+              style={styles.enhancementKeep}
+            >
+              <Text style={styles.enhancementKeepText}>Keep current</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                onChange(enhancementSuggestion);
+                setEnhancementSuggestion("");
+              }}
+              style={styles.enhancementApply}
+            >
+              <Text style={styles.enhancementApplyText}>Use suggestion</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      {field.voiceInput && supportsTextAssist ? (
+        <Text style={styles.help}>
+          Transcribed text appears in the field. Review and edit it before
+          saving.
+        </Text>
+      ) : null}
+      {enhanceError ? <Text style={styles.error}>{enhanceError}</Text> : null}
+      {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
       {text && fileField ? (
         <Text style={styles.help}>
           {text.startsWith("http") ? "Photo uploaded" : text}
@@ -1240,6 +1337,55 @@ const styles = StyleSheet.create({
   label: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
+  fieldAssistRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+    minHeight: 38,
+  },
+  fieldAssistButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 34,
+    borderRadius: 10,
+    backgroundColor: "#E8F4ED",
+    paddingHorizontal: 10,
+  },
+  fieldAssistDisabled: { opacity: 0.5 },
+  fieldAssistText: { color: colors.green, fontSize: 12, fontWeight: "700" },
+  voiceInputButton: {
+    minWidth: 38,
+    minHeight: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  enhancementCard: {
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#B8D8C8",
+    backgroundColor: "#F1F8F4",
+    padding: 12,
+  },
+  enhancementTitle: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  enhancementText: { color: colors.ink, fontSize: 14, lineHeight: 20 },
+  enhancementActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 2,
+  },
+  enhancementKeep: { paddingHorizontal: 10, paddingVertical: 8 },
+  enhancementKeepText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  enhancementApply: {
+    borderRadius: 9,
+    backgroundColor: colors.green,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  enhancementApplyText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
   input: {
     minHeight: 48,
     borderWidth: 1.5,
