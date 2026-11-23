@@ -79,10 +79,15 @@ function landing(farm: FarmDashboardEntry): {
 } {
   const name = farmNameRow(farm);
   const highlights = ownerLine(farm);
+  const ownerPhone = highlights.find((row) =>
+    /phone|mobile/i.test(`${row.key ?? ""} ${row.label}`),
+  );
   return {
     title: name?.value.trim() || farm.name,
     highlights,
-    badges: farm.rows.filter((row) => row.value.trim() && row.badgeView),
+    badges: farm.rows.filter(
+      (row) => row.value.trim() && row.badgeView && row !== ownerPhone,
+    ),
     details: farm.rows.filter(
       (row) =>
         row.value.trim() &&
@@ -96,9 +101,11 @@ function landing(farm: FarmDashboardEntry): {
 function FarmCardCover({
   farm,
   initial,
+  title,
 }: {
   farm: FarmDashboardEntry;
   initial: string;
+  title: string;
 }) {
   const [images, setImages] = useState({ farm: "", owner: "" });
 
@@ -133,6 +140,9 @@ function FarmCardCover({
         </View>
       )}
       <View style={styles.tileCoverShade} />
+      <Text numberOfLines={1} style={styles.tileCoverTitle}>
+        {title}
+      </Text>
       <View style={styles.tileOwnerPhoto}>
         {images.owner ? (
           <Image
@@ -529,90 +539,99 @@ export default function FarmBoardScreen() {
             });
           return (
             <View key={farm.farmId} style={styles.card}>
-              <FarmCardCover farm={farm} initial={ownerInitial} />
+              <FarmCardCover
+                farm={farm}
+                initial={ownerInitial}
+                title={place.title}
+              />
               <View style={styles.landing}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${place.title}${owner ? `, owner ${owner.value}` : ""}. Open farm`}
-                  onPress={openFarm}
-                  style={styles.landingMain}
-                >
-                  <View style={styles.landingCopy}>
-                    <View style={styles.farmTitleRow}>
-                      <Text numberOfLines={1} style={styles.farmName}>
-                        {place.title}
-                      </Text>
-                      <View
-                        accessible
-                        accessibilityLabel={`${farm.animalCount} total ${farm.animalCount === 1 ? "animal" : "animals"}`}
-                        style={styles.tileAnimalBadge}
-                      >
-                        <Text style={styles.tileAnimalCount}>
-                          {farm.animalCount}{" "}
-                          {farm.animalCount === 1 ? "animal" : "animals"}
+                <View style={styles.landingHeader}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${place.title}${owner ? `, owner ${owner.value}` : ""}. Open farm`}
+                    onPress={openFarm}
+                    style={styles.landingMain}
+                  >
+                    <View style={styles.ownerSummary}>
+                      <View style={styles.ownerDetails}>
+                        <Text numberOfLines={1} style={styles.ownerName}>
+                          {owner?.value ?? "Owner not provided"}
                         </Text>
+                        {phone ? (
+                          <Text numberOfLines={1} style={styles.ownerPhone}>
+                            {phone.value.replace(/^\+92-/i, "")}
+                          </Text>
+                        ) : null}
                       </View>
-                      {classification ? (
+                      <View style={styles.ownerSummaryBadges}>
                         <View
                           accessible
-                          accessibilityLabel={`Farm classification ${classification.value}`}
-                          style={styles.tileClassificationBadge}
+                          accessibilityLabel={`${farm.animalCount} total ${farm.animalCount === 1 ? "animal" : "animals"}`}
+                          style={styles.tileAnimalBadge}
                         >
-                          <Text
-                            numberOfLines={1}
-                            style={styles.tileClassificationText}
-                          >
-                            {classification.value}
+                          <Text style={styles.tileAnimalCount}>
+                            {farm.animalCount}{" "}
+                            {farm.animalCount === 1 ? "animal" : "animals"}
                           </Text>
                         </View>
-                      ) : null}
-                    </View>
-                    <Text numberOfLines={1} style={styles.subline}>
-                      {owner?.value ?? "Owner not provided"}
-                      {expanded && phone ? (
-                        <Text style={styles.subPhone}>
-                          {" "}
-                          · {phone.value.replace(/^\+92-/i, "")}
-                        </Text>
-                      ) : null}
-                    </Text>
-                    {place.badges.length ? (
-                      <View style={styles.dashboardBadges}>
-                        {place.badges.map((row, index) => (
+                        {classification ? (
                           <View
-                            key={`dashboard-badge-${filterId(row)}-${index}`}
-                            style={styles.dashboardBadge}
+                            accessible
+                            accessibilityLabel={`Farm classification ${classification.value}`}
+                            style={styles.tileClassificationBadge}
                           >
                             <Text
                               numberOfLines={1}
-                              style={styles.dashboardBadgeText}
+                              style={styles.tileClassificationText}
                             >
-                              {row.label}: {row.value}
+                              {classification.value}
                             </Text>
                           </View>
-                        ))}
+                        ) : null}
                       </View>
-                    ) : null}
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${place.title} details`}
+                    accessibilityState={{ expanded }}
+                    onPress={() =>
+                      setExpandedFarms((current) => ({
+                        ...current,
+                        [farm.farmId]: !expanded,
+                      }))
+                    }
+                    style={styles.openIcon}
+                  >
+                    <Feather
+                      name={expanded ? "chevron-up" : "chevron-down"}
+                      size={18}
+                      color={colors.green}
+                    />
+                  </Pressable>
+                </View>
+                {place.badges.length ? (
+                  <View style={styles.dashboardBadges}>
+                    {place.badges.map((row, index) => (
+                      <View
+                        key={`dashboard-badge-${filterId(row)}-${index}`}
+                        style={styles.dashboardBadge}
+                      >
+                        <Text
+                          numberOfLines={1}
+                          style={styles.dashboardBadgeText}
+                        >
+                          <Text style={styles.dashboardBadgeLabel}>
+                            {row.label}:{" "}
+                          </Text>
+                          <Text style={styles.dashboardBadgeValue}>
+                            {row.value}
+                          </Text>
+                        </Text>
+                      </View>
+                    ))}
                   </View>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${place.title} details`}
-                  accessibilityState={{ expanded }}
-                  onPress={() =>
-                    setExpandedFarms((current) => ({
-                      ...current,
-                      [farm.farmId]: !expanded,
-                    }))
-                  }
-                  style={styles.openIcon}
-                >
-                  <Feather
-                    name={expanded ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color={colors.green}
-                  />
-                </Pressable>
+                ) : null}
               </View>
               {expanded ? (
                 <>
@@ -770,7 +789,7 @@ const styles = StyleSheet.create({
     ...farmCard,
   },
   tileCover: {
-    height: 70,
+    height: 94,
     position: "relative",
     backgroundColor: colors.mint,
   },
@@ -797,15 +816,29 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: "rgba(23,61,50,0.08)",
+    backgroundColor: "rgba(23,61,50,0.28)",
+  },
+  tileCoverTitle: {
+    position: "absolute",
+    left: 92,
+    right: 12,
+    bottom: 7,
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   tileOwnerPhoto: {
     position: "absolute",
     left: 12,
-    bottom: -24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    top: 12,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.mint,
@@ -815,31 +848,38 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tileOwnerImage: { width: "100%", height: "100%" },
-  tileOwnerInitial: { color: colors.green, fontSize: 15, fontWeight: "800" },
+  tileOwnerInitial: { color: colors.green, fontSize: 18, fontWeight: "800" },
   landing: {
+    gap: 2,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    paddingBottom: 7,
+  },
+  landingHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingLeft: 78,
-    paddingRight: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
-    minHeight: 56,
+    paddingTop: 0,
+    minHeight: 44,
   },
   landingMain: { flex: 1, minWidth: 0 },
-  landingCopy: { flex: 1, gap: 2, minWidth: 0 },
-  farmTitleRow: {
+  ownerSummary: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-  },
-  farmName: {
-    flex: 1,
+    justifyContent: "space-between",
+    gap: 8,
     minWidth: 0,
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: -0.2,
+  },
+  ownerDetails: { flex: 1, minWidth: 0, gap: 2 },
+  ownerName: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  ownerPhone: { color: colors.green, fontSize: 11, fontWeight: "700" },
+  ownerSummaryBadges: {
+    maxWidth: "54%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 5,
   },
   tileAnimalBadge: {
     flexShrink: 0,
@@ -862,8 +902,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
   },
-  subline: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  subPhone: { color: colors.green, fontWeight: "700" },
   openIcon: {
     width: 30,
     height: 30,
@@ -875,20 +913,34 @@ const styles = StyleSheet.create({
   dashboardBadges: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginTop: 6,
+    justifyContent: "space-between",
+    gap: 5,
+    width: "100%",
+    paddingHorizontal: 2,
+    marginTop: 3,
   },
   dashboardBadge: {
-    maxWidth: "100%",
-    borderRadius: 999,
-    backgroundColor: colors.mint,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    maxWidth: "49%",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#C8DED2",
+    backgroundColor: "#F5FAF7",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    flexShrink: 1,
   },
   dashboardBadgeText: {
     color: colors.green,
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 9,
+    lineHeight: 13,
+  },
+  dashboardBadgeLabel: {
+    color: colors.muted,
+    fontWeight: "600",
+  },
+  dashboardBadgeValue: {
+    color: colors.ink,
+    fontWeight: "800",
   },
   facts: {
     flexDirection: "row",
