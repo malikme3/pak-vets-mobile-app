@@ -1,11 +1,19 @@
+import { CollapseSection } from "../features/farm-vitals/collapse-section";
+import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { HeaderBackground } from "../features/farm-vitals/header-background";
-import { farmCard, farmButton } from "../features/farm-vitals/presentation";
+import {
+  AdditionalFlowButton,
+  farmButton,
+  farmCard,
+  formatFarmDate,
+} from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,12 +30,11 @@ import {
   animalPhotoPromptKey,
   farmPhotoPairs,
   getFarmReview,
-  listFormTypes,
+  listAdditionalFlows,
   readableFarmImage,
   uploadFarmImage,
-  childFormTypes,
   type FarmAnimalReview,
-  type FarmFormType,
+  type AdditionalFlow,
   type FarmHistoryReview,
   type FarmReviewRow,
 } from "../services/farmVitalsApi";
@@ -42,17 +49,6 @@ const colors = {
   danger: "#B42318",
   mint: "#E7F5EE",
 };
-
-function when(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function provided(row: FarmReviewRow): boolean {
   return row.value !== "Not provided";
@@ -89,15 +85,33 @@ function photoFileName(asset: ImagePicker.ImagePickerAsset): string {
   return `${base}.${extension}`;
 }
 
+function DetailRows({ rows }: { rows: FarmReviewRow[] }) {
+  return (
+    <>
+      {rows.map((row, index) => (
+        <View
+          key={`${row.label}-${index}`}
+          style={[styles.fact, index > 0 && styles.factDivider]}
+        >
+          <Text style={styles.factLabel}>{row.label}</Text>
+          <Text style={styles.factValue}>{row.value}</Text>
+        </View>
+      ))}
+    </>
+  );
+}
+
 function HistoryList({
   title,
   records,
   onAdd,
+  onBrowse,
   onOpen,
 }: {
   title: string;
   records: FarmHistoryReview[];
   onAdd: () => void;
+  onBrowse?: () => void;
   onOpen: (entryId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -106,26 +120,21 @@ function HistoryList({
       <View style={styles.sectionHeader}>
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ expanded: open }}
-          onPress={() => setOpen((current) => !current)}
+          accessibilityState={onBrowse ? undefined : { expanded: open }}
+          onPress={onBrowse ?? (() => setOpen((current) => !current))}
           style={styles.sectionToggle}
         >
           <Text style={styles.historyTitle}>{title}</Text>
-          <Text style={styles.count}>{records.length}</Text>
+          {onBrowse ? null : <Text style={styles.count}>{records.length}</Text>}
           <Feather
-            name={open ? "chevron-up" : "chevron-down"}
+            name={
+              onBrowse ? "chevron-right" : open ? "chevron-up" : "chevron-down"
+            }
             size={16}
             color={colors.green}
           />
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Add ${title}`}
-          onPress={onAdd}
-          style={styles.addIcon}
-        >
-          <Feather name="plus" size={16} color="#FFFFFF" />
-        </Pressable>
+        <AdditionalFlowButton label={title} onPress={onAdd} />
       </View>
       {open ? (
         records.length ? (
@@ -141,8 +150,8 @@ function HistoryList({
                 <Text numberOfLines={1} style={styles.historyName}>
                   {record.name}
                 </Text>
-                {when(record.submittedAt) ? (
-                  <Text style={styles.help}>{when(record.submittedAt)}</Text>
+                {formatFarmDate(record.submittedAt) ? (
+                  <Text style={styles.help}>{formatFarmDate(record.submittedAt)}</Text>
                 ) : null}
               </View>
               <Feather name="chevron-right" size={18} color={colors.green} />
@@ -161,10 +170,12 @@ export default function FarmAnimalScreen() {
   const params = useLocalSearchParams<{ farmId?: string; entryId?: string }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
   const [animal, setAnimal] = useState<FarmAnimalReview | null>(null);
-  const [formTypes, setFormTypes] = useState<FarmFormType[]>([]);
-  const [farmName, setFarmName] = useState("Farm");
+  const [flows, setFlows] = useState<AdditionalFlow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [addingPhotos, setAddingPhotos] = useState(false);
   const [photoPairs, setPhotoPairs] = useState<
     { original: string; enhanced: string }[]
@@ -184,13 +195,12 @@ export default function FarmAnimalScreen() {
       try {
         const [review, types] = await Promise.all([
           getFarmReview(farmId),
-          listFormTypes(),
+          listAdditionalFlows("animal"),
         ]);
         const match = review.animals.find((item) => item.entryId === entryId);
         if (!match) throw new Error("This animal is no longer on the farm.");
-        setFarmName(review.name);
         setAnimal(match);
-        setFormTypes(types);
+        setFlows(types);
       } catch (cause) {
         setError(
           cause instanceof Error
@@ -254,6 +264,10 @@ export default function FarmAnimalScreen() {
       !/photo|image/i.test(row.label),
   );
 
+  const detailRows = rows.filter(
+    (row) => provided(row) && !/photo|image/i.test(row.label),
+  );
+
   function openPhotos(index: number) {
     if (!animal) return;
     router.push({
@@ -300,17 +314,22 @@ export default function FarmAnimalScreen() {
       setAddingPhotos(false);
     }
   }
-  const added = animal ? when(animal.submittedAt) : "";
-  const childSections = childFormTypes(
-    formTypes,
-    "animal",
-    animal?.records.map((record) => record.kind) ?? [],
-  );
-
+  const added = animal ? formatFarmDate(animal.submittedAt) : "";
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load(true).finally(() => setRefreshing(false));
+            }}
+          />
+        }
+      >
         <FlowPageHeading onBack={() => router.back()} title="Animal details" />
         {loading ? (
           <View style={styles.status}>
@@ -395,19 +414,6 @@ export default function FarmAnimalScreen() {
             >
               <Feather name="share-2" size={16} color={colors.green} />
               <Text style={styles.postText}>Prepare post</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: "/animal-case-dashboard",
-                  params: { farmId, animalEntryId: animal.entryId },
-                })
-              }
-              style={styles.postButton}
-            >
-              <Feather name="list" size={16} color={colors.green} />
-              <Text style={styles.postText}>Case dashboard</Text>
             </Pressable>
             {photoPairs.length ? (
               <View style={styles.photos}>
@@ -495,33 +501,70 @@ export default function FarmAnimalScreen() {
             ) : null}
             {facts.length ? (
               <View style={styles.card}>
-                {facts.map((row, index) => (
-                  <View
-                    key={`${row.label}-${index}`}
-                    style={[styles.fact, index > 0 && styles.factDivider]}
-                  >
-                    <Text style={styles.factLabel}>{row.label}</Text>
-                    <Text style={styles.factValue}>{row.value}</Text>
-                  </View>
-                ))}
+                <DetailRows rows={facts} />
               </View>
             ) : null}
-            {childSections.map((type) => (
+            <CollapseSection
+              title="Animal details"
+              count={detailRows.length}
+              expanded={editingDetails || detailsOpen}
+              onToggle={() => {
+                if (!editingDetails) setDetailsOpen((current) => !current);
+              }}
+              onEdit={animal.edit ? () => setEditingDetails(true) : undefined}
+              editDisabled={editingDetails}
+            >
+              {editingDetails && animal.edit ? (
+                <FarmSectionEditor
+                  farmId={farmId}
+                  animalEntryId={animal.entryId}
+                  draft={animal.edit}
+                  fields={animal.edit.fields}
+                  onCancel={() => setEditingDetails(false)}
+                  onSaved={async () => {
+                    setEditingDetails(false);
+                    await load(true);
+                  }}
+                />
+              ) : detailRows.length ? (
+                <DetailRows rows={detailRows} />
+              ) : (
+                <Text style={styles.empty}>No details recorded.</Text>
+              )}
+            </CollapseSection>
+            {flows.map((type) => (
               <HistoryList
                 key={type.key}
                 title={type.label}
                 records={animal.records.filter(
                   (record) => record.kind === type.key,
                 )}
-                onAdd={() =>
-                  router.push({
-                    pathname: "/add-farm-history",
-                    params: {
-                      farmId,
-                      animalEntryId: animal.entryId,
-                      kind: type.key,
-                    },
-                  })
+                onAdd={() => {
+                  const params = {
+                    farmId,
+                    animalEntryId: animal.entryId,
+                  };
+                  if (type.key === "health-case") {
+                    router.push({ pathname: "/health-case", params });
+                  } else {
+                    router.push({
+                      pathname: "/add-farm-history",
+                      params: {
+                        ...params,
+                        kind: type.key,
+                        species: animal.species,
+                      },
+                    });
+                  }
+                }}
+                onBrowse={
+                  type.key === "health-case"
+                    ? () =>
+                        router.push({
+                          pathname: "/animal-case-dashboard",
+                          params: { farmId, animalEntryId: animal.entryId },
+                        })
+                    : undefined
                 }
                 onOpen={(historyId) =>
                   router.push({
@@ -541,14 +584,6 @@ export default function FarmAnimalScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 20, paddingBottom: 36, gap: 16 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-    minHeight: 36,
-  },
-  backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   status: { gap: 8 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
@@ -659,15 +694,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     minHeight: 36,
-  },
-  addIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.green,
-    ...farmButton,
   },
   count: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   empty: {

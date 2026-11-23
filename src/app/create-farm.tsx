@@ -1,4 +1,3 @@
-import { farmCard } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,18 +10,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import Feather from "@expo/vector-icons/Feather";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   createFarmRecord,
-  getActiveFarmTemplate,
+  getActiveTemplate,
   type ActiveFarmTemplate,
 } from "../services/farmVitalsApi";
 
 const colors = {
   background: "#F8F8F2",
-  ink: "#173D32",
   muted: "#63766C",
   green: "#1E7F5C",
   danger: "#B42318",
@@ -34,13 +31,12 @@ export default function CreateFarmScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [farmId, setFarmId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setTemplate(await getActiveFarmTemplate());
+      setTemplate(await getActiveTemplate("farm"));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -61,7 +57,8 @@ export default function CreateFarmScreen() {
     setSaving(true);
     setError(null);
     try {
-      setFarmId(await createFarmRecord(template, values));
+      const farmId = await createFarmRecord(template, values);
+      router.replace({ pathname: "/farm-dashboard", params: { farmId } });
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "The farm could not be saved.",
@@ -96,7 +93,7 @@ export default function CreateFarmScreen() {
             </Pressable>
           </View>
         ) : null}
-        {template && !farmId ? (
+        {template ? (
           <TemplateEntryForm
             template={template}
             showDescription={false}
@@ -104,18 +101,6 @@ export default function CreateFarmScreen() {
             saving={saving}
             onSubmit={submit}
           />
-        ) : null}
-        {farmId ? (
-          <View style={styles.success}>
-            <Text style={styles.stepTitle}>Farm registered</Text>
-            <Text style={styles.help}>Farm ID: {farmId}</Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.dismissTo("/farm-board")}
-            >
-              <Text style={styles.retry}>Return to Farms dashboard</Text>
-            </Pressable>
-          </View>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -125,18 +110,9 @@ export default function CreateFarmScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 16, paddingBottom: 32, gap: 10 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-  },
-  backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
-  stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  success: { gap: 6, ...farmCard, padding: 14 },
 });

@@ -11,14 +11,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import Feather from "@expo/vector-icons/Feather";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
+import { breedEntryTemplate } from "../features/farm-vitals/breed-entry";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   addAnimalHistory,
   formTypeTitle,
   getActiveTemplate,
   getAnimalHistoryDraft,
+  getFarmReview,
   updateAnimalHistory,
   type ActiveFarmTemplate,
 } from "../services/farmVitalsApi";
@@ -49,6 +50,7 @@ export default function AddFarmHistoryScreen() {
     animalEntryId?: string;
     kind?: string;
     entryId?: string;
+    species?: string;
   }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const animalEntryId =
@@ -58,6 +60,9 @@ export default function AddFarmHistoryScreen() {
     typeof params.kind === "string" ? params.kind : "",
   );
   const [kind, setKind] = useState<string | null>(requestedKind);
+  const routeSpecies = typeof params.species === "string" ? params.species : "";
+  const [species, setSpecies] = useState("");
+  const [breedCategory, setBreedCategory] = useState("");
   const title = kind ? formTypeTitle(kind) : "Record";
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [initialValues, setInitialValues] = useState<Record<string, unknown>>(
@@ -80,22 +85,50 @@ export default function AddFarmHistoryScreen() {
     }
     setLoading(true);
     setError(null);
+    setTemplate(null);
     try {
       if (entryId) {
         const draft = await getAnimalHistoryDraft(farmId, entryId);
         setKind(draft.kind);
         setInitialValues(draft.values);
-        setTemplate({
-          type: draft.kind,
-          updatedAt: draft.updatedAt,
-          name: draft.form.name,
-          form: draft.form,
-          adminConfig: {},
-        });
+        if (draft.kind === "breed") {
+          const selectedSpecies =
+            typeof draft.values.animalType === "string"
+              ? draft.values.animalType
+              : ((await getFarmReview(farmId)).animals.find(
+                  (animal) => animal.entryId === draft.animalEntryId,
+                )?.species ?? "");
+          const category =
+            typeof draft.values.breed === "string" ? draft.values.breed : "";
+          const loaded = await getActiveTemplate(draft.kind);
+          breedEntryTemplate(loaded, selectedSpecies, category, draft.values);
+          setSpecies(selectedSpecies);
+          setBreedCategory(category);
+          setTemplate(loaded);
+        } else
+          setTemplate({
+            type: draft.kind,
+            updatedAt: draft.updatedAt,
+            name: draft.form.name,
+            form: draft.form,
+            adminConfig: {},
+          });
       } else if (requestedKind) {
         setKind(requestedKind);
         setInitialValues({});
-        setTemplate(await getActiveTemplate(requestedKind));
+        const loaded = await getActiveTemplate(requestedKind);
+        if (requestedKind === "breed") {
+          const selectedSpecies =
+            routeSpecies ||
+            (await getFarmReview(farmId)).animals.find(
+              (animal) => animal.entryId === animalEntryId,
+            )?.species ||
+            "";
+          breedEntryTemplate(loaded, selectedSpecies, "", {});
+          setSpecies(selectedSpecies);
+          setBreedCategory("");
+        }
+        setTemplate(loaded);
       }
     } catch (cause) {
       setError(
@@ -106,19 +139,38 @@ export default function AddFarmHistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [animalEntryId, entryId, farmId, requestedKind]);
+  }, [animalEntryId, entryId, farmId, requestedKind, routeSpecies]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const entryTemplate =
+    template?.type === "breed"
+      ? breedEntryTemplate(template, species, breedCategory, initialValues)
+      : template;
+
   async function submit(values: Record<string, unknown>) {
-    if (!template || !kind || saving) return;
+    if (!entryTemplate || !kind || saving) return;
     setSaving(true);
     setError(null);
     try {
-      if (entryId) await updateAnimalHistory(farmId, entryId, values);
-      else await addAnimalHistory(farmId, animalEntryId, template, values);
+      const entryValues =
+        kind === "breed" ? { ...values, animalType: species } : values;
+      if (entryId)
+        await updateAnimalHistory(
+          farmId,
+          entryId,
+          entryValues,
+          kind === "breed" ? entryTemplate.form : undefined,
+        );
+      else
+        await addAnimalHistory(
+          farmId,
+          animalEntryId,
+          entryTemplate,
+          entryValues,
+        );
       setSaved(true);
     } catch (cause) {
       setError(
@@ -156,10 +208,18 @@ export default function AddFarmHistoryScreen() {
             </Pressable>
           </View>
         ) : null}
-        {template && !saved ? (
+        {entryTemplate && !saved ? (
           <TemplateEntryForm
             key={entryId || "new"}
-            template={template}
+            template={entryTemplate}
+            onDraftChange={
+              kind === "breed"
+                ? (values) =>
+                    setBreedCategory(
+                      typeof values.breed === "string" ? values.breed : "",
+                    )
+                : undefined
+            }
             submitLabel={entryId ? "Save changes" : `Add ${title}`}
             saving={saving}
             initialValues={initialValues}
@@ -186,13 +246,6 @@ export default function AddFarmHistoryScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 16, paddingBottom: 32, gap: 10 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-  },
-  backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
   stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },

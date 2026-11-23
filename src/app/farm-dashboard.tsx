@@ -1,10 +1,19 @@
+import {
+  CollapseSection,
+  EditSectionButton,
+} from "../features/farm-vitals/collapse-section";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
-import { farmCard, farmButton } from "../features/farm-vitals/presentation";
-import { useCallback, useState, type ReactNode } from "react";
+import {
+  AdditionalFlowButton,
+  farmCard,
+  formatFarmDate,
+} from "../features/farm-vitals/presentation";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,13 +33,12 @@ import * as ImagePicker from "expo-image-picker";
 import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
-  childFormTypes,
   getFarmReview,
-  listFormTypes,
+  listAdditionalFlows,
   readableFarmImage,
   saveFarmProfileImages,
   uploadFarmImage,
-  type FarmFormType,
+  type AdditionalFlow,
   type FarmReview,
   type FarmReviewSection,
 } from "../services/farmVitalsApi";
@@ -45,17 +53,6 @@ const colors = {
   danger: "#B42318",
   mint: "#E7F5EE",
 };
-
-function when(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function visibleSections(review: FarmReview): FarmReviewSection[] {
   return review.sections.filter(
@@ -116,77 +113,6 @@ function farmCategory(review: FarmReview): string {
   return "";
 }
 
-function CollapseSection({
-  title,
-  count,
-  expanded,
-  onToggle,
-  onEdit,
-  editDisabled,
-  children,
-}: {
-  title: string;
-  count: number;
-  expanded: boolean;
-  onToggle: () => void;
-  onEdit?: () => void;
-  editDisabled?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.sectionHeading}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          aria-expanded={expanded}
-          onPress={onToggle}
-          style={styles.sectionHeader}
-        >
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.count}>{count}</Text>
-          <Feather
-            name={expanded ? "chevron-up" : "chevron-down"}
-            size={16}
-            color={colors.green}
-          />
-        </Pressable>
-        {onEdit ? (
-          <EditSectionButton
-            title={title}
-            disabled={editDisabled}
-            onPress={onEdit}
-          />
-        ) : null}
-      </View>
-      {expanded ? children : null}
-    </View>
-  );
-}
-
-function EditSectionButton({
-  title,
-  disabled,
-  onPress,
-}: {
-  title: string;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Edit ${title}`}
-      disabled={disabled}
-      onPress={onPress}
-      style={[styles.editSection, disabled && { opacity: 0.45 }]}
-    >
-      <Feather name="edit-2" size={14} color={colors.green} />
-      <Text style={styles.editText}>Edit</Text>
-    </Pressable>
-  );
-}
-
 export default function FarmDashboardScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
@@ -195,8 +121,9 @@ export default function FarmDashboardScreen() {
     ? params.farmId[0]
     : params.farmId;
   const [review, setReview] = useState<FarmReview | null>(null);
-  const [formTypes, setFormTypes] = useState<FarmFormType[]>([]);
+  const [flows, setFlows] = useState<AdditionalFlow[]>([]);
   const [opening, setOpening] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -218,7 +145,7 @@ export default function FarmDashboardScreen() {
     try {
       const [next, types] = await Promise.all([
         getFarmReview(farmId),
-        listFormTypes(),
+        listAdditionalFlows("farm"),
       ]);
       setReview(next);
       const [farmPhotoUrl, ownerPhotoUrl] = await Promise.all([
@@ -230,7 +157,7 @@ export default function FarmDashboardScreen() {
           : Promise.resolve(""),
       ]);
       setProfilePhotoUrls({ farm: farmPhotoUrl, owner: ownerPhotoUrl });
-      setFormTypes(types);
+      setFlows(types);
       if (!quiet) {
         setOpenSections({});
         setOpenUtils({});
@@ -309,13 +236,24 @@ export default function FarmDashboardScreen() {
   const phone = review ? ownerPhone(review) : "";
   const city = review ? locationCity(review) : "";
   const category = review ? farmCategory(review) : "";
-  const registered = review ? when(review.submittedAt) : "";
+  const registered = review ? formatFarmDate(review.submittedAt) : "";
   const coverHeight = Math.min(156, Math.max(118, screenWidth * 0.34));
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void openFarm(farmId, true).finally(() => setRefreshing(false));
+            }}
+          />
+        }
+      >
         <FlowPageHeading
           onBack={() => router.dismissTo("/farm-board")}
           title="Farm details"
@@ -592,15 +530,18 @@ export default function FarmDashboardScreen() {
                 </CollapseSection>
               );
             })}
-            {childFormTypes(formTypes, "farm", [
-              ...(review.animals.length ? ["animal"] : []),
-              ...review.records.map((record) => record.kind),
-            ]).map((type) => {
+            {flows.map((type) => {
               const entries =
-                type.key === "animal"
-                  ? review.animals
+                type.key === "health-case"
+                  ? review.animals.flatMap((animal) =>
+                      animal.cases.map((record) => ({
+                        entryId: record.entryId,
+                        name: record.complaint || record.animalName || "Case",
+                        submittedAt: record.openedAt,
+                      })),
+                    )
                   : review.records.filter((record) => record.kind === type.key);
-              const title = type.key === "animal" ? "Animals" : type.label;
+              const title = type.label;
               return (
                 <View key={type.key} style={styles.childSection}>
                   <View style={styles.animalHead}>
@@ -616,24 +557,27 @@ export default function FarmDashboardScreen() {
                         </Text>
                       </View>
                     ) : null}
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        router.push({
-                          pathname: "/add-farm-animal",
-                          params: { farmId: review.farmId, kind: type.key },
-                        })
-                      }
-                      style={styles.add}
-                    >
-                      <Feather name="plus" size={14} color="#FFFFFF" />
-                      <Text style={styles.addText}>Add</Text>
-                    </Pressable>
+                    <AdditionalFlowButton
+                      label={type.label}
+                      onPress={() => {
+                        if (type.key === "health-case") {
+                          router.push({
+                            pathname: "/health-case",
+                            params: { farmId: review.farmId },
+                          });
+                        } else {
+                          router.push({
+                            pathname: "/add-farm-animal",
+                            params: { farmId: review.farmId, kind: type.key },
+                          });
+                        }
+                      }}
+                    />
                   </View>
                   {type.key === "animal" ? (
                     review.animals.length ? (
                       review.animals.map((animal) => {
-                        const date = when(animal.submittedAt);
+                        const date = formatFarmDate(animal.submittedAt);
                         return (
                           <Pressable
                             key={animal.entryId}
@@ -694,7 +638,10 @@ export default function FarmDashboardScreen() {
                         accessibilityLabel={`Open ${record.name}`}
                         onPress={() =>
                           router.push({
-                            pathname: "/farm-history",
+                            pathname:
+                              type.key === "health-case"
+                                ? "/health-case-detail"
+                                : "/farm-history",
                             params: {
                               farmId: review.farmId,
                               entryId: record.entryId,
@@ -712,9 +659,9 @@ export default function FarmDashboardScreen() {
                           <Text numberOfLines={1} style={styles.rowTitle}>
                             {record.name}
                           </Text>
-                          {when(record.submittedAt) ? (
+                          {formatFarmDate(record.submittedAt) ? (
                             <Text style={styles.help}>
-                              {when(record.submittedAt)}
+                              {formatFarmDate(record.submittedAt)}
                             </Text>
                           ) : null}
                         </View>
@@ -741,13 +688,6 @@ export default function FarmDashboardScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 20, paddingBottom: 36, gap: 12 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-    minHeight: 36,
-  },
   backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
@@ -934,20 +874,7 @@ const styles = StyleSheet.create({
   },
   registrationDate: { color: colors.muted, fontSize: 10 },
   copy: { flex: 1, minWidth: 0, gap: 3 },
-  card: {
-    ...farmCard,
-  },
-  sectionHeader: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
   sectionTitle: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: "800" },
-  count: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   fact: {
     flexDirection: "row",
     alignItems: "center",
@@ -966,23 +893,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
   },
-  sectionHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingRight: 10,
-    gap: 6,
-  },
-  editSection: {
-    ...farmButton,
-    minHeight: 36,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-  },
-  editText: { color: colors.green, fontSize: 13, fontWeight: "700" },
   utilHeading: {
     flexDirection: "row",
     alignItems: "center",
@@ -1023,17 +933,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.mint,
   },
   animalTotalText: { color: colors.green, fontSize: 12, fontWeight: "800" },
-  add: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minHeight: 32,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: colors.green,
-    ...farmButton,
-  },
-  addText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   row: {
     flexDirection: "row",
     alignItems: "center",

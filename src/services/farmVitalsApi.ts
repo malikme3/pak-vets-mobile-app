@@ -34,12 +34,15 @@ export type FarmTemplateField = {
   helpText: string;
   rules: FarmFieldRules;
   source?: string;
+  sourceFieldOrder?: string[];
   showOnDashboard?: boolean;
   fullWidth?: boolean;
   aiEnhance?: boolean;
   voiceInput?: boolean;
   fields?: FarmTemplateField[];
   promptKey?: string;
+  searchable?: boolean;
+  optionSource?: "breed";
 };
 
 type CaseSection = "treatment" | "medicine";
@@ -133,11 +136,17 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       rules: parseRules(item.rules),
       fullWidth: item.fullWidth === true,
     };
+    if (item.optionSource === "breed") field.optionSource = "breed";
     if (typeof item.aiEnhance === "boolean") field.aiEnhance = item.aiEnhance;
     if (typeof item.voiceInput === "boolean")
       field.voiceInput = item.voiceInput;
     if (typeof item.source === "string" && item.source.trim())
       field.source = item.source.trim();
+    if (field.source && Array.isArray(item.sourceFieldOrder))
+      field.sourceFieldOrder = item.sourceFieldOrder.filter(
+        (path: unknown): path is string =>
+          typeof path === "string" && Boolean(path),
+      );
     if (item.showOnDashboard === true || item.showOnDashboard === false)
       field.showOnDashboard = item.showOnDashboard;
     if (
@@ -698,17 +707,25 @@ function cloneFields(
   }));
 }
 
+function fetchFormTemplate(type: string, query = ""): Promise<Response> {
+  return fetch(
+    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}${query}`,
+    { headers: { Accept: "application/json" } },
+  );
+}
+
+async function readTemplateRecord(response: Response) {
+  const payload = await readJson(response);
+  return isObject(payload) && isObject(payload.data) ? payload.data : null;
+}
+
 async function readSourceFields(
   type: string,
 ): Promise<FarmTemplateField[] | null> {
-  const response = await fetch(
-    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}`,
-    { headers: { Accept: "application/json" } },
-  );
+  const response = await fetchFormTemplate(type);
   if (response.status === 404) return null;
-  const payload = await readJson(response);
-  if (!isObject(payload) || !isObject(payload.data)) return null;
-  const stored = isObject(payload.data.data) ? payload.data.data : null;
+  const record = await readTemplateRecord(response);
+  const stored = isObject(record?.data) ? record.data : null;
   const adminConfig =
     stored && isObject(stored.adminConfig) ? stored.adminConfig : null;
   const forms = adminConfig ? adminConfig.forms : null;
@@ -718,6 +735,32 @@ async function readSourceFields(
     .flatMap((step) => step.fields)
     .filter((field) => field.key !== "active");
   return fields.length ? fields : null;
+}
+
+function orderSourceFields(
+  fields: FarmTemplateField[],
+  order: string[] | undefined,
+): FarmTemplateField[] {
+  if (!order?.length) return fields;
+  const rank = new Map(order.map((path, index) => [path, index]));
+  function sort(
+    siblings: FarmTemplateField[],
+    prefix: string,
+  ): FarmTemplateField[] {
+    return siblings
+      .slice()
+      .sort(
+        (a, b) =>
+          (rank.get(prefix + a.key) ?? Infinity) -
+          (rank.get(prefix + b.key) ?? Infinity),
+      )
+      .map((field) =>
+        field.fields
+          ? { ...field, fields: sort(field.fields, `${prefix}${field.key}.`) }
+          : field,
+      );
+  }
+  return sort(fields, "");
 }
 
 async function expandSources(
@@ -734,7 +777,13 @@ async function expandSources(
         cache.set(field.source, loaded ?? defaultUtilFields(field.source));
       }
       const children = await expandSources(
-        cloneFields(cache.get(field.source) ?? [], field.id),
+        cloneFields(
+          orderSourceFields(
+            cache.get(field.source) ?? [],
+            field.sourceFieldOrder,
+          ),
+          field.id,
+        ),
         cache,
         depth + 1,
       );
@@ -795,6 +844,7 @@ async function getInputPresets(): Promise<Map<string, CatalogField[]>> {
 function applyDashboardFieldOptions(
   fields: FarmTemplateField[],
   options: FarmDashboardField[],
+  widths: Map<string, boolean>,
   sourceContext?: { source: string; groupKey: string },
 ): FarmTemplateField[] {
   return fields.map((field) => {
@@ -814,6 +864,7 @@ function applyDashboardFieldOptions(
       : sourceContext;
     return {
       ...field,
+      ...(widths.has(field.key) ? { fullWidth: widths.get(field.key) } : {}),
       ...(typeof option?.aiEnhance === "boolean"
         ? { aiEnhance: option.aiEnhance }
         : {}),
@@ -825,6 +876,7 @@ function applyDashboardFieldOptions(
             fields: applyDashboardFieldOptions(
               field.fields,
               options,
+              widths,
               nextSourceContext,
             ),
           }
@@ -836,9 +888,9 @@ function applyDashboardFieldOptions(
 export async function getActiveTemplate(
   type: string,
 ): Promise<ActiveFarmTemplate> {
-  const response = await fetch(
-    `${FARM_VITALS_API_URL}/farm-vitals/form-templates/${encodeURIComponent(type)}?active=true&refresh=${Date.now()}`,
-    { headers: { Accept: "application/json" } },
+  const response = await fetchFormTemplate(
+    type,
+    `?active=true&refresh=${Date.now()}`,
   );
   if (type === "health-case" && response.status === 404)
     throw new Error("No active Case template is available.");
@@ -869,10 +921,8 @@ export async function getActiveTemplate(
       };
     }
   }
-  const payload = await readJson(response);
-  if (!isObject(payload) || !isObject(payload.data))
-    throw new Error("The template response was incomplete.");
-  const record = payload.data;
+  const record = await readTemplateRecord(response);
+  if (!record) throw new Error("The template response was incomplete.");
   const stored = isObject(record.data) ? record.data : null;
   const adminConfig =
     stored && isObject(stored.adminConfig) ? stored.adminConfig : null;
@@ -889,26 +939,15 @@ export async function getActiveTemplate(
       .filter((field) => typeof field.fullWidth === "boolean")
       .map((field): [string, boolean] => [field.key, field.fullWidth === true]),
   );
-  const applyDashboardWidths = (
-    fields: FarmTemplateField[],
-  ): FarmTemplateField[] =>
-    fields.map((field) => ({
-      ...field,
-      ...(dashboardWidths.has(field.key)
-        ? { fullWidth: dashboardWidths.get(field.key) }
-        : {}),
-      ...(field.fields ? { fields: applyDashboardWidths(field.fields) } : {}),
-    }));
   const steps = [];
   for (const step of form.steps) {
     steps.push({
       ...step,
       caseSection: type === "health-case" ? undefined : step.caseSection,
       fields: applyDashboardFieldOptions(
-        applyDashboardWidths(
-          await expandSources(hydrateFields(step.fields, presets), sources),
-        ),
+        await expandSources(hydrateFields(step.fields, presets), sources),
         form.dashboardFields ?? [],
+        dashboardWidths,
       ),
     });
   }
@@ -921,9 +960,6 @@ export async function getActiveTemplate(
   };
 }
 
-export function getActiveHealthCaseTemplate(): Promise<ActiveFarmTemplate> {
-  return getActiveTemplate("health-case");
-}
 export function getActiveFarmTemplate(): Promise<ActiveFarmTemplate> {
   const now = Date.now();
   if (farmTemplateCache && farmTemplateCache.expiresAt > now)
@@ -986,98 +1022,70 @@ export type FarmReviewSection = {
 };
 export type FarmHistoryKind = string;
 
-export type FarmFormType = {
-  key: string;
-  label: string;
-  parent: string | null;
-  status: "Active" | "Inactive";
-};
+export type AdditionalFlow = { key: string; label: string };
 
-const BUILTIN_FORM_TYPES: FarmFormType[] = [
-  { key: "farm", label: "Farm", parent: null, status: "Active" },
-  { key: "animal", label: "Animal", parent: "farm", status: "Active" },
-  { key: "doctor", label: "Doctor", parent: null, status: "Active" },
-  {
-    key: "medical-history",
-    label: "Medical History",
-    parent: "animal",
-    status: "Active",
-  },
-  {
-    key: "production-history",
-    label: "Production History",
-    parent: "animal",
-    status: "Active",
-  },
-  { key: "contact", label: "Contact", parent: null, status: "Active" },
-  { key: "location", label: "Location", parent: null, status: "Active" },
-];
+async function configuredFlowKeys(parent: string): Promise<Set<string>> {
+  const response = await fetchFormTemplate("farm", `?refresh=${Date.now()}`);
+  if (response.status === 404) return new Set();
+  const record = await readTemplateRecord(response);
+  const stored = isObject(record?.data) ? record.data : null;
+  const roles = stored?.formRoles;
+  if (roles === undefined) return new Set();
+  if (!isObject(roles) || roles.version !== 2 || !Array.isArray(roles.forms))
+    throw new Error("The Farm template has unsupported flow settings.");
 
-function builtinParent(key: string): string | null {
-  return BUILTIN_FORM_TYPES.find((type) => type.key === key)?.parent ?? null;
+  return new Set(
+    roles.forms.flatMap((role) =>
+      isObject(role) &&
+      typeof role.key === "string" &&
+      role.key !== parent &&
+      role.key !== "farm" &&
+      Array.isArray(role.parentKeys) &&
+      role.parentKeys.includes(parent)
+        ? [role.key]
+        : [],
+    ),
+  );
 }
 
-export async function listFormTypes(): Promise<FarmFormType[]> {
+export async function listAdditionalFlows(
+  parent: "farm" | "animal",
+): Promise<AdditionalFlow[]> {
   try {
+    const keys = await configuredFlowKeys(parent);
+    if (!keys.size) return [];
     const response = await fetch(
       `${FARM_VITALS_API_URL}/farm-vitals/form-types`,
-      {
-        headers: { Accept: "application/json" },
-      },
+      { headers: { Accept: "application/json" } },
     );
     const payload = await readJson(response);
-    const formTypes =
-      isObject(payload) && isObject(payload.data)
-        ? payload.data.formTypes
-        : null;
-    if (!Array.isArray(formTypes))
-      throw new Error("The form type list was incomplete.");
-    const parsed = formTypes.flatMap((item): FarmFormType[] => {
-      if (!isObject(item) || typeof item.key !== "string" || !item.key)
+    const types =
+      isObject(payload) && isObject(payload.data) ? payload.data.formTypes : null;
+    if (!Array.isArray(types)) return [];
+    const flows = types.flatMap((type): AdditionalFlow[] => {
+      if (
+        !isObject(type) ||
+        typeof type.key !== "string" ||
+        !keys.has(type.key) ||
+        type.status !== "Active"
+      )
         return [];
-      const parent =
-        "parent" in item
-          ? typeof item.parent === "string" && item.parent
-            ? item.parent
-            : null
-          : builtinParent(item.key);
-      return [
-        {
-          key: item.key,
-          label:
-            typeof item.label === "string" && item.label.trim()
-              ? item.label.trim()
-              : formTypeTitle(item.key),
-          parent,
-          status: item.status === "Inactive" ? "Inactive" : "Active",
-        },
-      ];
+      const label =
+        type.key === "health-case"
+          ? formTypeTitle(type.key)
+          : text(type.label).trim() || formTypeTitle(type.key);
+      return [{ key: type.key, label }];
     });
-    return parsed.length ? parsed : BUILTIN_FORM_TYPES;
+    // Older catalogs omit the built-in Breed utility.
+    if (
+      keys.has("breed") &&
+      !types.some((type) => isObject(type) && type.key === "breed")
+    )
+      flows.push({ key: "breed", label: formTypeTitle("breed") });
+    return flows;
   } catch {
-    return BUILTIN_FORM_TYPES;
+    return [];
   }
-}
-
-export function childFormTypes(
-  types: FarmFormType[],
-  parent: string,
-  recordKinds: string[] = [],
-): FarmFormType[] {
-  const active = types.filter(
-    (type) => type.status === "Active" && type.parent === parent,
-  );
-  const known = new Set(active.map((type) => type.key));
-  const extras = [...new Set(recordKinds)].filter((kind) => !known.has(kind));
-  return [
-    ...active,
-    ...extras.map((key) => ({
-      key,
-      label: formTypeTitle(key),
-      parent,
-      status: "Active" as const,
-    })),
-  ];
 }
 
 export type HealthCaseFile = {
@@ -1235,6 +1243,7 @@ export type FarmHistoryReview = {
 };
 
 export type FarmAnimalReview = {
+  edit?: FarmSectionDraft;
   headerBackgroundImageUrl?: string;
   entryId: string;
   name: string;
@@ -1957,6 +1966,13 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     const animalForm = parseForm(item.form);
     const animalValues = isObject(item.values) ? item.values : {};
     const animalId = text(item.entryId, text(animalForm?.id, "animal"));
+    const editableFields =
+      animalForm?.steps
+        .flatMap((step) => step.fields)
+        .filter(
+          (field) =>
+            field.key !== "active" && (!field.source || field.fields?.length),
+        ) ?? [];
     const linked = histories.filter(
       (history) => history.animalEntryId === animalId,
     );
@@ -1967,6 +1983,17 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     return [
       {
         entryId: animalId,
+        ...(typeof item.entryId === "string" &&
+        item.entryId &&
+        editableFields.length
+          ? {
+              edit: {
+                fields: editableFields,
+                values: animalValues,
+                revision: JSON.stringify(item),
+              },
+            }
+          : {}),
         headerBackgroundImageUrl: animalHeaderImage,
         name: namedText(animalValues, text(animalForm?.name, "Animal")),
         species: animalSpecies(animalValues),
@@ -2110,12 +2137,43 @@ export async function updateFarmSection(
   keys: string[],
   changes: Record<string, unknown>,
 ): Promise<void> {
+  return updateEntrySection(farmId, revision, keys, changes);
+}
+
+export async function updateAnimalSection(
+  farmId: string,
+  animalEntryId: string,
+  revision: string,
+  keys: string[],
+  changes: Record<string, unknown>,
+): Promise<void> {
+  return updateEntrySection(farmId, revision, keys, changes, animalEntryId);
+}
+
+async function updateEntrySection(
+  farmId: string,
+  revision: string,
+  keys: string[],
+  changes: Record<string, unknown>,
+  animalEntryId?: string,
+): Promise<void> {
   const { data, entries } = await readFarmDocument(farmId);
-  const index = latestFarmEntry(entries);
+  const index =
+    animalEntryId === undefined
+      ? latestFarmEntry(entries)
+      : entries.findIndex(
+          (entry) =>
+            isObject(entry) &&
+            entry.entryId === animalEntryId &&
+            isObject(entry.form) &&
+            entry.form.entity === "animal",
+        );
   const current = entries[index];
   if (!isObject(current) || JSON.stringify(current) !== revision)
     throw new Error(
-      "This farm changed while you were editing. Cancel and reload the farm before saving.",
+      animalEntryId === undefined
+        ? "This farm changed while you were editing. Cancel and reload the farm before saving."
+        : "This animal changed while you were editing. Cancel and reload the animal before saving.",
     );
   const scoped = Object.fromEntries(
     Object.entries(changes).filter(([key]) => keys.includes(key)),
@@ -2142,9 +2200,10 @@ export async function addAnimalRecord(
   farmId: string,
   template: ActiveFarmTemplate,
   values: Record<string, unknown>,
-): Promise<void> {
+): Promise<string> {
+  const entryId = `${Date.now()}`;
   await appendFarmEntry(farmId, {
-    entryId: `${Date.now()}`,
+    entryId,
     submittedAt: new Date().toISOString(),
     template: {
       type: template.type || "animal",
@@ -2153,6 +2212,7 @@ export async function addAnimalRecord(
     form: template.form,
     values,
   });
+  return entryId;
 }
 
 export type AnimalHistoryDraft = {
@@ -2229,6 +2289,7 @@ export async function updateAnimalHistory(
   farmId: string,
   entryId: string,
   values: Record<string, unknown>,
+  form?: FarmTemplateForm,
 ): Promise<void> {
   const { data, entries } = await readFarmDocument(farmId);
   const index = entries.findIndex(
@@ -2238,7 +2299,7 @@ export async function updateAnimalHistory(
   const current = entries[index];
   if (!isObject(current)) throw new Error("This history could not be updated.");
   const nextEntries = entries.slice();
-  nextEntries[index] = { ...current, values };
+  nextEntries[index] = { ...current, values, ...(form ? { form } : {}) };
   await saveFarmDocument(farmId, {
     ...data,
     farmVitals: { version: 1, entries: nextEntries },

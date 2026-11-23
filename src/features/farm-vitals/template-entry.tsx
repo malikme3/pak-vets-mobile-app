@@ -1,5 +1,5 @@
 import { farmBorder, farmCard, farmButton } from "./presentation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -21,10 +21,20 @@ import * as ImagePicker from "expo-image-picker";
 import { VoiceMessageRecorder } from "../../components/voice/VoiceMessageRecorder";
 import { enhanceFieldText } from "../../services/sharedServicesApi";
 import {
+  getActiveTemplate,
   uploadFarmImage,
   type ActiveFarmTemplate,
   type FarmTemplateField,
 } from "../../services/farmVitalsApi";
+
+import {
+  breedNameField,
+  breedSpeciesField,
+  inlineBreedFields,
+  listedBreed,
+  readBreedOptions,
+  type BreedOption,
+} from "./breed-entry";
 
 const colors = {
   ink: "#173D32",
@@ -220,7 +230,7 @@ function leafError(
     .filter(Boolean);
   if (
     (field.type === "select" || field.type === "radio") &&
-    options.length > 0 &&
+    (options.length > 0 || field.searchable) &&
     !options.includes(text)
   )
     return "Choose one of the options.";
@@ -358,7 +368,10 @@ function choiceOptions(field: FarmTemplateField): string[] {
     .filter(Boolean);
 }
 
-function layoutRows(fields: FarmTemplateField[]): FarmTemplateField[][] {
+function layoutRows(
+  fields: FarmTemplateField[],
+  separateUtils = false,
+): FarmTemplateField[][] {
   const columns = 2;
   const rows: FarmTemplateField[][] = [];
   let compact: FarmTemplateField[] = [];
@@ -369,6 +382,12 @@ function layoutRows(fields: FarmTemplateField[]): FarmTemplateField[][] {
     }
   };
   for (const field of fields) {
+    if (
+      separateUtils &&
+      compact[0] &&
+      isUtilGroup(field) !== isUtilGroup(compact[0])
+    )
+      flush();
     if (field.fullWidth === true) {
       flush();
       rows.push([field]);
@@ -381,14 +400,16 @@ function layoutRows(fields: FarmTemplateField[]): FarmTemplateField[][] {
 function FieldRow({
   fields,
   children,
+  fillSingle = false,
 }: {
   fields: FarmTemplateField[];
   children: ReactNode;
+  fillSingle?: boolean;
 }) {
   return (
     <View style={styles.fieldRow}>
       {children}
-      {fields.length === 1 && fields[0].fullWidth !== true ? (
+      {!fillSingle && fields.length === 1 && fields[0].fullWidth !== true ? (
         <View style={styles.fieldSlot} />
       ) : null}
     </View>
@@ -480,6 +501,7 @@ function FieldControl({
   outlinedLabels?: boolean;
   onChange: (value: Answer) => void;
 }) {
+  const [choiceSearch, setChoiceSearch] = useState("");
   const [focused, setFocused] = useState(false);
   const [showDate, setShowDate] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -581,6 +603,46 @@ function FieldControl({
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {!error && field.helpText ? (
           <Text style={styles.help}>{field.helpText}</Text>
+        ) : null}
+      </View>
+    );
+  }
+  if (field.searchable) {
+    const query = choiceSearch.trim().toLowerCase();
+    const choices = options.filter((option) =>
+      option.toLowerCase().includes(query),
+    );
+    return (
+      <View style={styles.field}>
+        <Text style={styles.label}>{label}</Text>
+        {options.length ? (
+          <>
+            <TextInput
+              accessibilityLabel={`Search ${field.label.toLowerCase()}`}
+              placeholder={`Search ${field.label.toLowerCase()}`}
+              value={choiceSearch}
+              onChangeText={setChoiceSearch}
+              style={styles.input}
+            />
+            {choices.length ? (
+              <ChoiceTabs
+                radio
+                value={text}
+                onChange={onChange}
+                options={choices.map((option) => ({
+                  id: option,
+                  label: option,
+                }))}
+              />
+            ) : (
+              <Text style={styles.help}>No matching options.</Text>
+            )}
+          </>
+        ) : null}
+        {error || field.helpText ? (
+          <Text style={error ? styles.error : styles.help}>
+            {error || field.helpText}
+          </Text>
         ) : null}
       </View>
     );
@@ -1032,28 +1094,75 @@ export function TemplateEntryForm({
 }) {
   const { width } = useWindowDimensions();
   const fieldColumns = width >= 840 ? 4 : width >= 560 ? 3 : 2;
-  const steps = template.form.steps
-    .map((step) => ({ ...step, fields: entryFields(step.fields) }))
-    .filter((step) => step.fields.length > 0);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [answers, setAnswers] = useState<Answers>(() =>
-    answersFromValues(
-      template.form.steps.flatMap((step) => step.fields),
-      initialValues ?? {},
-    ),
+  const fields = template.form.steps.flatMap((step) =>
+    entryFields(step.fields),
   );
+  const breed = inlineBreedFields(fields);
+  const needsCatalog = Boolean(breed);
+  const [breedOptions, setBreedOptions] = useState<BreedOption[] | null>(null);
+  const [breedError, setBreedError] = useState(false);
+  const [breedAttempt, setBreedAttempt] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [answers, setAnswers] = useState<Answers>(() => {
+    const initial = answersFromValues(fields, initialValues ?? {});
+    if (breed) {
+      for (const key of [breed.speciesKey, breed.nameKey]) {
+        const value = initialValues?.[key];
+        if (typeof value === "string") initial[key] = value;
+      }
+    }
+    return initial;
+  });
+  useEffect(() => {
+    if (!needsCatalog) return;
+    let mounted = true;
+    getActiveTemplate("breed")
+      .then(readBreedOptions)
+      .then((options) => {
+        if (mounted) setBreedOptions(options);
+      })
+      .catch(() => {
+        if (mounted) setBreedError(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [needsCatalog, breedAttempt]);
+
+  const category = breed ? answers[breed.category.key] : undefined;
+  const listed = listedBreed(category);
+  const species = breed ? answers[breed.speciesKey] : undefined;
+  const detail =
+    breed && typeof category === "string"
+      ? breedNameField(
+          breed.nameKey,
+          breedOptions ?? [],
+          typeof species === "string" ? species : "",
+          category,
+        )
+      : undefined;
+  const steps = template.form.steps
+    .map((step) => ({
+      ...step,
+      fields: entryFields(step.fields).flatMap((field) =>
+        breed && field.id === breed.category.id
+          ? [
+              field,
+              ...(listed && !breed.hasSpecies && breedOptions
+                ? [breedSpeciesField(breed.speciesKey, breedOptions)]
+                : []),
+              ...(detail && (!listed || breedOptions) ? [detail] : []),
+            ]
+          : [field],
+      ),
+    }))
+    .filter((step) => step.fields.length > 0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openUtil, setOpenUtil] = useState<string | null>(null);
   const separateUtils =
     !inlineGroups && steps.some((step) => step.fields.some(isUtilGroup));
   const activeIndex = Math.min(stepIndex, Math.max(steps.length - 1, 0));
   const activeStep = steps[activeIndex];
-  const directFields = separateUtils
-    ? (activeStep?.fields.filter((field) => !isUtilGroup(field)) ?? [])
-    : (activeStep?.fields ?? []);
-  const utilFields = separateUtils
-    ? (activeStep?.fields.filter(isUtilGroup) ?? [])
-    : [];
   const openField =
     steps
       .flatMap((step) => step.fields)
@@ -1061,11 +1170,31 @@ export function TemplateEntryForm({
 
   function changeAnswer(key: string, value: Answer) {
     const next = { ...answers, [key]: value };
+    const inlineName =
+      breed && (key === breed.category.key || key === breed.speciesKey)
+        ? breed.nameKey
+        : undefined;
+    const detailKey =
+      inlineName ??
+      (template.type === "breed" &&
+      onDraftChange &&
+      (key === "breed" || key === "animalType")
+        ? "breedName"
+        : undefined);
+    if (detailKey && answers[key] !== value) {
+      delete next[detailKey];
+      setErrors((current) => {
+        const remaining = { ...current };
+        delete remaining[detailKey];
+        return remaining;
+      });
+    }
     setAnswers(next);
     onDraftChange?.(next);
   }
 
   function submit() {
+    if (listed && !breedOptions) return;
     const fields = steps.flatMap((step) => step.fields);
     const nextErrors: Record<string, string> = {};
     collectErrors(fields, answers, "", false, nextErrors);
@@ -1082,7 +1211,10 @@ export function TemplateEntryForm({
       return;
     }
     if (saving) return;
-    void onSubmit(collectValues(fields, answers));
+    const values = collectValues(fields, answers);
+    if (breed && !detail) values[breed.nameKey] = null;
+    if (breed && !breed.hasSpecies && !listed) values[breed.speciesKey] = null;
+    void onSubmit(values);
   }
 
   return (
@@ -1105,13 +1237,48 @@ export function TemplateEntryForm({
           {steps.length === 1 && activeStep.title ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
-          {layoutRows(directFields).map((row) => (
-            <FieldRow key={row.map((field) => field.id).join("-")} fields={row}>
+          {layoutRows(activeStep.fields, separateUtils).map((row) => (
+            <FieldRow
+              key={row.map((field) => field.id).join("-")}
+              fields={row}
+              fillSingle={separateUtils && isUtilGroup(row[0])}
+            >
               {row.map((field) => {
+                if (separateUtils && isUtilGroup(field)) {
+                  const saved = hasAnswer(answers[field.key]);
+                  return (
+                    <View key={field.id} style={styles.fieldSlot}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setOpenUtil(field.key)}
+                        style={styles.utilButton}
+                      >
+                        <Feather
+                          name={saved ? "check" : "plus"}
+                          size={16}
+                          color={colors.green}
+                        />
+                        <Text style={styles.utilText}>
+                          {saved ? field.label : `Add ${field.label}`}
+                        </Text>
+                        {saved ? (
+                          <Text style={styles.optional}>Edit</Text>
+                        ) : null}
+                      </Pressable>
+                    </View>
+                  );
+                }
                 const onChange = (value: Answer) =>
                   changeAnswer(field.key, value);
                 return (
-                  <View key={field.id} style={styles.fieldSlot}>
+                  <View
+                    key={
+                      field.searchable
+                        ? `${field.id}-${breed ? species : answers.animalType}-${breed ? category : answers.breed}`
+                        : field.id
+                    }
+                    style={styles.fieldSlot}
+                  >
                     {renderField?.(field) ?? (
                       <FieldControl
                         field={field}
@@ -1130,46 +1297,28 @@ export function TemplateEntryForm({
               })}
             </FieldRow>
           ))}
-          {utilFields.length ? (
-            <View style={styles.utilList}>
-              {layoutRows(utilFields).map((row) => (
-                <FieldRow
-                  key={row.map((field) => field.id).join("-")}
-                  fields={row}
-                >
-                  {row.map((field) => {
-                    const saved = hasAnswer(answers[field.key]);
-                    return (
-                      <View key={field.id} style={styles.fieldSlot}>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => setOpenUtil(field.key)}
-                          style={styles.utilButton}
-                        >
-                          <Feather
-                            name={saved ? "check" : "plus"}
-                            size={16}
-                            color={colors.green}
-                          />
-                          <Text style={styles.utilText}>
-                            {saved ? field.label : `Add ${field.label}`}
-                          </Text>
-                          {saved ? (
-                            <Text style={styles.optional}>Edit</Text>
-                          ) : null}
-                        </Pressable>
-                      </View>
-                    );
-                  })}
-                </FieldRow>
-              ))}
-            </View>
-          ) : null}
         </View>
+      ) : null}
+      {listed && !breedOptions ? (
+        breedError ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setBreedError(false);
+              setBreedAttempt((current) => current + 1);
+            }}
+          >
+            <Text style={styles.error}>
+              Breed options could not be loaded. Tap to retry.
+            </Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.help}>Loading breed options…</Text>
+        )
       ) : null}
       <Pressable
         accessibilityRole="button"
-        disabled={saving}
+        disabled={saving || (listed && !breedOptions)}
         onPress={submit}
         style={[styles.action, saving && styles.pressed]}
       >
@@ -1208,7 +1357,6 @@ export function TemplateEntryForm({
 
 const styles = StyleSheet.create({
   form: { gap: 12, width: "100%" },
-  utilList: { gap: 8, width: "100%" },
   utilButton: {
     minHeight: 44,
     flexDirection: "row",

@@ -10,8 +10,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import Feather from "@expo/vector-icons/Feather";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
+import { breedEntryTemplate } from "../features/farm-vitals/breed-entry";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   addAnimalRecord,
@@ -37,6 +37,7 @@ export default function AddFarmAnimalScreen() {
       ? params.kind
       : "animal";
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
+  const [breedAnswers, setBreedAnswers] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +51,12 @@ export default function AddFarmAnimalScreen() {
     setLoading(true);
     setError(null);
     try {
-      setTemplate(await getActiveTemplate(kind));
+      const loaded = await getActiveTemplate(kind);
+      if (kind === "breed") {
+        breedEntryTemplate(loaded, "", "", {}, true);
+        setBreedAnswers({});
+      }
+      setTemplate(loaded);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -66,13 +72,30 @@ export default function AddFarmAnimalScreen() {
     void load();
   }, [load]);
 
+  const entryTemplate =
+    template?.type === "breed"
+      ? breedEntryTemplate(
+          template,
+          typeof breedAnswers.animalType === "string"
+            ? breedAnswers.animalType
+            : "",
+          typeof breedAnswers.breed === "string" ? breedAnswers.breed : "",
+          {},
+          true,
+        )
+      : template;
+
   async function submit(values: Record<string, unknown>) {
-    if (!template || saving) return;
+    if (!entryTemplate || saving) return;
     setSaving(true);
     setError(null);
     try {
-      await addAnimalRecord(farmId, template, values);
-      router.back();
+      const entryId = await addAnimalRecord(farmId, entryTemplate, values);
+      if (entryTemplate.type === "animal") {
+        router.replace({ pathname: "/farm-animal", params: { farmId, entryId } });
+      } else {
+        router.back();
+      }
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -111,9 +134,10 @@ export default function AddFarmAnimalScreen() {
             </Pressable>
           </View>
         ) : null}
-        {template ? (
+        {entryTemplate ? (
           <TemplateEntryForm
-            template={template}
+            template={entryTemplate}
+            onDraftChange={kind === "breed" ? setBreedAnswers : undefined}
             showDescription={false}
             submitLabel={
               kind === "animal" ? "Add Animal" : "Add " + formTypeTitle(kind)
@@ -131,13 +155,6 @@ export default function AddFarmAnimalScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 16, paddingBottom: 32, gap: 10 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-  },
-  backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },

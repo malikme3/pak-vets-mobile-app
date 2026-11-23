@@ -16,6 +16,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import {
   getFarmReview,
+  listAdditionalFlows,
   type FarmAnimalReview,
 } from "../services/farmVitalsApi";
 
@@ -37,6 +38,7 @@ export default function AnimalCaseDashboard() {
   }>();
   const [filter, setFilter] = useState<"all" | "draft" | "saved">("all");
   const [animal, setAnimal] = useState<FarmAnimalReview | null>(null);
+  const [canAddCase, setCanAddCase] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -47,18 +49,27 @@ export default function AnimalCaseDashboard() {
       setLoading(true);
       setError("");
       setAnimal(null);
+      setCanAddCase(false);
 
       async function load() {
         try {
           if (!farmId || !animalEntryId)
             throw new Error("Open the case dashboard from an animal page.");
-          const farm = await getFarmReview(farmId);
+          const [farm, types] = await Promise.all([
+            getFarmReview(farmId),
+            listAdditionalFlows("animal"),
+          ]);
           const selected = farm.animals.find(
             (item) => item.entryId === animalEntryId,
           );
           if (!selected)
             throw new Error("This animal is no longer on the farm.");
-          if (!cancelled) setAnimal(selected);
+          if (!cancelled) {
+            setAnimal(selected);
+            setCanAddCase(
+              types.some((type) => type.key === "health-case"),
+            );
+          }
         } catch (cause) {
           if (!cancelled)
             setError(
@@ -137,23 +148,25 @@ export default function AnimalCaseDashboard() {
                     </Text>
                   </View>
                 </HeaderBackground>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Add case"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/health-case",
-                      params: { farmId, animalEntryId },
-                    })
-                  }
-                  style={({ pressed }) => [
-                    styles.action,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Feather name="plus" size={18} color={colors.surface} />
-                  <Text style={styles.actionText}>Add case</Text>
-                </Pressable>
+                {canAddCase ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add case"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/health-case",
+                        params: { farmId, animalEntryId },
+                      })
+                    }
+                    style={({ pressed }) => [
+                      styles.action,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Feather name="plus" size={18} color={colors.surface} />
+                    <Text style={styles.actionText}>Add case</Text>
+                  </Pressable>
+                ) : null}
                 <View accessibilityRole="tablist" style={styles.filters}>
                   {filters.map((item) => (
                     <Pressable
@@ -351,27 +364,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: 16, paddingBottom: 36, gap: 12 },
   header: { gap: 14, marginBottom: 2 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 8,
-    minHeight: 44,
-  },
   link: { color: colors.green, fontSize: 14, fontWeight: "700" },
-  pageHeading: { gap: 4 },
-  eyebrow: {
-    color: colors.green,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 26,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-  },
   subtitle: { color: colors.muted, fontSize: 12, lineHeight: 18 },
   animalCard: {
     ...farmCard,

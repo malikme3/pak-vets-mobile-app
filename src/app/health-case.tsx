@@ -31,7 +31,6 @@ import {
 } from "expo-audio";
 import Feather from "@expo/vector-icons/Feather";
 import {
-  getActiveHealthCaseTemplate,
   getActiveTemplate,
   getFarmReview,
   getHealthCase,
@@ -258,7 +257,7 @@ export default function HealthCaseScreen() {
       }
       const [review, active] = await Promise.all([
         getFarmReview(farmId),
-        getActiveHealthCaseTemplate(),
+        getActiveTemplate("health-case"),
       ]);
       const animal = review.animals.find(
         (item) => item.entryId === animalEntryId,

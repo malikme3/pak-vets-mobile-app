@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { TemplateEntryForm, fullWidthFields } from "./template-entry";
+import { inlineBreedFields } from "./breed-entry";
 import { farmButton } from "./presentation";
 import {
+  updateAnimalSection,
   updateFarmSection,
   type FarmSectionDraft,
   type FarmTemplateField,
@@ -10,17 +12,21 @@ import {
 
 export function FarmSectionEditor({
   farmId,
+  animalEntryId,
   draft,
   fields,
   onCancel,
   onSaved,
 }: {
   farmId: string;
+  animalEntryId?: string;
   draft: FarmSectionDraft;
   fields: FarmTemplateField[];
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const entity = animalEntryId ? "animal" : "farm";
+  const name = animalEntryId ? "Animal" : "Farm";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function save(values: Record<string, unknown>) {
@@ -28,12 +34,21 @@ export function FarmSectionEditor({
     setSaving(true);
     setError(null);
     try {
-      await updateFarmSection(
-        farmId,
-        draft.revision,
-        fields.map((field) => field.key),
-        values,
-      );
+      const keys = fields.map((field) => field.key);
+      const breed = inlineBreedFields(fields);
+      if (breed) {
+        keys.push(breed.nameKey);
+        if (!breed.hasSpecies) keys.push(breed.speciesKey);
+      }
+      if (animalEntryId)
+        await updateAnimalSection(
+          farmId,
+          animalEntryId,
+          draft.revision,
+          keys,
+          values,
+        );
+      else await updateFarmSection(farmId, draft.revision, keys, values);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -49,14 +64,14 @@ export function FarmSectionEditor({
     <View style={styles.editor}>
       <TemplateEntryForm
         template={{
-          type: "farm",
-          name: "Farm",
+          type: entity,
+          name,
           updatedAt: "",
           adminConfig: {},
           form: {
             id: "section",
-            name: "Farm",
-            entity: "farm",
+            name,
+            entity,
             description: "",
             steps: [
               {
