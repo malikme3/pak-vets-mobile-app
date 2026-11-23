@@ -6,6 +6,16 @@ const FARM_VITALS_API_URL = (
   "https://dl6axiz667.execute-api.us-east-1.amazonaws.com"
 ).replace(/\/+$/, "");
 
+const farmDashboardCacheTtlMs = 2 * 60 * 1000;
+const farmImageUrlCacheTtlMs = 2 * 60 * 1000;
+let farmDashboardCache:
+  | { savedAt: number; entries: FarmDashboardEntry[] }
+  | undefined;
+const farmImageUrlCache = new Map<
+  string,
+  { expiresAt: number; promise: Promise<string> }
+>();
+
 export type FarmFieldRules = {
   required?: boolean;
   min?: number | string;
@@ -497,24 +507,38 @@ export async function deleteSocialPost(postId: string): Promise<void> {
 }
 
 export async function readableFarmImage(fileUrl: string): Promise<string> {
-  const response = await fetch(
-    `${FARM_VITALS_API_URL}/farm-vitals/uploads/download`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
+  const cached = farmImageUrlCache.get(fileUrl);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const promise = (async () => {
+    const response = await fetch(
+      `${FARM_VITALS_API_URL}/farm-vitals/uploads/download`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fileUrl }),
       },
-      body: JSON.stringify({ fileUrl }),
-    },
-  );
-  const payload = await readJson(response);
-  const data =
-    isObject(payload) && isObject(payload.data) ? payload.data : null;
-  const downloadUrl = text(data?.downloadUrl);
-  if (!downloadUrl.startsWith("http"))
-    throw new Error("The photo could not be opened.");
-  return downloadUrl;
+    );
+    const payload = await readJson(response);
+    const data =
+      isObject(payload) && isObject(payload.data) ? payload.data : null;
+    const downloadUrl = text(data?.downloadUrl);
+    if (!downloadUrl.startsWith("http"))
+      throw new Error("The photo could not be opened.");
+    return downloadUrl;
+  })();
+  farmImageUrlCache.set(fileUrl, {
+    expiresAt: Date.now() + farmImageUrlCacheTtlMs,
+    promise,
+  });
+  void promise.catch(() => {
+    if (farmImageUrlCache.get(fileUrl)?.promise === promise)
+      farmImageUrlCache.delete(fileUrl);
+  });
+  return promise;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -901,8 +925,21 @@ export function getActiveHealthCaseTemplate(): Promise<ActiveFarmTemplate> {
   return getActiveTemplate("health-case");
 }
 export function getActiveFarmTemplate(): Promise<ActiveFarmTemplate> {
-  return getActiveTemplate("farm");
+  const now = Date.now();
+  if (farmTemplateCache && farmTemplateCache.expiresAt > now)
+    return farmTemplateCache.promise;
+
+  const promise = getActiveTemplate("farm").catch((error: unknown) => {
+    if (farmTemplateCache?.promise === promise) farmTemplateCache = undefined;
+    throw error;
+  });
+  farmTemplateCache = { expiresAt: now + 60_000, promise };
+  return promise;
 }
+
+let farmTemplateCache:
+  | { expiresAt: number; promise: Promise<ActiveFarmTemplate> }
+  | undefined;
 
 export type SubmittedFarm = {
   farmId: string;
@@ -910,6 +947,10 @@ export type SubmittedFarm = {
   updatedAt: string;
   name: string;
   submittedAt: string | null;
+  dashboardValues?: Record<string, unknown>;
+  farmPhotoUrl?: string;
+  ownerPhotoUrl?: string;
+  animalCount?: number;
 };
 
 export type FarmReviewRow = {
@@ -1345,19 +1386,62 @@ async function farmEntryValues(farmId: string): Promise<{
   };
 }
 
-export async function listFarmDashboard(): Promise<FarmDashboardEntry[]> {
-  const [template, farms] = await Promise.all([
-    getActiveFarmTemplate(),
-    listSubmittedFarms(),
-  ]);
+export async function listFarmDashboard(
+  onFarmList?: (farms: FarmDashboardEntry[]) => void,
+  onFarmUpdated?: (farm: FarmDashboardEntry) => void,
+): Promise<FarmDashboardEntry[]> {
+  const cached = farmDashboardCache;
+  const cacheIsFresh =
+    cached !== undefined &&
+    Date.now() - cached.savedAt < farmDashboardCacheTtlMs;
+  if (cacheIsFresh) onFarmList?.(cached.entries);
+
+  const templatePromise = getActiveFarmTemplate().then(
+    (template) => ({ template, error: undefined }),
+    (error: unknown) => ({ template: undefined, error }),
+  );
+  const farms = await listSubmittedFarms();
+  const cachedById = new Map(
+    (cacheIsFresh ? cached.entries : []).map((farm) => [farm.farmId, farm]),
+  );
+  const initial = farms.map((farm): FarmDashboardEntry => {
+    const previous = cachedById.get(farm.farmId);
+    return previous
+      ? { ...previous, submittedAt: farm.submittedAt }
+      : {
+          farmId: farm.farmId,
+          name: farm.name,
+          farmPhotoUrl: farm.farmPhotoUrl,
+          ownerPhotoUrl: farm.ownerPhotoUrl,
+          animalCount: farm.animalCount ?? 0,
+          submittedAt: farm.submittedAt,
+          rows: [],
+        };
+  });
+  farmDashboardCache = { savedAt: Date.now(), entries: initial };
+  onFarmList?.(initial);
+
+  // The list API includes only fields configured for the farm dashboard, so
+  // the common path needs no per-farm detail requests. Keep the detail fallback
+  // while older deployed API stages are being upgraded.
+  const result = await templatePromise;
+  if (!result.template) throw result.error;
+  const template = result.template;
   const fields = template.form.steps.flatMap((step) => step.fields);
   const selected = template.form.dashboardFields ?? [];
   return Promise.all(
-    farms.map(async (farm) => {
+    farms.map(async (farm, index) => {
       try {
-        const entry = await farmEntryValues(farm.farmId);
+        const entry = farm.dashboardValues
+          ? {
+              values: farm.dashboardValues,
+              farmPhotoUrl: farm.farmPhotoUrl,
+              ownerPhotoUrl: farm.ownerPhotoUrl,
+              animalCount: farm.animalCount ?? 0,
+            }
+          : await farmEntryValues(farm.farmId);
         const values = entry.values;
-        return {
+        const hydrated: FarmDashboardEntry = {
           farmId: farm.farmId,
           name: namedText(values, farm.name),
           farmPhotoUrl: entry.farmPhotoUrl,
@@ -1372,14 +1456,26 @@ export async function listFarmDashboard(): Promise<FarmDashboardEntry[]> {
             ] ?? values,
           ),
         };
-      } catch {
-        return {
-          farmId: farm.farmId,
-          name: farm.name,
-          animalCount: 0,
-          submittedAt: farm.submittedAt,
-          rows: [],
+        const currentEntries = farmDashboardCache?.entries ?? initial;
+        farmDashboardCache = {
+          savedAt: Date.now(),
+          entries: currentEntries.map((item) =>
+            item.farmId === hydrated.farmId ? hydrated : item,
+          ),
         };
+        onFarmUpdated?.(hydrated);
+        return hydrated;
+      } catch {
+        const fallback = initial[index];
+        const currentEntries = farmDashboardCache?.entries ?? initial;
+        farmDashboardCache = {
+          savedAt: Date.now(),
+          entries: currentEntries.map((item) =>
+            item.farmId === fallback.farmId ? fallback : item,
+          ),
+        };
+        onFarmUpdated?.(fallback);
+        return fallback;
       }
     }),
   );
@@ -1404,6 +1500,18 @@ export async function listSubmittedFarms(): Promise<SubmittedFarm[]> {
         name: text(item.name, "Farm"),
         submittedAt:
           typeof item.submittedAt === "string" ? item.submittedAt : null,
+        ...(isObject(item.dashboardValues)
+          ? { dashboardValues: item.dashboardValues }
+          : {}),
+        ...(text(item.farmPhotoUrl)
+          ? { farmPhotoUrl: text(item.farmPhotoUrl) }
+          : {}),
+        ...(text(item.ownerPhotoUrl)
+          ? { ownerPhotoUrl: text(item.ownerPhotoUrl) }
+          : {}),
+        ...(typeof item.animalCount === "number"
+          ? { animalCount: item.animalCount }
+          : {}),
       },
     ];
   });

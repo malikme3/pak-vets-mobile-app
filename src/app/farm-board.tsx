@@ -23,7 +23,6 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Location from "expo-location";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { distanceKm, type Coordinates } from "../utils/coordinates";
-import { formatDistance } from "../utils/formatDistance";
 import {
   listFarmDashboard,
   readableFarmImage,
@@ -75,7 +74,6 @@ function landing(farm: FarmDashboardEntry): {
   title: string;
   highlights: FarmDashboardEntry["rows"];
   badges: FarmDashboardEntry["rows"];
-  details: FarmDashboardEntry["rows"];
 } {
   const name = farmNameRow(farm);
   const highlights = ownerLine(farm);
@@ -87,13 +85,6 @@ function landing(farm: FarmDashboardEntry): {
     highlights,
     badges: farm.rows.filter(
       (row) => row.value.trim() && row.badgeView && row !== ownerPhone,
-    ),
-    details: farm.rows.filter(
-      (row) =>
-        row.value.trim() &&
-        row.tileView &&
-        row !== name &&
-        !highlights.includes(row),
     ),
   };
 }
@@ -173,6 +164,12 @@ function withinOneEdit(left: string, right: string): boolean {
     : left.slice(index) === right.slice(index + 1);
 }
 
+function phoneDigits(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("92")) return digits.slice(2);
+  return digits.startsWith("0") ? digits.slice(1) : digits;
+}
+
 function matches(farm: FarmDashboardEntry, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
@@ -182,6 +179,11 @@ function matches(farm: FarmDashboardEntry, query: string): boolean {
     const value = row === name ? row.value.trim() || farm.name : row.value;
     const searchable = value.toLowerCase();
     if (searchable.includes(needle)) return true;
+    if (/phone|mobile|cell/i.test(`${row.key ?? ""} ${row.label}`)) {
+      const digits = phoneDigits(needle);
+      if (digits.length >= 3 && phoneDigits(value).includes(digits))
+        return true;
+    }
     if (row !== name || needle.length < 4) return false;
     return (
       withinOneEdit(searchable, needle) ||
@@ -200,9 +202,6 @@ export default function FarmBoardScreen() {
   const [findingNearby, setFindingNearby] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [farms, setFarms] = useState<FarmDashboardEntry[]>([]);
-  const [expandedFarms, setExpandedFarms] = useState<Record<string, boolean>>(
-    {},
-  );
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [searched, setSearched] = useState(false);
@@ -215,10 +214,23 @@ export default function FarmBoardScreen() {
       setLoading(true);
       setError(null);
 
-      listFarmDashboard()
-        .then((entries) => {
-          if (!cancelled) setFarms(entries);
-        })
+      listFarmDashboard(
+        (entries) => {
+          if (!cancelled) {
+            setFarms(entries);
+            setLoading(false);
+          }
+        },
+        (updatedFarm) => {
+          if (!cancelled) {
+            setFarms((current) =>
+              current.map((farm) =>
+                farm.farmId === updatedFarm.farmId ? updatedFarm : farm,
+              ),
+            );
+          }
+        },
+      )
         .catch((cause: unknown) => {
           if (!cancelled)
             setError(
@@ -522,7 +534,6 @@ export default function FarmBoardScreen() {
         ) : null}
         {shown.map((farm) => {
           const place = landing(farm);
-          const expanded = expandedFarms[farm.farmId] === true;
           const owner = place.highlights.find((row) => /name/i.test(row.label));
           const phone = place.highlights.find((row) =>
             /phone|mobile/i.test(`${row.key ?? ""} ${row.label}`),
@@ -538,7 +549,13 @@ export default function FarmBoardScreen() {
               params: { farmId: farm.farmId },
             });
           return (
-            <View key={farm.farmId} style={styles.card}>
+            <Pressable
+              key={farm.farmId}
+              accessibilityRole="button"
+              accessibilityLabel={`${place.title}${owner ? `, owner ${owner.value}` : ""}. Open farm details`}
+              onPress={openFarm}
+              style={styles.card}
+            >
               <FarmCardCover
                 farm={farm}
                 initial={ownerInitial}
@@ -546,12 +563,7 @@ export default function FarmBoardScreen() {
               />
               <View style={styles.landing}>
                 <View style={styles.landingHeader}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${place.title}${owner ? `, owner ${owner.value}` : ""}. Open farm`}
-                    onPress={openFarm}
-                    style={styles.landingMain}
-                  >
+                  <View style={styles.landingMain}>
                     <View style={styles.ownerSummary}>
                       <View style={styles.ownerDetails}>
                         <Text numberOfLines={1} style={styles.ownerName}>
@@ -590,25 +602,14 @@ export default function FarmBoardScreen() {
                         ) : null}
                       </View>
                     </View>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${place.title} details`}
-                    accessibilityState={{ expanded }}
-                    onPress={() =>
-                      setExpandedFarms((current) => ({
-                        ...current,
-                        [farm.farmId]: !expanded,
-                      }))
-                    }
-                    style={styles.openIcon}
-                  >
+                  </View>
+                  <View style={styles.openIcon}>
                     <Feather
-                      name={expanded ? "chevron-up" : "chevron-down"}
+                      name="chevron-right"
                       size={18}
                       color={colors.green}
                     />
-                  </Pressable>
+                  </View>
                 </View>
                 {place.badges.length ? (
                   <View style={styles.dashboardBadges}>
@@ -633,34 +634,7 @@ export default function FarmBoardScreen() {
                   </View>
                 ) : null}
               </View>
-              {expanded ? (
-                <>
-                  {nearbyOrigin && farm.distance !== null ? (
-                    <Text style={styles.expandedDistance}>
-                      {formatDistance(farm.distance)} away
-                    </Text>
-                  ) : null}
-                  {place.details.length ? (
-                    <View style={styles.facts}>
-                      {place.details
-                        .filter((row) => row !== classification)
-                        .map((row, index) => (
-                          <View
-                            key={`${filterId(row)}-${index}`}
-                            style={[
-                              styles.fact,
-                              row.fullWidth === true && styles.factWide,
-                            ]}
-                          >
-                            <Text style={styles.factLabel}>{row.label}</Text>
-                            <Text style={styles.factValue}>{row.value}</Text>
-                          </View>
-                        ))}
-                    </View>
-                  ) : null}
-                </>
-              ) : null}
-            </View>
+            </Pressable>
           );
         })}
       </ScrollView>
@@ -772,13 +746,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 12,
     ...farmButton,
-  },
-  expandedDistance: {
-    color: colors.green,
-    fontSize: 12,
-    fontWeight: "600",
-    paddingHorizontal: 12,
-    paddingBottom: 6,
   },
   searchDisabled: { opacity: 0.5 },
   searchButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
@@ -942,23 +909,4 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontWeight: "800",
   },
-  facts: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 6,
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-  },
-  fact: {
-    width: "49%",
-    backgroundColor: colors.field,
-    borderRadius: 11,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 3,
-  },
-  factWide: { width: "100%" },
-  factLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-  factValue: { color: colors.ink, fontSize: 14, fontWeight: "700" },
 });
