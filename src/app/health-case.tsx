@@ -152,6 +152,7 @@ export default function HealthCaseScreen() {
     farmId?: string;
     animalEntryId?: string;
     entryId?: string;
+    flowLabel?: string;
   }>();
   const farmId = param(params.farmId);
   const animalEntryId = param(params.animalEntryId);
@@ -533,6 +534,7 @@ export default function HealthCaseScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <CaseFlowHeader
+          title={`Add ${param(params.flowLabel).trim() || "Case"}`}
           onBack={() => (step > 0 ? goToStep(step - 1) : router.back())}
           animalName={health.animalName}
           farmName={farmName}

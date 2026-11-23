@@ -30,12 +30,19 @@ const colors = {
 
 export default function AddFarmAnimalScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ farmId?: string; kind?: string }>();
+  const params = useLocalSearchParams<{
+    farmId?: string;
+    kind?: string;
+    flowLabel?: string;
+  }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const kind =
     typeof params.kind === "string" && params.kind.trim()
       ? params.kind
       : "animal";
+  const label =
+    (typeof params.flowLabel === "string" && params.flowLabel.trim()) ||
+    formTypeTitle(kind);
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [breedAnswers, setBreedAnswers] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
@@ -100,7 +107,7 @@ export default function AddFarmAnimalScreen() {
       setError(
         cause instanceof Error
           ? cause.message
-          : `The ${formTypeTitle(kind).toLowerCase()} could not be saved.`,
+          : `The ${label.toLowerCase()} could not be saved.`,
       );
     } finally {
       setSaving(false);
@@ -114,12 +121,7 @@ export default function AddFarmAnimalScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <FlowPageHeading
-          onBack={() => router.back()}
-          title={
-            kind === "animal" ? "Add Animal" : `Add ${formTypeTitle(kind)}`
-          }
-        />
+        <FlowPageHeading onBack={() => router.back()} title={`Add ${label}`} />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -139,9 +141,7 @@ export default function AddFarmAnimalScreen() {
             template={entryTemplate}
             onDraftChange={kind === "breed" ? setBreedAnswers : undefined}
             showDescription={false}
-            submitLabel={
-              kind === "animal" ? "Add Animal" : "Add " + formTypeTitle(kind)
-            }
+            submitLabel={`Add ${label}`}
             saving={saving}
             farmId={farmId}
             onSubmit={submit}

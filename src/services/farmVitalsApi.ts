@@ -1024,25 +1024,34 @@ export type FarmHistoryKind = string;
 
 export type AdditionalFlow = { key: string; label: string };
 
-async function configuredFlowKeys(parent: string): Promise<Set<string>> {
+async function configuredFlowNames(
+  parent: string,
+): Promise<Map<string, string>> {
   const response = await fetchFormTemplate("farm", `?refresh=${Date.now()}`);
-  if (response.status === 404) return new Set();
+  if (response.status === 404) return new Map();
   const record = await readTemplateRecord(response);
   const stored = isObject(record?.data) ? record.data : null;
   const roles = stored?.formRoles;
-  if (roles === undefined) return new Set();
+  if (roles === undefined) return new Map();
   if (!isObject(roles) || roles.version !== 2 || !Array.isArray(roles.forms))
     throw new Error("The Farm template has unsupported flow settings.");
 
-  return new Set(
-    roles.forms.flatMap((role) =>
+  return new Map(
+    roles.forms.flatMap((role): [string, string][] =>
       isObject(role) &&
       typeof role.key === "string" &&
       role.key !== parent &&
       role.key !== "farm" &&
       Array.isArray(role.parentKeys) &&
       role.parentKeys.includes(parent)
-        ? [role.key]
+        ? [
+            [
+              role.key,
+              isObject(role.parentLabels)
+                ? text(role.parentLabels[parent]).trim()
+                : "",
+            ],
+          ]
         : [],
     ),
   );
@@ -1052,36 +1061,41 @@ export async function listAdditionalFlows(
   parent: "farm" | "animal",
 ): Promise<AdditionalFlow[]> {
   try {
-    const keys = await configuredFlowKeys(parent);
-    if (!keys.size) return [];
+    const names = await configuredFlowNames(parent);
+    if (!names.size) return [];
     const response = await fetch(
       `${FARM_VITALS_API_URL}/farm-vitals/form-types`,
       { headers: { Accept: "application/json" } },
     );
     const payload = await readJson(response);
     const types =
-      isObject(payload) && isObject(payload.data) ? payload.data.formTypes : null;
+      isObject(payload) && isObject(payload.data)
+        ? payload.data.formTypes
+        : null;
     if (!Array.isArray(types)) return [];
     const flows = types.flatMap((type): AdditionalFlow[] => {
       if (
         !isObject(type) ||
         typeof type.key !== "string" ||
-        !keys.has(type.key) ||
+        !names.has(type.key) ||
         type.status !== "Active"
       )
         return [];
       const label =
-        type.key === "health-case"
-          ? formTypeTitle(type.key)
-          : text(type.label).trim() || formTypeTitle(type.key);
+        names.get(type.key) ||
+        (type.key === "health-case" ? "Case" : text(type.label).trim()) ||
+        formTypeTitle(type.key);
       return [{ key: type.key, label }];
     });
     // Older catalogs omit the built-in Breed utility.
     if (
-      keys.has("breed") &&
+      names.has("breed") &&
       !types.some((type) => isObject(type) && type.key === "breed")
     )
-      flows.push({ key: "breed", label: formTypeTitle("breed") });
+      flows.push({
+        key: "breed",
+        label: names.get("breed") || formTypeTitle("breed"),
+      });
     return flows;
   } catch {
     return [];

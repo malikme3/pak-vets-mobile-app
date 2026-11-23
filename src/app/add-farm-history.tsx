@@ -51,6 +51,7 @@ export default function AddFarmHistoryScreen() {
     kind?: string;
     entryId?: string;
     species?: string;
+    flowLabel?: string;
   }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const animalEntryId =
@@ -63,7 +64,9 @@ export default function AddFarmHistoryScreen() {
   const routeSpecies = typeof params.species === "string" ? params.species : "";
   const [species, setSpecies] = useState("");
   const [breedCategory, setBreedCategory] = useState("");
-  const title = kind ? formTypeTitle(kind) : "Record";
+  const title =
+    (typeof params.flowLabel === "string" && params.flowLabel.trim()) ||
+    (kind ? formTypeTitle(kind) : "Record");
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
   const [initialValues, setInitialValues] = useState<Record<string, unknown>>(
     {},
@@ -192,7 +195,7 @@ export default function AddFarmHistoryScreen() {
       >
         <FlowPageHeading
           onBack={() => router.back()}
-          title={entryId ? "Edit record" : "Add record"}
+          title={entryId ? `Edit ${title}` : `Add ${title}`}
         />
         {loading ? (
           <View style={styles.status}>

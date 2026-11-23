@@ -563,12 +563,19 @@ export default function FarmDashboardScreen() {
                         if (type.key === "health-case") {
                           router.push({
                             pathname: "/health-case",
-                            params: { farmId: review.farmId },
+                            params: {
+                              farmId: review.farmId,
+                              flowLabel: type.label,
+                            },
                           });
                         } else {
                           router.push({
                             pathname: "/add-farm-animal",
-                            params: { farmId: review.farmId, kind: type.key },
+                            params: {
+                              farmId: review.farmId,
+                              kind: type.key,
+                              flowLabel: type.label,
+                            },
                           });
                         }
                       }}

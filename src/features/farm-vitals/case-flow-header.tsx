@@ -4,6 +4,7 @@ import { FlowPageHeading } from "./flow-page-heading";
 import { farmCard } from "./presentation";
 
 type Props = {
+  title?: string;
   onBack: () => void;
   animalName: string;
   farmName: string;
@@ -15,6 +16,7 @@ type Props = {
 
 export function CaseFlowHeader({
   onBack,
+  title = "Add Case",
   animalName,
   farmName,
   date,
@@ -25,7 +27,7 @@ export function CaseFlowHeader({
   const current = Math.min(step, Math.max(steps.length - 1, 0));
   return (
     <View style={styles.header}>
-      <FlowPageHeading onBack={onBack} title="Add Case" />
+      <FlowPageHeading onBack={onBack} title={title} />
       <View style={styles.card}>
         <View style={styles.identity}>
           <View style={styles.icon}>

@@ -38,7 +38,7 @@ export default function AnimalCaseDashboard() {
   }>();
   const [filter, setFilter] = useState<"all" | "draft" | "saved">("all");
   const [animal, setAnimal] = useState<FarmAnimalReview | null>(null);
-  const [canAddCase, setCanAddCase] = useState(false);
+  const [caseLabel, setCaseLabel] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -49,7 +49,7 @@ export default function AnimalCaseDashboard() {
       setLoading(true);
       setError("");
       setAnimal(null);
-      setCanAddCase(false);
+      setCaseLabel("");
 
       async function load() {
         try {
@@ -66,8 +66,8 @@ export default function AnimalCaseDashboard() {
             throw new Error("This animal is no longer on the farm.");
           if (!cancelled) {
             setAnimal(selected);
-            setCanAddCase(
-              types.some((type) => type.key === "health-case"),
+            setCaseLabel(
+              types.find((type) => type.key === "health-case")?.label ?? "",
             );
           }
         } catch (cause) {
@@ -148,14 +148,14 @@ export default function AnimalCaseDashboard() {
                     </Text>
                   </View>
                 </HeaderBackground>
-                {canAddCase ? (
+                {caseLabel ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Add case"
+                    accessibilityLabel={`Add ${caseLabel}`}
                     onPress={() =>
                       router.push({
                         pathname: "/health-case",
-                        params: { farmId, animalEntryId },
+                        params: { farmId, animalEntryId, flowLabel: caseLabel },
                       })
                     }
                     style={({ pressed }) => [
@@ -164,7 +164,7 @@ export default function AnimalCaseDashboard() {
                     ]}
                   >
                     <Feather name="plus" size={18} color={colors.surface} />
-                    <Text style={styles.actionText}>Add case</Text>
+                    <Text style={styles.actionText}>Add {caseLabel}</Text>
                   </Pressable>
                 ) : null}
                 <View accessibilityRole="tablist" style={styles.filters}>

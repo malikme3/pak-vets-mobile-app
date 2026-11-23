@@ -151,7 +151,9 @@ function HistoryList({
                   {record.name}
                 </Text>
                 {formatFarmDate(record.submittedAt) ? (
-                  <Text style={styles.help}>{formatFarmDate(record.submittedAt)}</Text>
+                  <Text style={styles.help}>
+                    {formatFarmDate(record.submittedAt)}
+                  </Text>
                 ) : null}
               </View>
               <Feather name="chevron-right" size={18} color={colors.green} />
@@ -543,6 +545,7 @@ export default function FarmAnimalScreen() {
                   const params = {
                     farmId,
                     animalEntryId: animal.entryId,
+                    flowLabel: type.label,
                   };
                   if (type.key === "health-case") {
                     router.push({ pathname: "/health-case", params });
