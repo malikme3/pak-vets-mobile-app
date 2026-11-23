@@ -25,7 +25,9 @@ import {
   getFarmReview,
   updateAnimalHistory,
   type ActiveFarmTemplate,
+  type FarmTemplateField,
 } from "../services/farmVitalsApi";
+import { PhotoVersionsPreview } from "../features/farm-vitals/record-photo";
 
 const colors = {
   background: "#F8F8F2",
@@ -44,6 +46,36 @@ function historyKind(value: string | undefined): string | null {
   )
     return value;
   return null;
+}
+
+function imageUrls(
+  fields: FarmTemplateField[],
+  values: Record<string, unknown>,
+): string[] {
+  return fields.flatMap((field) => {
+    const value = values[field.key];
+    if (
+      (field.type === "image" || field.type === "upload") &&
+      typeof value === "string" &&
+      /^https?:\/\//i.test(value)
+    )
+      return [value];
+    if (
+      field.fields?.length &&
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value)
+    )
+      return imageUrls(field.fields, value as Record<string, unknown>);
+    return [];
+  });
+}
+
+function formImageUrls(
+  form: ActiveFarmTemplate["form"],
+  values: Record<string, unknown>,
+): string[] {
+  return form.steps.flatMap((step) => imageUrls(step.fields, values));
 }
 
 export default function AddFarmHistoryScreen() {
@@ -74,6 +106,7 @@ export default function AddFarmHistoryScreen() {
   const [initialValues, setInitialValues] = useState<Record<string, unknown>>(
     {},
   );
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -97,6 +130,7 @@ export default function AddFarmHistoryScreen() {
         const draft = await getAnimalHistoryDraft(farmId, entryId);
         setKind(draft.kind);
         setInitialValues(draft.values);
+        setPhotoUrls(formImageUrls(draft.form, draft.values));
         if (draft.kind === "breed") {
           const selectedSpecies =
             typeof draft.values.animalType === "string"
@@ -200,7 +234,11 @@ export default function AddFarmHistoryScreen() {
       >
         <FlowPageHeading
           onBack={() => router.back()}
-          title={compactHeading ?? (entryId ? `Edit ${title}` : `Add ${title}`)}
+          title={
+            entryId
+              ? `Edit ${compactHeading ?? title}`
+              : compactHeading ?? `Add ${title}`
+          }
         />
         {loading ? (
           <View style={styles.status}>
@@ -220,14 +258,13 @@ export default function AddFarmHistoryScreen() {
           <TemplateEntryForm
             key={entryId || "new"}
             template={entryTemplate}
-            onDraftChange={
-              kind === "breed"
-                ? (values) =>
-                    setBreedCategory(
-                      typeof values.breed === "string" ? values.breed : "",
-                    )
-                : undefined
-            }
+            onDraftChange={(values) => {
+              setPhotoUrls(formImageUrls(entryTemplate.form, values));
+              if (kind === "breed")
+                setBreedCategory(
+                  typeof values.breed === "string" ? values.breed : "",
+                );
+            }}
             compactTitle={compactHeading ? title : undefined}
             submitLabel={entryId ? "Save changes" : "Save"}
             farmId={farmId}
@@ -235,6 +272,12 @@ export default function AddFarmHistoryScreen() {
             initialValues={initialValues}
             onSubmit={submit}
           />
+        ) : null}
+        {photoUrls.length ? (
+          <View style={styles.photos}>
+            <Text style={styles.photoTitle}>Photo versions</Text>
+            <PhotoVersionsPreview urls={photoUrls} />
+          </View>
         ) : null}
         {saved ? (
           <View style={styles.success}>
@@ -263,4 +306,6 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
   success: { gap: 6, ...farmCard, padding: 14 },
+  photos: { gap: 10 },
+  photoTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },
 });

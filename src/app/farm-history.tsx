@@ -16,10 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
-import {
-  recordPhotoUrls,
-  RecordPhoto,
-} from "../features/farm-vitals/record-photo";
+import { RecordPhoto } from "../features/farm-vitals/record-photo";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
   formTypeTitle,
@@ -82,8 +79,6 @@ export default function FarmHistoryScreen() {
 
   const title = history ? formTypeTitle(history.kind) : "Record";
   const added = history ? formatFarmDate(history.submittedAt) : "";
-  const photos = recordPhotoUrls(history?.sections);
-
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
@@ -149,17 +144,8 @@ export default function FarmHistoryScreen() {
                           label={row.label}
                           onOpen={() =>
                             router.push({
-                              pathname: "/farm-photos",
-                              params: {
-                                farmId,
-                                entryId,
-                                index: String(
-                                  Math.max(
-                                    photos.indexOf(row.imageUrl ?? ""),
-                                    0,
-                                  ) * 2,
-                                ),
-                              },
+                              pathname: "/add-farm-history",
+                              params: { farmId, entryId, kind: history.kind },
                             })
                           }
                         />

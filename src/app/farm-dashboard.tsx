@@ -133,6 +133,7 @@ export default function FarmDashboardScreen() {
     ? params.farmId[0]
     : params.farmId;
   const [review, setReview] = useState<FarmReview | null>(null);
+  const [photoRefreshToken, setPhotoRefreshToken] = useState(0);
   const [flows, setFlows] = useState<AdditionalFlow[]>([]);
   const [opening, setOpening] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -160,6 +161,7 @@ export default function FarmDashboardScreen() {
         listAdditionalFlows("farm"),
       ]);
       setReview(next);
+      setPhotoRefreshToken((current) => current + 1);
       const [farmPhotoUrl, ownerPhotoUrl] = await Promise.all([
         next.farmPhotoUrl
           ? readableFarmImage(next.farmPhotoUrl).catch(() => "")
@@ -657,34 +659,34 @@ export default function FarmDashboardScreen() {
                         <Pressable
                           key={record.entryId}
                           accessibilityRole="button"
-                          accessibilityLabel={`Open ${record.name}`}
+                          accessibilityLabel={
+                            photo
+                              ? `Edit ${record.name} and view photo versions`
+                              : `Open ${record.name}`
+                          }
                           onPress={() =>
                             router.push({
-                              pathname:
-                                type.key === "health-case"
+                              pathname: photo
+                                ? "/add-farm-history"
+                                : type.key === "health-case"
                                   ? "/health-case-detail"
                                   : "/farm-history",
                               params: {
                                 farmId: review.farmId,
                                 entryId: record.entryId,
+                                ...(photo ? { kind: type.key } : {}),
                               },
                             })
                           }
-                          style={styles.row}
+                          style={
+                            photo ? [styles.row, styles.photoRow] : styles.row
+                          }
                         >
                           <RecordPhoto
-                            key={photo ?? record.entryId}
+                            key={`${photo ?? record.entryId}-${photoRefreshToken}`}
                             url={photo}
                             label={record.name}
-                            onOpen={() =>
-                              router.push({
-                                pathname: "/farm-photos",
-                                params: {
-                                  farmId: review.farmId,
-                                  entryId: record.entryId,
-                                },
-                              })
-                            }
+                            tileBackground={Boolean(photo)}
                             fallbackText={record.name.slice(0, 1).toUpperCase()}
                           />
                           <View style={styles.copy}>
@@ -974,6 +976,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     ...farmCard,
   },
+  photoRow: { position: "relative", overflow: "hidden" },
   rowTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   avatar: {
     width: 36,

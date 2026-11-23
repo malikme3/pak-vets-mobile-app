@@ -118,7 +118,7 @@ function HistoryList({
   onAdd: () => void;
   onBrowse?: () => void;
   onOpen: (entryId: string) => void;
-  onOpenPhoto: (entryId: string) => void;
+  onOpenPhoto: (record: FarmHistoryReview) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -150,8 +150,14 @@ function HistoryList({
               <Pressable
                 key={record.entryId}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${record.name}`}
-                onPress={() => onOpen(record.entryId)}
+                accessibilityLabel={
+                  photo
+                    ? `Edit ${record.name} and view photo versions`
+                    : `Open ${record.name}`
+                }
+                onPress={() =>
+                  photo ? onOpenPhoto(record) : onOpen(record.entryId)
+                }
                 style={styles.historyRow}
               >
                 {photo && (
@@ -159,7 +165,6 @@ function HistoryList({
                     key={photo}
                     url={photo}
                     label={record.name}
-                    onOpen={() => onOpenPhoto(record.entryId)}
                     fallbackText={record.name.slice(0, 1).toUpperCase()}
                   />
                 )}
@@ -588,10 +593,14 @@ export default function FarmAnimalScreen() {
                         })
                     : undefined
                 }
-                onOpenPhoto={(historyId) =>
+                onOpenPhoto={(history) =>
                   router.push({
-                    pathname: "/farm-photos",
-                    params: { farmId, entryId: historyId },
+                    pathname: "/add-farm-history",
+                    params: {
+                      farmId,
+                      entryId: history.entryId,
+                      kind: history.kind,
+                    },
                   })
                 }
                 onOpen={(historyId) =>

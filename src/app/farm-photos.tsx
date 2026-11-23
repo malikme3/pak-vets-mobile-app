@@ -15,51 +15,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { getFarmReview } from "../services/farmVitalsApi";
 import {
-  aiFarmImageUrl,
-  getFarmReview,
-  readableFarmImage,
-} from "../services/farmVitalsApi";
+  loadPhotoVersions,
+  photoSides,
+  recordPhotoUrls,
+  type PhotoSide,
+  type PhotoVersions,
+} from "../features/farm-vitals/record-photo";
 
-import { recordPhotoUrls } from "../features/farm-vitals/record-photo";
-
-const photoSides = ["Original", "AI", "Thumbnail"] as const;
-type PhotoSide = (typeof photoSides)[number];
-type PhotoVersions = { Original: string } & Partial<Record<PhotoSide, string>>;
-
-async function availableImage(uri: string): Promise<string | undefined> {
-  if (!uri) return;
-  try {
-    await Image.getSize(uri);
-    return uri;
-  } catch {
-    return undefined;
-  }
-}
-
-async function loadPhotoVersions(url: string): Promise<PhotoVersions> {
-  const enhancedUrl = aiFarmImageUrl(url);
-  const [original, enhanced, thumbnail] = await Promise.all([
-    readableFarmImage(url).catch(() => url),
-    enhancedUrl ? readableFarmImage(enhancedUrl).catch(() => "") : "",
-    readableFarmImage(url, "thumbnail").catch(() => ""),
-  ]);
-  // Older uploads and servers can return the original for a thumbnail request.
-  const distinctThumbnail =
-    thumbnail && new URL(thumbnail).pathname !== new URL(original).pathname
-      ? thumbnail
-      : "";
-  const [ai, thumb] = await Promise.all([
-    availableImage(enhanced),
-    availableImage(distinctThumbnail),
-  ]);
-  return { Original: original, AI: ai, Thumbnail: thumb };
-}
-
-const colors = {
-  ink: "#173D32",
-  mint: "#E7F5EE",
-};
+const colors = { ink: "#173D32", mint: "#E7F5EE" };
 
 export default function FarmPhotosScreen() {
   const router = useRouter();
@@ -104,8 +69,7 @@ export default function FarmPhotosScreen() {
         throw new Error("This record is no longer available.");
       const urls = animal?.photos ?? recordPhotoUrls(record?.sections);
       if (!urls.length) throw new Error("This record has no photos to show.");
-      const signed: PhotoVersions[] = [];
-      for (const url of urls) signed.push(await loadPhotoVersions(url));
+      const signed = await Promise.all(urls.map(loadPhotoVersions));
       setName(animal?.name ?? record?.name ?? "Photos");
       setPairs(signed);
       setMissing({});
