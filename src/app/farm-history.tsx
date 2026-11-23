@@ -1,4 +1,8 @@
-import { farmCard, farmButton } from "../features/farm-vitals/presentation";
+import {
+  farmCard,
+  farmButton,
+  formatFarmDate,
+} from "../features/farm-vitals/presentation";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,6 +16,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import {
+  recordPhotoUrls,
+  RecordPhoto,
+} from "../features/farm-vitals/record-photo";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
   formTypeTitle,
@@ -29,24 +37,12 @@ const colors = {
   danger: "#B42318",
 };
 
-function when(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export default function FarmHistoryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ farmId?: string; entryId?: string }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
   const [history, setHistory] = useState<FarmHistoryReview | null>(null);
-  const [animalName, setAnimalName] = useState("Animal");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,17 +57,12 @@ export default function FarmHistoryScreen() {
     try {
       const review = await getFarmReview(farmId);
       const match =
-        review.animals.flatMap((animal) =>
-          animal.records
-            .filter((item) => item.entryId === entryId)
-            .map((item) => ({ item, ownerName: animal.name })),
-        )[0] ??
-        review.records
-          .filter((item) => item.entryId === entryId)
-          .map((item) => ({ item, ownerName: review.name }))[0];
+        review.records.find((record) => record.entryId === entryId) ??
+        review.animals
+          .flatMap((animal) => animal.records)
+          .find((record) => record.entryId === entryId);
       if (!match) throw new Error("This record is no longer available.");
-      setAnimalName(match.ownerName);
-      setHistory(match.item);
+      setHistory(match);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -90,7 +81,8 @@ export default function FarmHistoryScreen() {
   );
 
   const title = history ? formTypeTitle(history.kind) : "Record";
-  const added = history ? when(history.submittedAt) : "";
+  const added = history ? formatFarmDate(history.submittedAt) : "";
+  const photos = recordPhotoUrls(history?.sections);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -116,7 +108,9 @@ export default function FarmHistoryScreen() {
             <View style={styles.recordIdentity}>
               <Text style={styles.name}>{history.name}</Text>
               <Text style={styles.help}>
-                {[title, added].filter(Boolean).join(" · ")}
+                {[history.name === title ? "" : title, added]
+                  .filter(Boolean)
+                  .join(" · ")}
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -139,10 +133,43 @@ export default function FarmHistoryScreen() {
                 {section.rows.map((row, index) => (
                   <View
                     key={`${row.label}-${index}`}
-                    style={[styles.fact, index > 0 && styles.factDivider]}
+                    style={[
+                      row.imageUrl ? styles.photoRow : styles.fact,
+                      index > 0 && styles.factDivider,
+                    ]}
                   >
-                    <Text style={styles.factLabel}>{row.label}</Text>
-                    <Text style={styles.factValue}>{row.value}</Text>
+                    {row.imageUrl ? (
+                      <>
+                        {row.label !== section.title && (
+                          <Text style={styles.photoLabel}>{row.label}</Text>
+                        )}
+                        <RecordPhoto
+                          key={row.imageUrl}
+                          url={row.imageUrl}
+                          label={row.label}
+                          onOpen={() =>
+                            router.push({
+                              pathname: "/farm-photos",
+                              params: {
+                                farmId,
+                                entryId,
+                                index: String(
+                                  Math.max(
+                                    photos.indexOf(row.imageUrl ?? ""),
+                                    0,
+                                  ) * 2,
+                                ),
+                              },
+                            })
+                          }
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.factLabel}>{row.label}</Text>
+                        <Text style={styles.factValue}>{row.value}</Text>
+                      </>
+                    )}
                   </View>
                 ))}
               </View>
@@ -157,14 +184,6 @@ export default function FarmHistoryScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: 20, paddingBottom: 36, gap: 16 },
-  back: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "flex-start",
-    minHeight: 36,
-  },
-  backText: { color: colors.green, fontSize: 15, fontWeight: "700" },
   status: { gap: 8 },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
@@ -207,6 +226,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  photoRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 14 },
+  photoLabel: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   factDivider: { borderTopWidth: 1, borderTopColor: colors.border },
   factLabel: { flex: 1, color: colors.muted, fontSize: 13, fontWeight: "600" },
   factValue: {

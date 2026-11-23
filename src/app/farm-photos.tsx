@@ -16,21 +16,48 @@ import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import {
-  farmPhotoPairs,
+  aiFarmImageUrl,
   getFarmReview,
   readableFarmImage,
 } from "../services/farmVitalsApi";
 
-type PhotoPair = {
-  original: string;
-  enhanced: string;
-};
+import { recordPhotoUrls } from "../features/farm-vitals/record-photo";
 
-type PhotoSide = "Original" | "AI";
+const photoSides = ["Original", "AI", "Thumbnail"] as const;
+type PhotoSide = (typeof photoSides)[number];
+type PhotoVersions = { Original: string } & Partial<Record<PhotoSide, string>>;
+
+async function availableImage(uri: string): Promise<string | undefined> {
+  if (!uri) return;
+  try {
+    await Image.getSize(uri);
+    return uri;
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadPhotoVersions(url: string): Promise<PhotoVersions> {
+  const enhancedUrl = aiFarmImageUrl(url);
+  const [original, enhanced, thumbnail] = await Promise.all([
+    readableFarmImage(url).catch(() => url),
+    enhancedUrl ? readableFarmImage(enhancedUrl).catch(() => "") : "",
+    readableFarmImage(url, "thumbnail").catch(() => ""),
+  ]);
+  // Older uploads and servers can return the original for a thumbnail request.
+  const distinctThumbnail =
+    thumbnail && new URL(thumbnail).pathname !== new URL(original).pathname
+      ? thumbnail
+      : "";
+  const [ai, thumb] = await Promise.all([
+    availableImage(enhanced),
+    availableImage(distinctThumbnail),
+  ]);
+  return { Original: original, AI: ai, Thumbnail: thumb };
+}
 
 const colors = {
   ink: "#173D32",
-  muted: "#63766C",
   mint: "#E7F5EE",
 };
 
@@ -48,19 +75,19 @@ export default function FarmPhotosScreen() {
   const startPair = Number.isFinite(requested) ? Math.floor(requested / 2) : 0;
   const startSide: PhotoSide =
     Number.isFinite(requested) && requested % 2 === 1 ? "AI" : "Original";
-  const [pairs, setPairs] = useState<PhotoPair[]>([]);
-  const [missingAi, setMissingAi] = useState<Record<string, boolean>>({});
+  const [pairs, setPairs] = useState<PhotoVersions[]>([]);
+  const [missing, setMissing] = useState<Record<string, boolean>>({});
   const [name, setName] = useState("Animal");
   const [index, setIndex] = useState(startPair);
   const [side, setSide] = useState<PhotoSide>(startSide);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const listRef = useRef<FlatList<PhotoPair>>(null);
+  const listRef = useRef<FlatList<PhotoVersions>>(null);
 
   const load = useCallback(async () => {
     if (!farmId || !entryId) {
       setLoading(false);
-      setError("Open photos from the animal.");
+      setError("Open photos from the farm or animal record.");
       return;
     }
     setLoading(true);
@@ -68,28 +95,27 @@ export default function FarmPhotosScreen() {
     try {
       const review = await getFarmReview(farmId);
       const animal = review.animals.find((item) => item.entryId === entryId);
-      if (!animal) throw new Error("This animal is no longer on the farm.");
-      const signed: PhotoPair[] = [];
-      for (const pair of farmPhotoPairs(animal.photos)) {
-        const [original, enhanced] = await Promise.all([
-          readableFarmImage(pair.original).catch(() => ""),
-          readableFarmImage(pair.enhanced).catch(() => ""),
-        ]);
-        if (!original.startsWith("http")) continue;
-        signed.push({
-          original,
-          enhanced: enhanced.startsWith("http") ? enhanced : "",
-        });
-      }
-      if (!signed.length) throw new Error("This animal has no photos to show.");
-      setName(animal.name);
+      const record =
+        review.records.find((item) => item.entryId === entryId) ??
+        review.animals
+          .flatMap((item) => item.records)
+          .find((item) => item.entryId === entryId);
+      if (!animal && !record)
+        throw new Error("This record is no longer available.");
+      const urls = animal?.photos ?? recordPhotoUrls(record?.sections);
+      if (!urls.length) throw new Error("This record has no photos to show.");
+      const signed: PhotoVersions[] = [];
+      for (const url of urls) signed.push(await loadPhotoVersions(url));
+      setName(animal?.name ?? record?.name ?? "Photos");
       setPairs(signed);
-      setMissingAi({});
+      setMissing({});
       setIndex(Math.min(Math.max(startPair, 0), signed.length - 1));
       setSide(startSide);
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "These photos could not be opened.",
+        cause instanceof Error
+          ? cause.message
+          : "These photos could not be opened.",
       );
     } finally {
       setLoading(false);
@@ -114,6 +140,12 @@ export default function FarmPhotosScreen() {
   }
 
   const current = pairs[index];
+  function versionUrl(photo: PhotoVersions, version: PhotoSide) {
+    const url = photo[version];
+    return url && !missing[url] ? url : undefined;
+  }
+  const selectedVersion =
+    current && versionUrl(current, side) ? side : "Original";
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -162,8 +194,8 @@ export default function FarmPhotosScreen() {
               offset: width * itemIndex,
               index: itemIndex,
             })}
-            keyExtractor={(pair) => pair.original}
-            extraData={`${side}:${Object.keys(missingAi).length}`}
+            keyExtractor={(pair) => pair.Original}
+            extraData={`${side}:${Object.keys(missing).length}`}
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={onScrollEnd}
             onScrollToIndexFailed={({ index: failed }) => {
@@ -173,28 +205,29 @@ export default function FarmPhotosScreen() {
               });
             }}
             renderItem={({ item }) => {
-              const url = side === "AI" ? item.enhanced : item.original;
-              const unavailable = side === "AI" && (!url || missingAi[url]);
+              const version = versionUrl(item, selectedVersion)
+                ? selectedVersion
+                : "Original";
+              const url = versionUrl(item, version);
               return (
                 <View style={[styles.slide, { width }]}>
-                  {url && !unavailable ? (
+                  {url ? (
                     <Image
                       source={{ uri: url }}
                       style={styles.hero}
                       resizeMode="contain"
-                      accessibilityLabel={`${name} ${side} photo`}
-                      onError={() => {
-                        if (side !== "AI" || !url) return;
-                        setMissingAi((currentMissing) => ({
+                      accessibilityLabel={`${name} ${version} photo`}
+                      onError={() =>
+                        setMissing((currentMissing) => ({
                           ...currentMissing,
                           [url]: true,
-                        }));
-                      }}
+                        }))
+                      }
                     />
                   ) : (
                     <View style={styles.pending}>
                       <Feather name="image" size={22} color="#D7E4DC" />
-                      <Text style={styles.help}>No AI photo for this upload.</Text>
+                      <Text style={styles.help}>Photo unavailable.</Text>
                     </View>
                   )}
                 </View>
@@ -203,27 +236,25 @@ export default function FarmPhotosScreen() {
             style={styles.gallery}
           />
           <View style={styles.versions}>
-            <VersionChoice
-              label="Original"
-              url={current.original}
-              selected={side === "Original"}
-              onPress={() => setSide("Original")}
-            />
-            <VersionChoice
-              label="AI"
-              url={
-                current.enhanced && !missingAi[current.enhanced]
-                  ? current.enhanced
-                  : ""
-              }
-              selected={side === "AI"}
-              onPress={() => setSide("AI")}
-            />
+            {photoSides.flatMap((version) => {
+              const url = versionUrl(current, version);
+              return url
+                ? [
+                    <VersionChoice
+                      key={version}
+                      label={version}
+                      url={url}
+                      selected={selectedVersion === version}
+                      onPress={() => setSide(version)}
+                    />,
+                  ]
+                : [];
+            })}
           </View>
           <FlatList
             data={pairs}
             horizontal
-            keyExtractor={(pair) => `thumb-${pair.original}`}
+            keyExtractor={(pair) => `thumb-${pair.Original}`}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.thumbs}
             renderItem={({ item, index: photoIndex }) => (
@@ -233,8 +264,13 @@ export default function FarmPhotosScreen() {
                 onPress={() => show(photoIndex)}
               >
                 <Image
-                  source={{ uri: item.original }}
-                  style={[styles.thumb, photoIndex === index && styles.thumbActive]}
+                  source={{
+                    uri: versionUrl(item, "Thumbnail") ?? item.Original,
+                  }}
+                  style={[
+                    styles.thumb,
+                    photoIndex === index && styles.thumbActive,
+                  ]}
                 />
               </Pressable>
             )}
@@ -263,13 +299,7 @@ function VersionChoice({
       onPress={onPress}
       style={[styles.version, selected && styles.versionOn]}
     >
-      {url ? (
-        <Image source={{ uri: url }} style={styles.versionImage} />
-      ) : (
-        <View style={[styles.versionImage, styles.versionEmpty]}>
-          <Feather name="image" size={16} color={colors.muted} />
-        </View>
-      )}
+      <Image source={{ uri: url }} style={styles.versionImage} />
       <Text style={[styles.versionLabel, selected && styles.versionLabelOn]}>
         {label}
       </Text>
@@ -303,7 +333,13 @@ const styles = StyleSheet.create({
   gallery: { flex: 1 },
   slide: { flex: 1, justifyContent: "center" },
   hero: { flex: 1, width: "100%" },
-  pending: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: 24 },
+  pending: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: 24,
+  },
   versions: {
     flexDirection: "row",
     gap: 8,
@@ -312,9 +348,8 @@ const styles = StyleSheet.create({
   },
   version: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
     minHeight: 56,
     padding: 6,
     borderRadius: 14,
@@ -322,14 +357,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.16)",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  versionOn: { borderColor: "#8DDCB4", backgroundColor: "rgba(141,220,180,0.16)" },
+  versionOn: {
+    borderColor: "#8DDCB4",
+    backgroundColor: "rgba(141,220,180,0.16)",
+  },
   versionImage: {
     width: 44,
     height: 44,
     borderRadius: 10,
     backgroundColor: colors.mint,
   },
-  versionEmpty: { alignItems: "center", justifyContent: "center" },
   versionLabel: { color: "#D7E4DC", fontSize: 13, fontWeight: "700" },
   versionLabelOn: { color: "#FFFFFF" },
   thumbs: { gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },

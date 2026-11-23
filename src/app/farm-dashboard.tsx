@@ -2,6 +2,10 @@ import {
   CollapseSection,
   EditSectionButton,
 } from "../features/farm-vitals/collapse-section";
+import {
+  recordPhotoUrls,
+  RecordPhoto,
+} from "../features/farm-vitals/record-photo";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
   AdditionalFlowButton,
@@ -66,10 +70,14 @@ function ownerLine(review: FarmReview): string {
       const row = util.rows.find(
         (item) => /name/i.test(item.label) && item.value !== "Not provided",
       );
-      if (row && /owner|contact/i.test(util.label)) return row.value;
+      if (
+        row &&
+        (util.field?.source === "contact" || /owner|contact/i.test(util.label))
+      )
+        return row.value;
     }
   }
-  return "";
+  return review.ownerName ?? "";
 }
 
 function ownerPhone(review: FarmReview): string {
@@ -79,10 +87,14 @@ function ownerPhone(review: FarmReview): string {
         (item) =>
           /phone|mobile/i.test(item.label) && item.value !== "Not provided",
       );
-      if (row && /owner|contact/i.test(util.label)) return row.value;
+      if (
+        row &&
+        (util.field?.source === "contact" || /owner|contact/i.test(util.label))
+      )
+        return row.value;
     }
   }
-  return "";
+  return review.ownerPhone ?? "";
 }
 
 function displayPhone(value: string): string {
@@ -538,6 +550,7 @@ export default function FarmDashboardScreen() {
                         entryId: record.entryId,
                         name: record.complaint || record.animalName || "Case",
                         submittedAt: record.openedAt,
+                        sections: [],
                       })),
                     )
                   : review.records.filter((record) => record.kind === type.key);
@@ -638,47 +651,60 @@ export default function FarmDashboardScreen() {
                       </Text>
                     )
                   ) : entries.length ? (
-                    entries.map((record) => (
-                      <Pressable
-                        key={record.entryId}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open ${record.name}`}
-                        onPress={() =>
-                          router.push({
-                            pathname:
-                              type.key === "health-case"
-                                ? "/health-case-detail"
-                                : "/farm-history",
-                            params: {
-                              farmId: review.farmId,
-                              entryId: record.entryId,
-                            },
-                          })
-                        }
-                        style={styles.row}
-                      >
-                        <View style={styles.avatar}>
-                          <Text style={styles.initial}>
-                            {record.name.slice(0, 1).toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={styles.copy}>
-                          <Text numberOfLines={1} style={styles.rowTitle}>
-                            {record.name}
-                          </Text>
-                          {formatFarmDate(record.submittedAt) ? (
-                            <Text style={styles.help}>
-                              {formatFarmDate(record.submittedAt)}
+                    entries.map((record) => {
+                      const photo = recordPhotoUrls(record.sections)[0];
+                      return (
+                        <Pressable
+                          key={record.entryId}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open ${record.name}`}
+                          onPress={() =>
+                            router.push({
+                              pathname:
+                                type.key === "health-case"
+                                  ? "/health-case-detail"
+                                  : "/farm-history",
+                              params: {
+                                farmId: review.farmId,
+                                entryId: record.entryId,
+                              },
+                            })
+                          }
+                          style={styles.row}
+                        >
+                          <RecordPhoto
+                            key={photo ?? record.entryId}
+                            url={photo}
+                            label={record.name}
+                            onOpen={() =>
+                              router.push({
+                                pathname: "/farm-photos",
+                                params: {
+                                  farmId: review.farmId,
+                                  entryId: record.entryId,
+                                },
+                              })
+                            }
+                            fallbackText={record.name.slice(0, 1).toUpperCase()}
+                          />
+                          <View style={styles.copy}>
+                            <Text numberOfLines={1} style={styles.rowTitle}>
+                              {record.name}
                             </Text>
-                          ) : null}
-                        </View>
-                        <Feather
-                          name="chevron-right"
-                          size={16}
-                          color={colors.green}
-                        />
-                      </Pressable>
-                    ))
+                            {formatFarmDate(record.submittedAt) ? (
+                              <Text style={styles.help}>
+                                {formatFarmDate(record.submittedAt)}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Feather
+                            name="chevron-right"
+                            size={16}
+                            color={colors.green}
+                          />
+                        </Pressable>
+                      );
+                    })
                   ) : (
                     <Text style={styles.help}>None yet.</Text>
                   )}

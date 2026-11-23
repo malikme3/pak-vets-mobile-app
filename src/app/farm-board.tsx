@@ -42,7 +42,7 @@ const colors = {
 };
 
 function isOwnerGroup(row: FarmDashboardEntry["rows"][number]): boolean {
-  return /owner|contact/i.test(row.groupKey ?? "");
+  return row.source === "contact" || /owner|contact/i.test(row.groupKey ?? "");
 }
 
 function ownerLine(farm: FarmDashboardEntry): FarmDashboardEntry["rows"] {
@@ -534,7 +534,9 @@ export default function FarmBoardScreen() {
         ) : null}
         {shown.map((farm) => {
           const place = landing(farm);
-          const owner = place.highlights.find((row) => /name/i.test(row.label));
+          const owner = place.highlights.find((row) =>
+            /name/i.test(row.key ?? row.label),
+          );
           const phone = place.highlights.find((row) =>
             /phone|mobile/i.test(`${row.key ?? ""} ${row.label}`),
           );

@@ -12,7 +12,10 @@ import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { breedEntryTemplate } from "../features/farm-vitals/breed-entry";
-import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
+import {
+  singleEntryHeading,
+  TemplateEntryForm,
+} from "../features/farm-vitals/template-entry";
 import {
   addAnimalRecord,
   formTypeTitle,
@@ -92,6 +95,9 @@ export default function AddFarmAnimalScreen() {
         )
       : template;
 
+  const compactHeading =
+    kind === "animal" ? undefined : singleEntryHeading(entryTemplate, label);
+
   async function submit(values: Record<string, unknown>) {
     if (!entryTemplate || saving) return;
     setSaving(true);
@@ -99,7 +105,10 @@ export default function AddFarmAnimalScreen() {
     try {
       const entryId = await addAnimalRecord(farmId, entryTemplate, values);
       if (entryTemplate.type === "animal") {
-        router.replace({ pathname: "/farm-animal", params: { farmId, entryId } });
+        router.replace({
+          pathname: "/farm-animal",
+          params: { farmId, entryId },
+        });
       } else {
         router.back();
       }
@@ -121,7 +130,10 @@ export default function AddFarmAnimalScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <FlowPageHeading onBack={() => router.back()} title={`Add ${label}`} />
+        <FlowPageHeading
+          onBack={() => router.back()}
+          title={compactHeading ?? `Add ${label}`}
+        />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -141,7 +153,8 @@ export default function AddFarmAnimalScreen() {
             template={entryTemplate}
             onDraftChange={kind === "breed" ? setBreedAnswers : undefined}
             showDescription={false}
-            submitLabel={`Add ${label}`}
+            compactTitle={compactHeading ? label : undefined}
+            submitLabel={kind === "animal" ? `Add ${label}` : "Save"}
             saving={saving}
             farmId={farmId}
             onSubmit={submit}

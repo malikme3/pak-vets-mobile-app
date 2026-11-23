@@ -1,5 +1,9 @@
 import { CollapseSection } from "../features/farm-vitals/collapse-section";
 import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
+import {
+  recordPhotoUrls,
+  RecordPhoto,
+} from "../features/farm-vitals/record-photo";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { HeaderBackground } from "../features/farm-vitals/header-background";
 import {
@@ -27,7 +31,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   addAnimalPhotos,
-  animalPhotoPromptKey,
+  animalPhotoUploadOptions,
   farmPhotoPairs,
   getFarmReview,
   listAdditionalFlows,
@@ -107,12 +111,14 @@ function HistoryList({
   onAdd,
   onBrowse,
   onOpen,
+  onOpenPhoto,
 }: {
   title: string;
   records: FarmHistoryReview[];
   onAdd: () => void;
   onBrowse?: () => void;
   onOpen: (entryId: string) => void;
+  onOpenPhoto: (entryId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -138,27 +144,39 @@ function HistoryList({
       </View>
       {open ? (
         records.length ? (
-          records.map((record) => (
-            <Pressable
-              key={record.entryId}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${record.name}`}
-              onPress={() => onOpen(record.entryId)}
-              style={styles.historyRow}
-            >
-              <View style={styles.historyCopy}>
-                <Text numberOfLines={1} style={styles.historyName}>
-                  {record.name}
-                </Text>
-                {formatFarmDate(record.submittedAt) ? (
-                  <Text style={styles.help}>
-                    {formatFarmDate(record.submittedAt)}
+          records.map((record) => {
+            const photo = recordPhotoUrls(record.sections)[0];
+            return (
+              <Pressable
+                key={record.entryId}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${record.name}`}
+                onPress={() => onOpen(record.entryId)}
+                style={styles.historyRow}
+              >
+                {photo && (
+                  <RecordPhoto
+                    key={photo}
+                    url={photo}
+                    label={record.name}
+                    onOpen={() => onOpenPhoto(record.entryId)}
+                    fallbackText={record.name.slice(0, 1).toUpperCase()}
+                  />
+                )}
+                <View style={styles.historyCopy}>
+                  <Text numberOfLines={1} style={styles.historyName}>
+                    {record.name}
                   </Text>
-                ) : null}
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.green} />
-            </Pressable>
-          ))
+                  {formatFarmDate(record.submittedAt) ? (
+                    <Text style={styles.help}>
+                      {formatFarmDate(record.submittedAt)}
+                    </Text>
+                  ) : null}
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.green} />
+              </Pressable>
+            );
+          })
         ) : (
           <Text style={styles.empty}>None yet.</Text>
         )
@@ -290,7 +308,7 @@ export default function FarmAnimalScreen() {
       });
       if (result.canceled || !result.assets.length) return;
       setAddingPhotos(true);
-      const promptKey = await animalPhotoPromptKey();
+      const { promptKey, generateThumbnail } = await animalPhotoUploadOptions();
       const urls: string[] = [];
       for (const asset of result.assets) {
         if (!asset.uri) continue;
@@ -301,6 +319,7 @@ export default function FarmAnimalScreen() {
             farmId,
             animal.species || "unknown",
             promptKey,
+            generateThumbnail,
           ),
         );
       }
@@ -568,6 +587,12 @@ export default function FarmAnimalScreen() {
                           params: { farmId, animalEntryId: animal.entryId },
                         })
                     : undefined
+                }
+                onOpenPhoto={(historyId) =>
+                  router.push({
+                    pathname: "/farm-photos",
+                    params: { farmId, entryId: historyId },
+                  })
                 }
                 onOpen={(historyId) =>
                   router.push({

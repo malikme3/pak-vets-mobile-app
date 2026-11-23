@@ -66,6 +66,21 @@ function entryFields(fields: FarmTemplateField[]): FarmTemplateField[] {
     );
 }
 
+export function singleEntryHeading(
+  template: ActiveFarmTemplate | null,
+  title: string,
+) {
+  const fields = template?.form.steps.flatMap((step) =>
+    entryFields(step.fields),
+  );
+  if (fields?.length !== 1) return;
+  const [field] = fields;
+  if (isGroup(field) || field.optionSource) return;
+  const sameLabel =
+    field.label.trim().toLowerCase() === title.trim().toLowerCase();
+  return sameLabel && field.rules.required ? `${title} *` : title;
+}
+
 function isUtilGroup(field: FarmTemplateField): boolean {
   return Boolean(field.source) && isGroup(field);
 }
@@ -487,6 +502,7 @@ function FieldControl({
   species,
   embedded = false,
   outlinedLabels = true,
+  hideLabel = false,
   onChange,
 }: {
   field: FarmTemplateField;
@@ -499,6 +515,7 @@ function FieldControl({
   species: string;
   embedded?: boolean;
   outlinedLabels?: boolean;
+  hideLabel?: boolean;
   onChange: (value: Answer) => void;
 }) {
   const [choiceSearch, setChoiceSearch] = useState("");
@@ -579,9 +596,10 @@ function FieldControl({
     return (
       <View style={styles.field}>
         <View style={styles.switchRow}>
-          <Text style={styles.label}>{label}</Text>
+          {!hideLabel && <Text style={styles.label}>{label}</Text>}
           {field.type === "switch" ? (
             <Switch
+              accessibilityLabel={label}
               value={checked}
               onValueChange={onChange}
               trackColor={{ true: colors.green, false: colors.border }}
@@ -589,6 +607,7 @@ function FieldControl({
           ) : (
             <Pressable
               accessibilityRole="checkbox"
+              accessibilityLabel={label}
               accessibilityState={{ checked }}
               onPress={() => onChange(!checked)}
             >
@@ -614,7 +633,7 @@ function FieldControl({
     );
     return (
       <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
+        {!hideLabel && <Text style={styles.label}>{label}</Text>}
         {options.length ? (
           <>
             <TextInput
@@ -653,7 +672,7 @@ function FieldControl({
   ) {
     return (
       <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
+        {!hideLabel && <Text style={styles.label}>{label}</Text>}
         <ChoiceTabs
           radio={field.type === "radio"}
           value={text}
@@ -680,13 +699,20 @@ function FieldControl({
         ? new Date(`${field.rules.max}T00:00:00`)
         : undefined;
     return (
-      <View style={[styles.field, outlinedLabels && styles.outlinedField]}>
-        <Text
-          numberOfLines={outlinedLabels ? 1 : undefined}
-          style={[styles.label, outlinedLabels && styles.outlinedLabel]}
-        >
-          {label}
-        </Text>
+      <View
+        style={[
+          styles.field,
+          !hideLabel && outlinedLabels && styles.outlinedField,
+        ]}
+      >
+        {!hideLabel && (
+          <Text
+            numberOfLines={outlinedLabels ? 1 : undefined}
+            style={[styles.label, outlinedLabels && styles.outlinedLabel]}
+          >
+            {label}
+          </Text>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={label}
@@ -730,6 +756,13 @@ function FieldControl({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: 0.8,
+        ...(field.promptKey || field.generateThumbnail
+          ? {
+              preferredAssetRepresentationMode:
+                ImagePicker.UIImagePickerPreferredAssetRepresentationMode
+                  .Compatible,
+            }
+          : {}),
       });
       if (result.canceled || !result.assets[0]?.uri) return;
       if (!farmId) {
@@ -744,6 +777,7 @@ function FieldControl({
           farmId,
           species || "unknown",
           field.promptKey ?? "",
+          field.generateThumbnail,
         ),
       );
     } catch (cause) {
@@ -764,22 +798,25 @@ function FieldControl({
     <View
       style={[
         styles.field,
-        outlinedLabels && !fileField && styles.outlinedField,
+        !hideLabel && outlinedLabels && !fileField && styles.outlinedField,
       ]}
     >
-      <Text
-        numberOfLines={outlinedLabels && !fileField ? 1 : undefined}
-        style={[
-          styles.label,
-          outlinedLabels && !fileField && styles.outlinedLabel,
-          outlinedLabels && focused && styles.outlinedLabelFocused,
-        ]}
-      >
-        {label}
-      </Text>
+      {!hideLabel && (
+        <Text
+          numberOfLines={outlinedLabels && !fileField ? 1 : undefined}
+          style={[
+            styles.label,
+            outlinedLabels && !fileField && styles.outlinedLabel,
+            outlinedLabels && focused && styles.outlinedLabelFocused,
+          ]}
+        >
+          {label}
+        </Text>
+      )}
       {fileField ? (
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={label}
           disabled={uploading}
           onPress={() => void pickImage()}
           style={styles.fileButton}
@@ -1075,6 +1112,7 @@ export function TemplateEntryForm({
   inlineGroups = false,
   outlinedLabels = true,
   showDescription = true,
+  compactTitle,
   farmId = "",
   onSubmit,
   renderField,
@@ -1087,6 +1125,7 @@ export function TemplateEntryForm({
   inlineGroups?: boolean;
   outlinedLabels?: boolean;
   showDescription?: boolean;
+  compactTitle?: string;
   farmId?: string;
   onDraftChange?: (answers: Record<string, unknown>) => void;
   renderField?: (field: FarmTemplateField) => ReactNode;
@@ -1219,7 +1258,7 @@ export function TemplateEntryForm({
 
   return (
     <View style={styles.form}>
-      {showDescription && template.form.description ? (
+      {!compactTitle && showDescription && template.form.description ? (
         <Text style={styles.help}>{template.form.description}</Text>
       ) : null}
       {steps.length > 1 ? (
@@ -1234,7 +1273,7 @@ export function TemplateEntryForm({
       ) : null}
       {activeStep ? (
         <View style={styles.step}>
-          {steps.length === 1 && activeStep.title ? (
+          {!compactTitle && steps.length === 1 && activeStep.title ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
           {layoutRows(activeStep.fields, separateUtils).map((row) => (
@@ -1289,6 +1328,11 @@ export function TemplateEntryForm({
                         farmId={farmId}
                         species={selectedSpecies(answers)}
                         outlinedLabels={outlinedLabels}
+                        hideLabel={Boolean(
+                          compactTitle &&
+                          field.label.trim().toLowerCase() ===
+                            compactTitle.trim().toLowerCase(),
+                        )}
                         onChange={onChange}
                       />
                     )}

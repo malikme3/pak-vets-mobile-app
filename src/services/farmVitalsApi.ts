@@ -41,6 +41,7 @@ export type FarmTemplateField = {
   voiceInput?: boolean;
   fields?: FarmTemplateField[];
   promptKey?: string;
+  generateThumbnail?: boolean;
   searchable?: boolean;
   optionSource?: "breed";
 };
@@ -155,6 +156,8 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       item.promptKey.trim()
     )
       field.promptKey = item.promptKey.trim();
+    if ((field.type === "image" || field.type === "upload") && item.generateThumbnail === true)
+      field.generateThumbnail = true;
     if (Array.isArray(item.fields))
       field.fields = parseFields(item.fields, depth + 1);
     return [field];
@@ -225,22 +228,31 @@ function parseForm(value: unknown): FarmTemplateForm | null {
   };
 }
 
-function firstPhotoPrompt(fields: FarmTemplateField[]): string {
+function firstConfiguredPhoto(fields: FarmTemplateField[]): FarmTemplateField | undefined {
   for (const field of fields) {
-    if ((field.type === "upload" || field.type === "image") && field.promptKey)
-      return field.promptKey;
-    const nested = field.fields ? firstPhotoPrompt(field.fields) : "";
+    if (
+      (field.type === "upload" || field.type === "image") &&
+      (field.promptKey || field.generateThumbnail)
+    )
+      return field;
+    const nested = field.fields && firstConfiguredPhoto(field.fields);
     if (nested) return nested;
   }
-  return "";
 }
 
-export async function animalPhotoPromptKey(): Promise<string> {
+export async function animalPhotoUploadOptions(): Promise<{
+  promptKey?: string;
+  generateThumbnail?: boolean;
+}> {
   try {
     const template = await getActiveTemplate("animal");
-    return firstPhotoPrompt(template.form.steps.flatMap((step) => step.fields));
+    const field = firstConfiguredPhoto(template.form.steps.flatMap((step) => step.fields));
+    return {
+      promptKey: field?.promptKey,
+      generateThumbnail: field?.generateThumbnail,
+    };
   } catch {
-    return "";
+    return {};
   }
 }
 
@@ -250,6 +262,7 @@ export async function uploadFarmMedia(
   farmId: string,
   species: string,
   promptKey = "",
+  generateThumbnail = false,
 ): Promise<string> {
   const response = await fetch(`${FARM_VITALS_API_URL}/farm-vitals/uploads`, {
     method: "POST",
@@ -262,6 +275,7 @@ export async function uploadFarmMedia(
       farmId,
       species,
       ...(promptKey ? { promptKey } : {}),
+      ...(generateThumbnail ? { generateThumbnail: true } : {}),
     }),
   });
   const payload = await readJson(response);
@@ -303,11 +317,12 @@ export function uploadFarmImage(
   farmId: string,
   species: string,
   promptKey = "",
+  generateThumbnail = false,
 ): Promise<string> {
-  return uploadFarmMedia(uri, fileName, farmId, species, promptKey);
+  return uploadFarmMedia(uri, fileName, farmId, species, promptKey, generateThumbnail);
 }
 
-function aiFarmImageUrl(fileUrl: string): string {
+export function aiFarmImageUrl(fileUrl: string): string {
   let url: URL;
   try {
     url = new URL(fileUrl);
@@ -515,8 +530,12 @@ export async function deleteSocialPost(postId: string): Promise<void> {
   await readJson(response);
 }
 
-export async function readableFarmImage(fileUrl: string): Promise<string> {
-  const cached = farmImageUrlCache.get(fileUrl);
+export async function readableFarmImage(
+  fileUrl: string,
+  variant: "original" | "thumbnail" = "original",
+): Promise<string> {
+  const cacheKey = `${variant}:${fileUrl}`;
+  const cached = farmImageUrlCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.promise;
 
   const promise = (async () => {
@@ -528,7 +547,7 @@ export async function readableFarmImage(fileUrl: string): Promise<string> {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ fileUrl }),
+        body: JSON.stringify({ fileUrl, ...(variant === "thumbnail" ? { variant } : {}) }),
       },
     );
     const payload = await readJson(response);
@@ -539,13 +558,13 @@ export async function readableFarmImage(fileUrl: string): Promise<string> {
       throw new Error("The photo could not be opened.");
     return downloadUrl;
   })();
-  farmImageUrlCache.set(fileUrl, {
+  farmImageUrlCache.set(cacheKey, {
     expiresAt: Date.now() + farmImageUrlCacheTtlMs,
     promise,
   });
   void promise.catch(() => {
-    if (farmImageUrlCache.get(fileUrl)?.promise === promise)
-      farmImageUrlCache.delete(fileUrl);
+    if (farmImageUrlCache.get(cacheKey)?.promise === promise)
+      farmImageUrlCache.delete(cacheKey);
   });
   return promise;
 }
@@ -990,7 +1009,9 @@ export type SubmittedFarm = {
 };
 
 export type FarmReviewRow = {
+  imageUrl?: string;
   key?: string;
+  source?: string;
   groupKey?: string;
   filter?: boolean;
   fullWidth?: boolean;
@@ -1270,6 +1291,8 @@ export type FarmAnimalReview = {
 };
 
 export type FarmReview = {
+  ownerName?: string;
+  ownerPhone?: string;
   headerBackgroundImageUrl?: string;
   farmPhotoUrl?: string;
   ownerPhotoUrl?: string;
@@ -1325,13 +1348,14 @@ function dashboardRows(
   fields: FarmTemplateField[],
   values: Record<string, unknown>,
   selected: FarmDashboardField[],
+  ownerFields: FarmDashboardField[],
 ): FarmReviewRow[] {
   const chosen: FarmDashboardField[] = selected.length
     ? selected
     : fields
         .filter((field) => field.showOnDashboard === true && !field.source)
         .map((field) => ({ key: field.key }));
-  return chosen.flatMap((choice) => {
+  return [...chosen, ...ownerFields].flatMap((choice) => {
     const group = choice.groupKey
       ? fields.find((field) => field.key === choice.groupKey)
       : undefined;
@@ -1347,6 +1371,7 @@ function dashboardRows(
     return [
       {
         key: choice.key,
+        source: choice.source ?? group?.source,
         ...(choice.groupKey ? { groupKey: choice.groupKey } : {}),
         ...(choice.filter ? { filter: true } : {}),
         badgeView: choice.badgeView === true,
@@ -1368,25 +1393,35 @@ function dashboardRows(
   });
 }
 
-async function farmEntryValues(farmId: string): Promise<{
+const ownerFieldKeys = ["full_name", "phone"];
+
+function farmContactValues(entries: unknown[]): Record<string, unknown> {
+  const contact = [...entries]
+    .reverse()
+    .find(
+      (entry) =>
+        isObject(entry) &&
+        !entry.animalEntryId &&
+        historyKind(entry) === "contact" &&
+        isObject(entry.values),
+    );
+  return isObject(contact) && isObject(contact.values) ? contact.values : {};
+}
+
+async function farmEntryValues(
+  farmId: string,
+  contactKey?: string,
+): Promise<{
   values: Record<string, unknown>;
   farmPhotoUrl?: string;
   ownerPhotoUrl?: string;
   animalCount: number;
 }> {
-  const response = await fetch(
-    `${FARM_VITALS_API_URL}/farm-vitals/farms/${encodeURIComponent(farmId)}`,
-    { headers: { Accept: "application/json" } },
-  );
-  const payload = await readJson(response);
-  if (!isObject(payload) || !isObject(payload.data))
-    return { values: {}, animalCount: 0 };
-  const data = isObject(payload.data.data) ? payload.data.data : {};
+  const { data, entries } = await readFarmDocument(farmId);
   const vitals = isObject(data.farmVitals) ? data.farmVitals : {};
   const profileImages = isObject(vitals.profileImages)
     ? vitals.profileImages
     : {};
-  const entries = Array.isArray(vitals.entries) ? vitals.entries : [];
   const entry = [...entries]
     .reverse()
     .find(
@@ -1397,8 +1432,18 @@ async function farmEntryValues(farmId: string): Promise<{
     (item) =>
       isObject(item) && isObject(item.form) && item.form.entity === "animal",
   ).length;
+  const values = isObject(entry) && isObject(entry.values) ? entry.values : {};
+  const inline = contactKey ? values[contactKey] : undefined;
+  const contact = contactKey ? farmContactValues(entries) : {};
+  const contactValues = { ...contact };
+  if (isObject(inline)) {
+    for (const [key, value] of Object.entries(inline)) {
+      if (value !== null && value !== undefined && value !== "")
+        contactValues[key] = value;
+    }
+  }
   return {
-    values: isObject(entry) && isObject(entry.values) ? entry.values : {},
+    values: contactKey ? { ...values, [contactKey]: contactValues } : values,
     animalCount,
     ...(text(profileImages.farmPhotoUrl)
       ? { farmPhotoUrl: text(profileImages.farmPhotoUrl) }
@@ -1452,17 +1497,41 @@ export async function listFarmDashboard(
   const template = result.template;
   const fields = template.form.steps.flatMap((step) => step.fields);
   const selected = template.form.dashboardFields ?? [];
+  const contact = fields.find((field) => field.source === "contact");
+  const contactKey =
+    contact?.key ??
+    ((await listAdditionalFlows("farm")).some((flow) => flow.key === "contact")
+      ? "contact"
+      : undefined);
+  const ownerFields = contactKey
+    ? ownerFieldKeys
+        .filter(
+          (key) =>
+            !selected.some(
+              (field) => field.key === key && field.groupKey === contactKey,
+            ),
+        )
+        .map((key) => ({ key, groupKey: contactKey, tileView: false }))
+    : [];
   return Promise.all(
     farms.map(async (farm, index) => {
       try {
-        const entry = farm.dashboardValues
-          ? {
-              values: farm.dashboardValues,
-              farmPhotoUrl: farm.farmPhotoUrl,
-              ownerPhotoUrl: farm.ownerPhotoUrl,
-              animalCount: farm.animalCount ?? 0,
-            }
-          : await farmEntryValues(farm.farmId);
+        const projected = farm.dashboardValues;
+        const hasOwner =
+          !contactKey ||
+          ownerFieldKeys.every((key) =>
+            text(nestedValue(projected?.[contactKey], key)).trim(),
+          );
+        const summary = {
+          values: projected ?? {},
+          farmPhotoUrl: farm.farmPhotoUrl,
+          ownerPhotoUrl: farm.ownerPhotoUrl,
+          animalCount: farm.animalCount ?? 0,
+        };
+        const entry =
+          projected && hasOwner
+            ? summary
+            : await farmEntryValues(farm.farmId, contactKey).catch(() => summary);
         const values = entry.values;
         const hydrated: FarmDashboardEntry = {
           farmId: farm.farmId,
@@ -1471,7 +1540,7 @@ export async function listFarmDashboard(
           ownerPhotoUrl: entry.ownerPhotoUrl,
           animalCount: entry.animalCount,
           submittedAt: farm.submittedAt,
-          rows: dashboardRows(fields, values, selected),
+          rows: dashboardRows(fields, values, selected, ownerFields),
           location: readCoordinates(
             values[
               fields.find((field) => field.source === "location")?.key ??
@@ -1625,7 +1694,14 @@ function reviewRows(
       const nested = isObject(value) ? value : {};
       return reviewRows(field.fields, nested);
     }
-    return [{ label: field.label || field.key, value: reviewValue(value) }];
+    const label = field.label || field.key;
+    if (
+      (field.type === "image" || field.type === "upload") &&
+      typeof value === "string" &&
+      /^https?:\/\//i.test(value.trim())
+    )
+      return [{ label, value: "Photo", imageUrl: value.trim() }];
+    return [{ label, value: reviewValue(value) }];
   });
 }
 
@@ -1956,13 +2032,13 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
         .filter((section) => section.rows.length > 0);
       const summary = sections
         .flatMap((section) => section.rows)
-        .find((row) => row.value !== "Not provided");
+        .find((row) => !row.imageUrl && row.value !== "Not provided");
       return [
         {
           animalEntryId,
           entryId: text(item.entryId, kind),
           kind,
-          name: summary?.value ?? text(historyForm?.name, formTypeTitle(kind)),
+          name: summary?.value || historyForm?.name.trim() || formTypeTitle(kind),
           submittedAt:
             typeof item.submittedAt === "string" ? item.submittedAt : null,
           sections,
@@ -2025,8 +2101,11 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
       },
     ];
   });
+  const contact = farmContactValues(entries);
   return {
     farmId: text(record.farmId, farmId),
+    ownerName: text(contact.full_name).trim() || undefined,
+    ownerPhone: text(contact.phone).trim() || undefined,
     farmPhotoUrl: text(profileImages.farmPhotoUrl) || undefined,
     ownerPhotoUrl: text(profileImages.ownerPhotoUrl) || undefined,
     headerBackgroundImageUrl: farmHeaderImage,

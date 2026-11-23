@@ -25,7 +25,7 @@ import { File, Paths } from "expo-file-system";
 import Feather from "@expo/vector-icons/Feather";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
-  animalPhotoPromptKey,
+  animalPhotoUploadOptions,
   deleteSocialPost,
   getFarmReview,
   listSocialPosts,
@@ -239,7 +239,7 @@ export default function FarmPostScreen() {
     setError(null);
     setNotice(null);
     try {
-      const promptKey = await animalPhotoPromptKey();
+      const { promptKey, generateThumbnail } = await animalPhotoUploadOptions();
       const uploaded: string[] = [];
       for (const photo of photos) {
         uploaded.push(
@@ -249,6 +249,7 @@ export default function FarmPostScreen() {
             farmId,
             species || "unknown",
             promptKey,
+            generateThumbnail,
           ),
         );
       }

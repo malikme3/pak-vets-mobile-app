@@ -13,7 +13,10 @@ import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { breedEntryTemplate } from "../features/farm-vitals/breed-entry";
-import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
+import {
+  singleEntryHeading,
+  TemplateEntryForm,
+} from "../features/farm-vitals/template-entry";
 import {
   addAnimalHistory,
   formTypeTitle,
@@ -153,6 +156,8 @@ export default function AddFarmHistoryScreen() {
       ? breedEntryTemplate(template, species, breedCategory, initialValues)
       : template;
 
+  const compactHeading = singleEntryHeading(entryTemplate, title);
+
   async function submit(values: Record<string, unknown>) {
     if (!entryTemplate || !kind || saving) return;
     setSaving(true);
@@ -195,7 +200,7 @@ export default function AddFarmHistoryScreen() {
       >
         <FlowPageHeading
           onBack={() => router.back()}
-          title={entryId ? `Edit ${title}` : `Add ${title}`}
+          title={compactHeading ?? (entryId ? `Edit ${title}` : `Add ${title}`)}
         />
         {loading ? (
           <View style={styles.status}>
@@ -223,7 +228,9 @@ export default function AddFarmHistoryScreen() {
                     )
                 : undefined
             }
-            submitLabel={entryId ? "Save changes" : `Add ${title}`}
+            compactTitle={compactHeading ? title : undefined}
+            submitLabel={entryId ? "Save changes" : "Save"}
+            farmId={farmId}
             saving={saving}
             initialValues={initialValues}
             onSubmit={submit}
