@@ -487,8 +487,7 @@ export default function FarmDashboardScreen() {
               const key = `farm-${index}`;
               const directFields =
                 section.edit?.fields.filter((field) => !field.source) ?? [];
-              const expanded =
-                editing === key || (openSections[key] ?? index === 0);
+              const expanded = editing === key || (openSections[key] ?? false);
               return (
                 <CollapseSection
                   key={key}
@@ -496,7 +495,7 @@ export default function FarmDashboardScreen() {
                   count={section.rows.length + (section.utils?.length ?? 0)}
                   expanded={expanded}
                   onToggle={() => {
-                    if (editing !== key) toggleSection(key, index === 0);
+                    if (editing !== key) toggleSection(key, false);
                   }}
                   onEdit={
                     directFields.length ? () => setEditing(key) : undefined
