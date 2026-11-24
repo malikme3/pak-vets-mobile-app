@@ -20,6 +20,7 @@ import {
   loadPhotoVersions,
   photoSides,
   recordPhotoUrls,
+  waitForAiFarmImage,
   type PhotoSide,
   type PhotoVersions,
 } from "../features/farm-vitals/record-photo";
@@ -45,11 +46,12 @@ export default function FarmPhotosScreen() {
   const [name, setName] = useState("Animal");
   const [index, setIndex] = useState(startPair);
   const [side, setSide] = useState<PhotoSide>(startSide);
+  const [retryCount, setRetryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<PhotoVersions>>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isActive: () => boolean) => {
     if (!farmId || !entryId) {
       setLoading(false);
       setError("Open photos from the farm or animal record.");
@@ -70,26 +72,43 @@ export default function FarmPhotosScreen() {
       const urls = animal?.photos ?? recordPhotoUrls(record?.sections);
       if (!urls.length) throw new Error("This record has no photos to show.");
       const signed = await Promise.all(urls.map(loadPhotoVersions));
+      if (!isActive()) return;
       setName(animal?.name ?? record?.name ?? "Photos");
       setPairs(signed);
       setMissing({});
       setIndex(Math.min(Math.max(startPair, 0), signed.length - 1));
       setSide(startSide);
+      signed.forEach((photo, photoIndex) => {
+        if (photo.AI) return;
+        void waitForAiFarmImage(urls[photoIndex], isActive).then((enhanced) => {
+          if (!enhanced || !isActive()) return;
+          setPairs((current) =>
+            current.map((item, index) =>
+              index === photoIndex ? { ...item, AI: enhanced } : item,
+            ),
+          );
+        });
+      });
     } catch (cause) {
+      if (!isActive()) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "These photos could not be opened.",
       );
     } finally {
-      setLoading(false);
+      if (isActive()) setLoading(false);
     }
   }, [entryId, farmId, startPair, startSide]);
 
   useFocusEffect(
     useCallback(() => {
-      void load();
-    }, [load]),
+      let active = true;
+      void load(() => active);
+      return () => {
+        active = false;
+      };
+    }, [load, retryCount]),
   );
 
   function show(next: number) {
@@ -140,7 +159,7 @@ export default function FarmPhotosScreen() {
       {error ? (
         <View style={styles.status}>
           <Text style={styles.error}>{error}</Text>
-          <Pressable accessibilityRole="button" onPress={() => void load()}>
+          <Pressable accessibilityRole="button" onPress={() => setRetryCount((current) => current + 1)}>
             <Text style={styles.retry}>Retry</Text>
           </Pressable>
         </View>

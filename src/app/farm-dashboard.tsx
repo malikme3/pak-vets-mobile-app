@@ -515,7 +515,7 @@ export default function FarmDashboardScreen() {
                       fields={directFields}
                       onCancel={() => setEditing(null)}
                       onSaved={async () => {
-                        setEditing(null);
+                        setEditing((current) => (current === key ? null : current));
                         await openFarm(farmId, true);
                       }}
                     />
@@ -559,11 +559,27 @@ export default function FarmDashboardScreen() {
                               color={colors.muted}
                             />
                           </Pressable>
-                          {section.edit ? (
+                          {section.edit && editing !== utilKey ? (
                             <EditSectionButton
                               title={util.label}
-                              disabled={editing !== null}
-                              onPress={() => setEditing(utilKey)}
+                              onPress={() => {
+                                if (editing && editing !== utilKey) {
+                                  Alert.alert(
+                                    "Discard unsaved changes?",
+                                    "Switching sections will discard your unsaved changes.",
+                                    [
+                                      { text: "Keep editing", style: "cancel" },
+                                      {
+                                        text: "Discard and edit",
+                                        style: "destructive",
+                                        onPress: () => setEditing(utilKey),
+                                      },
+                                    ],
+                                  );
+                                  return;
+                                }
+                                setEditing(utilKey);
+                              }}
                             />
                           ) : null}
                         </View>
@@ -574,7 +590,9 @@ export default function FarmDashboardScreen() {
                             fields={[util.field]}
                             onCancel={() => setEditing(null)}
                             onSaved={async () => {
-                              setEditing(null);
+                              setEditing((current) =>
+                                current === utilKey ? null : current,
+                              );
                               await openFarm(farmId, true);
                             }}
                           />

@@ -2,6 +2,7 @@ import { farmCard } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -193,7 +194,7 @@ export default function AddFarmHistoryScreen() {
   const compactHeading = singleEntryHeading(entryTemplate, title);
 
   async function submit(values: Record<string, unknown>) {
-    if (!entryTemplate || !kind || saving) return;
+    if (!entryTemplate || !kind || saving || saved) return;
     setSaving(true);
     setError(null);
     try {
@@ -214,6 +215,14 @@ export default function AddFarmHistoryScreen() {
           entryValues,
         );
       setSaved(true);
+      if (!entryId) {
+        Alert.alert(
+          `${title} added`,
+          "",
+          [{ text: "OK", onPress: () => router.back() }],
+          { cancelable: false },
+        );
+      }
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -279,10 +288,10 @@ export default function AddFarmHistoryScreen() {
             <PhotoVersionsPreview urls={photoUrls} />
           </View>
         ) : null}
-        {saved ? (
+        {saved && entryId ? (
           <View style={styles.success}>
             <Text style={styles.stepTitle}>
-              {entryId ? "Changes saved" : `${title} added`}
+              Changes saved
             </Text>
             <Pressable accessibilityRole="button" onPress={() => router.back()}>
               <Text style={styles.retry}>

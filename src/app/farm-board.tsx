@@ -219,7 +219,7 @@ function matches(farm: FarmDashboardEntry, query: string): boolean {
 
 export default function FarmBoardScreen() {
   const router = useRouter();
-  const [radiusKm, setRadiusKm] = useState<5 | 25 | 50>(5);
+  const [radiusKm, setRadiusKm] = useState<5 | 25 | 50 | null>(null);
   const [radiusOpen, setRadiusOpen] = useState(false);
   const [nearbyOrigin, setNearbyOrigin] = useState<Coordinates | null>(null);
   const [findingNearby, setFindingNearby] = useState(false);
@@ -292,7 +292,9 @@ export default function FarmBoardScreen() {
   const shown = located.filter(
     (farm) =>
       matches(farm, searchQuery) &&
-      (!nearbyOrigin || (farm.distance !== null && farm.distance <= radiusKm)),
+      (!nearbyOrigin ||
+        radiusKm === null ||
+        (farm.distance !== null && farm.distance <= radiusKm)),
   );
   if (nearbyOrigin)
     shown.sort(
@@ -305,6 +307,11 @@ export default function FarmBoardScreen() {
     if (findingNearby) return;
     Keyboard.dismiss();
     setRadiusOpen(false);
+    if (radiusKm === null) {
+      setNearbyOrigin(null);
+      setNearbyError(null);
+      return;
+    }
     setFindingNearby(true);
     setNearbyError(null);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -425,7 +432,9 @@ export default function FarmBoardScreen() {
           <View style={styles.nearbyRow}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Search nearby farms"
+              accessibilityLabel={
+                radiusKm === null ? "Show all farms" : "Search nearby farms"
+              }
               disabled={loading || findingNearby}
               onPress={() => void searchNearby()}
               style={[
@@ -436,24 +445,35 @@ export default function FarmBoardScreen() {
               {findingNearby ? (
                 <ActivityIndicator size="small" color={colors.green} />
               ) : (
-                <Feather name="crosshair" size={17} color={colors.green} />
+                <Feather
+                  name={radiusKm === null ? "globe" : "crosshair"}
+                  size={17}
+                  color={colors.green}
+                />
               )}
               <Text
                 numberOfLines={1}
                 style={[styles.nearbyButtonText, styles.nearbyButtonLabel]}
               >
-                {findingNearby ? "Getting location…" : "Search nearby"}
+                {findingNearby
+                  ? "Getting location…"
+                  : radiusKm === null
+                    ? "Show all farms"
+                    : "Search nearby"}
               </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choose nearby radius"
+              disabled={findingNearby}
               accessibilityState={{ expanded: radiusOpen }}
               aria-expanded={radiusOpen}
               onPress={() => setRadiusOpen((current) => !current)}
               style={styles.radiusPicker}
             >
-              <Text style={styles.nearbyButtonText}>{radiusKm} km</Text>
+              <Text style={styles.nearbyButtonText}>
+                {radiusKm === null ? "All" : `${radiusKm} km`}
+              </Text>
               <Feather
                 name={radiusOpen ? "chevron-up" : "chevron-down"}
                 size={14}
@@ -482,16 +502,23 @@ export default function FarmBoardScreen() {
               accessibilityLabel="Nearby search radius"
               style={styles.radiusRow}
             >
-              {([5, 25, 50] as const).map((radius) => (
+              {([null, 5, 25, 50] as const).map((radius) => (
                 <Pressable
-                  key={radius}
+                  key={radius ?? "all"}
                   accessibilityRole="radio"
+                  disabled={findingNearby}
                   accessibilityState={{ checked: radiusKm === radius }}
                   aria-checked={radiusKm === radius}
-                  accessibilityLabel={`${radius} km radius`}
+                  accessibilityLabel={
+                    radius === null ? "All farms" : `${radius} km radius`
+                  }
                   onPress={() => {
                     setRadiusKm(radius);
                     setRadiusOpen(false);
+                    if (radius === null) {
+                      setNearbyOrigin(null);
+                      setNearbyError(null);
+                    }
                   }}
                   style={[
                     styles.radiusOption,
@@ -504,7 +531,7 @@ export default function FarmBoardScreen() {
                       radiusKm === radius && styles.radiusSelectedText,
                     ]}
                   >
-                    {radius} km
+                    {radius === null ? "All" : `${radius} km`}
                   </Text>
                 </Pressable>
               ))}

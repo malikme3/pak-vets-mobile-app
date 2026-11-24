@@ -3,6 +3,7 @@ import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import {
   recordPhotoUrls,
   RecordPhoto,
+  waitForAiFarmImage,
 } from "../features/farm-vitals/record-photo";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { HeaderBackground } from "../features/farm-vitals/header-background";
@@ -32,7 +33,6 @@ import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   addAnimalPhotos,
   animalPhotoUploadOptions,
-  farmPhotoPairs,
   getFarmReview,
   listAdditionalFlows,
   readableFarmImage,
@@ -112,6 +112,7 @@ function HistoryList({
   onBrowse,
   onOpen,
   onOpenPhoto,
+  compactRecord = false,
 }: {
   title: string;
   records: FarmHistoryReview[];
@@ -119,28 +120,50 @@ function HistoryList({
   onBrowse?: () => void;
   onOpen: (entryId: string) => void;
   onOpenPhoto: (record: FarmHistoryReview) => void;
+  compactRecord?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const singleRecord = compactRecord && records.length === 1 ? records[0] : null;
   return (
     <View style={styles.card}>
       <View style={styles.sectionHeader}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={onBrowse ? undefined : { expanded: open }}
-          onPress={onBrowse ?? (() => setOpen((current) => !current))}
-          style={styles.sectionToggle}
-        >
-          <Text style={styles.historyTitle}>{title}</Text>
-          {onBrowse ? null : <Text style={styles.count}>{records.length}</Text>}
-          <Feather
-            name={
-              onBrowse ? "chevron-right" : open ? "chevron-up" : "chevron-down"
-            }
-            size={16}
-            color={colors.green}
-          />
-        </Pressable>
-        <AdditionalFlowButton label={title} onPress={onAdd} />
+        {singleRecord ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${title}: ${singleRecord.name}`}
+            onPress={() => onOpen(singleRecord.entryId)}
+            style={styles.sectionToggle}
+          >
+            <Text style={[styles.historyTitle, styles.historyLabel]}>
+              {title}
+            </Text>
+            <Text numberOfLines={1} style={styles.historyValue}>
+              {singleRecord.name}
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={onBrowse ? undefined : { expanded: open }}
+            onPress={onBrowse ?? (() => setOpen((current) => !current))}
+            style={styles.sectionToggle}
+          >
+            <Text style={styles.historyTitle}>{title}</Text>
+            {onBrowse ? null : (
+              <Text style={styles.count}>{records.length}</Text>
+            )}
+            <Feather
+              name={
+                onBrowse ? "chevron-right" : open ? "chevron-up" : "chevron-down"
+              }
+              size={16}
+              color={colors.green}
+            />
+          </Pressable>
+        )}
+        {compactRecord && records.length ? null : (
+          <AdditionalFlowButton label={title} onPress={onAdd} />
+        )}
       </View>
       {open ? (
         records.length ? (
@@ -203,7 +226,7 @@ export default function FarmAnimalScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [addingPhotos, setAddingPhotos] = useState(false);
   const [photoPairs, setPhotoPairs] = useState<
-    { original: string; enhanced: string }[]
+    { original: string; enhanced: string; index: number }[]
   >([]);
   const [missingAi, setMissingAi] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -246,28 +269,29 @@ export default function FarmAnimalScreen() {
   );
 
   useEffect(() => {
-    const stored = farmPhotoPairs(animal?.photos ?? []);
-    if (!stored.length) {
-      setPhotoPairs([]);
-      setMissingAi({});
-      return;
-    }
+    const stored = animal?.photos ?? [];
     let cancelled = false;
+    setPhotoPairs([]);
+    setMissingAi({});
     void Promise.all(
-      stored.map(async (pair) => {
-        const [original, enhanced] = await Promise.all([
-          readableFarmImage(pair.original).catch(() => ""),
-          readableFarmImage(pair.enhanced).catch(() => ""),
-        ]);
-        return {
-          original: original.startsWith("http") ? original : "",
-          enhanced: enhanced.startsWith("http") ? enhanced : "",
-        };
+      stored.map(async (url, index) => {
+        const original = await readableFarmImage(url).catch(() => "");
+        return { original, enhanced: "", index };
       }),
     ).then((pairs) => {
       if (cancelled) return;
-      setPhotoPairs(pairs.filter((pair) => pair.original));
-      setMissingAi({});
+      const readable = pairs.filter((pair) => pair.original);
+      setPhotoPairs(readable);
+      for (const { index } of readable) {
+        void waitForAiFarmImage(stored[index], () => !cancelled).then((enhanced) => {
+          if (!enhanced || cancelled) return;
+          setPhotoPairs((current) =>
+            current.map((pair) =>
+              pair.index === index ? { ...pair, enhanced } : pair,
+            ),
+          );
+        });
+      }
     });
     return () => {
       cancelled = true;
@@ -289,6 +313,10 @@ export default function FarmAnimalScreen() {
       !/photo|image/i.test(row.label),
   );
 
+  const avatarPhoto = photoPairs[0];
+  const avatarAi = avatarPhoto?.enhanced && !missingAi[avatarPhoto.enhanced]
+    ? avatarPhoto.enhanced
+    : undefined;
   const detailRows = rows.filter(
     (row) => provided(row) && !/photo|image/i.test(row.label),
   );
@@ -378,16 +406,20 @@ export default function FarmAnimalScreen() {
               style={styles.identity}
             >
               <View style={styles.avatar}>
-                {photoPairs[0]?.original ? (
+                {avatarPhoto ? (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Open ${animal.name} photos`}
-                    onPress={() => openPhotos(0)}
+                    onPress={() => openPhotos(avatarPhoto.index * 2)}
                   >
                     <Image
-                      source={{ uri: photoPairs[0].original }}
+                      source={{ uri: avatarAi || avatarPhoto.original }}
                       style={styles.avatarImage}
                       accessibilityLabel={`${animal.name} photo`}
+                      onError={() => {
+                        if (avatarAi)
+                          setMissingAi((current) => ({ ...current, [avatarAi]: true }));
+                      }}
                     />
                   </Pressable>
                 ) : animal.species ? (
@@ -452,7 +484,7 @@ export default function FarmAnimalScreen() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Open original photo ${photoIndex + 1}`}
-                      onPress={() => openPhotos(photoIndex * 2)}
+                      onPress={() => openPhotos(pair.index * 2)}
                       style={styles.photoCell}
                     >
                       <Image
@@ -467,7 +499,7 @@ export default function FarmAnimalScreen() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Open AI photo ${photoIndex + 1}`}
-                      onPress={() => openPhotos(photoIndex * 2 + 1)}
+                      onPress={() => openPhotos(pair.index * 2 + 1)}
                       style={styles.photoCell}
                     >
                       {pair.enhanced && !missingAi[pair.enhanced] ? (
@@ -565,6 +597,7 @@ export default function FarmAnimalScreen() {
                 records={animal.records.filter(
                   (record) => record.kind === type.key,
                 )}
+                compactRecord={type.key === "breed"}
                 onAdd={() => {
                   const params = {
                     farmId,
@@ -740,6 +773,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   historyTitle: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: "800" },
+  historyLabel: { flex: 0 },
+  historyValue: {
+    flex: 1,
+    color: colors.green,
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "right",
+  },
   historyRow: {
     flexDirection: "row",
     alignItems: "center",

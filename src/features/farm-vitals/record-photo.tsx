@@ -44,6 +44,22 @@ async function availableImage(uri: string): Promise<string | undefined> {
   }
 }
 
+export async function waitForAiFarmImage(
+  originalUrl: string,
+  isActive: () => boolean,
+): Promise<string | undefined> {
+  const enhancedUrl = aiFarmImageUrl(originalUrl);
+  if (!enhancedUrl) return;
+  const attempts = 5;
+  for (let attempt = 0; attempt < attempts && isActive(); attempt++) {
+    const signedUrl = await readableFarmImage(enhancedUrl).catch(() => "");
+    const available = await availableImage(signedUrl);
+    if (available) return available;
+    if (attempt + 1 < attempts)
+      await new Promise<void>((resolve) => setTimeout(resolve, 3000));
+  }
+}
+
 export async function loadPhotoVersions(url: string): Promise<PhotoVersions> {
   const enhancedUrl = aiFarmImageUrl(url);
   const [original, enhanced, thumbnail] = await Promise.all([

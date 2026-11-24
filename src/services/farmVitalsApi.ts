@@ -248,11 +248,11 @@ export async function animalPhotoUploadOptions(): Promise<{
     const template = await getActiveTemplate("animal");
     const field = firstConfiguredPhoto(template.form.steps.flatMap((step) => step.fields));
     return {
-      promptKey: field?.promptKey,
+      promptKey: field?.promptKey ?? "animal_photo",
       generateThumbnail: field?.generateThumbnail,
     };
   } catch {
-    return {};
+    return { promptKey: "animal_photo" };
   }
 }
 
@@ -336,12 +336,13 @@ export function uploadFarmImage(
 
 export function aiFarmImageUrl(fileUrl: string): string {
   let url: URL;
+  let path: string;
   try {
     url = new URL(fileUrl);
+    path = decodeURIComponent(url.pathname.replace(/^\//, ""));
   } catch {
     return "";
   }
-  const path = decodeURIComponent(url.pathname.replace(/^\//, ""));
   const slash = path.lastIndexOf("/");
   const directory = slash >= 0 ? path.slice(0, slash) : "";
   const name = slash >= 0 ? path.slice(slash + 1) : path;
@@ -2079,12 +2080,26 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
       const summary = sections
         .flatMap((section) => section.rows)
         .find((row) => !row.imageUrl && row.value !== "Not provided");
+      const breedName =
+        kind === "breed"
+          ? [historyValues.breedName, historyValues.name, historyValues.breed]
+              .find(
+                (value) =>
+                  typeof value === "string" &&
+                  value.trim() &&
+                  !/^\d+$/.test(value.trim()),
+              )
+          : undefined;
       return [
         {
           animalEntryId,
           entryId: text(item.entryId, kind),
           kind,
-          name: summary?.value || historyForm?.name.trim() || formTypeTitle(kind),
+          name:
+            (typeof breedName === "string" ? breedName.trim() : "") ||
+            summary?.value ||
+            historyForm?.name.trim() ||
+            formTypeTitle(kind),
           submittedAt:
             typeof item.submittedAt === "string" ? item.submittedAt : null,
           sections,
@@ -2279,14 +2294,36 @@ async function saveFarmDocument(
   await readJson(saved);
 }
 
+function farmVitalsWithEntries(
+  data: Record<string, unknown>,
+  entries: unknown[],
+): Record<string, unknown> {
+  return {
+    version: 1,
+    ...(isObject(data.farmVitals) ? data.farmVitals : {}),
+    entries,
+  };
+}
+
 async function appendFarmEntry(
   farmId: string,
   entry: Record<string, unknown>,
 ): Promise<void> {
   const { data, entries } = await readFarmDocument(farmId);
+  if (
+    historyKind(entry) === "breed" &&
+    entries.some(
+      (existing) =>
+        isObject(existing) &&
+        existing.animalEntryId === entry.animalEntryId &&
+        historyKind(existing) === "breed",
+    )
+  ) {
+    throw new Error("A Breed record already exists for this animal. Edit it instead.");
+  }
   await saveFarmDocument(farmId, {
     ...data,
-    farmVitals: { version: 1, entries: [...entries, entry] },
+    farmVitals: farmVitalsWithEntries(data, [...entries, entry]),
   });
 }
 
@@ -2464,7 +2501,7 @@ export async function addAnimalPhotos(
   nextEntries[index] = { ...current, values };
   await saveFarmDocument(farmId, {
     ...data,
-    farmVitals: { version: 1, entries: nextEntries },
+    farmVitals: farmVitalsWithEntries(data, nextEntries),
   });
 }
 
@@ -2485,7 +2522,7 @@ export async function updateAnimalHistory(
   nextEntries[index] = { ...current, values, ...(form ? { form } : {}) };
   await saveFarmDocument(farmId, {
     ...data,
-    farmVitals: { version: 1, entries: nextEntries },
+    farmVitals: farmVitalsWithEntries(data, nextEntries),
   });
 }
 
