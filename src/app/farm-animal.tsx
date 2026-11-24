@@ -11,12 +11,15 @@ import {
   AdditionalFlowButton,
   farmButton,
   farmCard,
+  findAnimalTag,
   formatFarmDate,
 } from "../features/farm-vitals/presentation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -32,10 +35,12 @@ import Feather from "@expo/vector-icons/Feather";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   addAnimalPhotos,
+  aiFarmImageUrl,
   animalPhotoUploadOptions,
   getFarmReview,
   listAdditionalFlows,
   readableFarmImage,
+  removeAnimalPhoto,
   uploadFarmImage,
   type FarmAnimalReview,
   type AdditionalFlow,
@@ -224,9 +229,14 @@ export default function FarmAnimalScreen() {
   const [flows, setFlows] = useState<AdditionalFlow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [postPhotos, setPostPhotos] = useState<string[]>([]);
   const [addingPhotos, setAddingPhotos] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState<string | null>(null);
+  const photoChangePending = useRef(false);
+  const photoActionsDisabled =
+    addingPhotos || removingPhoto !== null || editingDetails;
   const [photoPairs, setPhotoPairs] = useState<
-    { original: string; enhanced: string; index: number }[]
+    { url: string; original: string; enhanced: string; index: number }[]
   >([]);
   const [missingAi, setMissingAi] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -276,14 +286,13 @@ export default function FarmAnimalScreen() {
     void Promise.all(
       stored.map(async (url, index) => {
         const original = await readableFarmImage(url).catch(() => "");
-        return { original, enhanced: "", index };
+        return { url, original, enhanced: "", index };
       }),
     ).then((pairs) => {
       if (cancelled) return;
-      const readable = pairs.filter((pair) => pair.original);
-      setPhotoPairs(readable);
-      for (const { index } of readable) {
-        void waitForAiFarmImage(stored[index], () => !cancelled).then((enhanced) => {
+      setPhotoPairs(pairs);
+      for (const { url, index } of pairs) {
+        void waitForAiFarmImage(url, () => !cancelled).then((enhanced) => {
           if (!enhanced || cancelled) return;
           setPhotoPairs((current) =>
             current.map((pair) =>
@@ -299,9 +308,7 @@ export default function FarmAnimalScreen() {
   }, [animal]);
 
   const rows = animal?.sections.flatMap((section) => section.rows) ?? [];
-  const tag = rows.find(
-    (row) => provided(row) && /tag|animal id|^id$/i.test(row.label),
-  );
+  const tag = findAnimalTag(rows);
   const highlights = rows.filter(
     (row) => provided(row) && isHighlight(row.label),
   );
@@ -313,7 +320,7 @@ export default function FarmAnimalScreen() {
       !/photo|image/i.test(row.label),
   );
 
-  const avatarPhoto = photoPairs[0];
+  const avatarPhoto = photoPairs.find((pair) => pair.original || pair.enhanced);
   const avatarAi = avatarPhoto?.enhanced && !missingAi[avatarPhoto.enhanced]
     ? avatarPhoto.enhanced
     : undefined;
@@ -329,8 +336,48 @@ export default function FarmAnimalScreen() {
     });
   }
 
+  function openGallery(gallery: "original" | "ai") {
+    router.push({
+      pathname: "/farm-photos",
+      params: { farmId, entryId, gallery },
+    });
+  }
+
+  function postPhotoCheckbox(url: string, label: string, ai = false) {
+    const selected = postPhotos.includes(url);
+    const disabled = !selected && postPhotos.length >= 2;
+    return (
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityLabel={label}
+        accessibilityState={{ checked: selected, disabled }}
+        disabled={disabled}
+        hitSlop={6}
+        onPress={() =>
+          setPostPhotos((current) =>
+            current.includes(url)
+              ? current.filter((photo) => photo !== url)
+              : current.length < 2
+                ? [...current, url]
+                : current,
+          )
+        }
+        style={[
+          styles.postPhotoCheckbox,
+          ai ? styles.aiPostPhotoCheckbox : styles.originalPostPhotoCheckbox,
+          selected && styles.postPhotoChecked,
+          disabled && styles.removePhotoDisabled,
+        ]}
+      >
+        {selected ? <Feather name="check" size={16} color={colors.surface} /> : null}
+      </Pressable>
+    );
+  }
+
   async function addPhotos() {
-    if (!animal || addingPhotos) return;
+    if (!animal || editingDetails || photoChangePending.current) return;
+    photoChangePending.current = true;
+    setAddingPhotos(true);
     setError(null);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -340,7 +387,6 @@ export default function FarmAnimalScreen() {
         selectionLimit: 8,
       });
       if (result.canceled || !result.assets.length) return;
-      setAddingPhotos(true);
       const { promptKey, generateThumbnail } = await animalPhotoUploadOptions();
       const urls: string[] = [];
       for (const asset of result.assets) {
@@ -365,9 +411,54 @@ export default function FarmAnimalScreen() {
           : "The photos could not be added.",
       );
     } finally {
+      photoChangePending.current = false;
       setAddingPhotos(false);
     }
   }
+  function confirmRemovePhoto(url: string) {
+    if (!animal || photoActionsDisabled) return;
+    const animalEntryId = animal.entryId;
+
+    async function remove() {
+      if (photoChangePending.current) return;
+      photoChangePending.current = true;
+      setRemovingPhoto(url);
+      setError(null);
+      try {
+        const photos = await removeAnimalPhoto(farmId, animalEntryId, url);
+        setPostPhotos((current) =>
+          current.filter((photo) => photo !== url && photo !== aiFarmImageUrl(url)),
+        );
+        setAnimal((current) =>
+          current?.entryId === animalEntryId ? { ...current, photos } : current,
+        );
+        await load(true);
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "The photo could not be removed.",
+        );
+      } finally {
+        photoChangePending.current = false;
+        setRemovingPhoto(null);
+      }
+    }
+
+    const message = "Remove this photo and its versions from the animal?";
+    if (Platform.OS === "web") {
+      const browser = globalThis as typeof globalThis & {
+        confirm: (message: string) => boolean;
+      };
+      if (browser.confirm(message)) void remove();
+      return;
+    }
+    Alert.alert("Remove photo?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => void remove() },
+    ]);
+  }
+
   const added = animal ? formatFarmDate(animal.submittedAt) : "";
   return (
     <SafeAreaView style={styles.safe}>
@@ -439,7 +530,7 @@ export default function FarmAnimalScreen() {
                   {animal.name}
                 </Text>
                 <Text style={styles.meta}>
-                  {[animal.species, tag?.value].filter(Boolean).join(" · ") ||
+                  {[animal.species, tag].filter(Boolean).join(" · ") ||
                     "Animal"}
                 </Text>
                 {added ? <Text style={styles.help}>Added {added}</Text> : null}
@@ -447,7 +538,7 @@ export default function FarmAnimalScreen() {
             </HeaderBackground>
             <Pressable
               accessibilityRole="button"
-              disabled={addingPhotos}
+              disabled={photoActionsDisabled}
               onPress={() => void addPhotos()}
               style={styles.photoButton}
             >
@@ -462,36 +553,75 @@ export default function FarmAnimalScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
+              disabled={addingPhotos || removingPhoto !== null}
               onPress={() =>
                 router.push({
                   pathname: "/farm-post",
-                  params: { farmId, entryId: animal.entryId },
+                  params: {
+                    farmId,
+                    entryId: animal.entryId,
+                    ...(postPhotos.length
+                      ? { postPhotos: JSON.stringify(postPhotos) }
+                      : {}),
+                  },
                 })
               }
               style={styles.postButton}
             >
               <Feather name="share-2" size={16} color={colors.green} />
-              <Text style={styles.postText}>Prepare post</Text>
+              <Text style={styles.postText}>
+                {postPhotos.length ? `Prepare post (${postPhotos.length})` : "Prepare post"}
+              </Text>
             </Pressable>
-            {photoPairs.length ? (
+            {animal.photos.length ? (
               <View style={styles.photos}>
                 <View style={styles.photosHeader}>
                   <Text style={styles.photosTitle}>Photos</Text>
-                  <Text style={styles.count}>{photoPairs.length}</Text>
+                  <Text style={styles.count}>{animal.photos.length}</Text>
                 </View>
+                <View style={styles.galleryTabs}>
+                  {(["original", "ai"] as const).map((gallery) => (
+                    <Pressable
+                      key={gallery}
+                      accessibilityRole="button"
+                      onPress={() => openGallery(gallery)}
+                      style={styles.galleryTab}
+                    >
+                      <Feather
+                        name={gallery === "original" ? "image" : "zap"}
+                        size={16}
+                        color={colors.green}
+                      />
+                      <Text style={styles.galleryTabLabel}>
+                        {gallery === "original" ? "Original Gallery" : "AI Gallery"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.help}>
+                  Select up to 2 photos for your post ({postPhotos.length}/2).
+                </Text>
                 {photoPairs.map((pair, photoIndex) => (
-                  <View key={pair.original} style={styles.photoCard}>
+                  <View key={`${pair.url}-${pair.index}`} style={styles.photoCard}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Open original photo ${photoIndex + 1}`}
                       onPress={() => openPhotos(pair.index * 2)}
                       style={styles.photoCell}
                     >
-                      <Image
-                        source={{ uri: pair.original }}
-                        style={styles.photo}
-                        accessibilityLabel="Original animal photo"
-                      />
+                      {pair.original ? (
+                        <Image
+                          source={{ uri: pair.original }}
+                          style={styles.photo}
+                          accessibilityLabel="Original animal photo"
+                        />
+                      ) : (
+                        <View style={[styles.photo, styles.photoPending]}>
+                          <Text style={styles.photoPendingText}>
+                            Photo unavailable
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.photoBadge}>
                         <Text style={styles.photoBadgeText}>Original</Text>
                       </View>
@@ -530,11 +660,42 @@ export default function FarmAnimalScreen() {
                         <Text style={styles.photoBadgeText}>AI</Text>
                       </View>
                     </Pressable>
+                    {pair.original || postPhotos.includes(pair.url)
+                      ? postPhotoCheckbox(
+                          pair.url,
+                          `Select original photo ${photoIndex + 1} for post`,
+                        )
+                      : null}
+                    {pair.enhanced && !missingAi[pair.enhanced]
+                      ? postPhotoCheckbox(
+                          aiFarmImageUrl(pair.url),
+                          `Select AI photo ${photoIndex + 1} for post`,
+                          true,
+                        )
+                      : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove photo ${photoIndex + 1} and its AI version`}
+                      accessibilityState={{ busy: removingPhoto === pair.url }}
+                      disabled={photoActionsDisabled}
+                      hitSlop={9}
+                      onPress={() => confirmRemovePhoto(pair.url)}
+                      style={[
+                        styles.removePhotoButton,
+                        photoActionsDisabled &&
+                          removingPhoto !== pair.url &&
+                          styles.removePhotoDisabled,
+                      ]}
+                    >
+                      {removingPhoto === pair.url ? (
+                        <ActivityIndicator size="small" color={colors.danger} />
+                      ) : (
+                        <Feather name="x" size={16} color={colors.danger} />
+                      )}
+                    </Pressable>
                   </View>
                 ))}
               </View>
-            ) : animal.photos.length ? (
-              <Text style={styles.help}>Photos could not be opened.</Text>
             ) : null}
             {highlights.length ? (
               <View style={styles.chips}>
@@ -570,7 +731,7 @@ export default function FarmAnimalScreen() {
                 if (!editingDetails) setDetailsOpen((current) => !current);
               }}
               onEdit={animal.edit ? () => setEditingDetails(true) : undefined}
-              editDisabled={editingDetails}
+              editDisabled={photoActionsDisabled}
             >
               {editingDetails && animal.edit ? (
                 <FarmSectionEditor
@@ -718,6 +879,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   photosTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  galleryTabs: { flexDirection: "row", gap: 8 },
+  galleryTab: {
+    ...farmButton,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: colors.mint,
+  },
+  galleryTabLabel: { color: colors.green, fontSize: 13, fontWeight: "700" },
   photoCard: {
     flexDirection: "row",
     gap: 8,
@@ -727,6 +902,36 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  postPhotoCheckbox: {
+    position: "absolute",
+    top: 12,
+    width: 24,
+    height: 24,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: colors.green,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  originalPostPhotoCheckbox: { left: 12 },
+  aiPostPhotoCheckbox: { right: 12 },
+  postPhotoChecked: { backgroundColor: colors.green },
+  removePhotoButton: {
+    position: "absolute",
+    top: 12,
+    left: "50%",
+    transform: [{ translateX: -12 }],
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: "#9BAEA3",
+  },
+  removePhotoDisabled: { opacity: 0.5 },
   photoCell: { flex: 1, borderRadius: 12, overflow: "hidden" },
   photo: {
     width: "100%",

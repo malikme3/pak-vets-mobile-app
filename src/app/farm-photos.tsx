@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -15,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
-import { getFarmReview } from "../services/farmVitalsApi";
+import { getFarmReview, readableFarmImage } from "../services/farmVitalsApi";
 import {
   loadPhotoVersions,
   photoSides,
@@ -34,11 +35,19 @@ export default function FarmPhotosScreen() {
     farmId?: string;
     entryId?: string;
     index?: string;
+    gallery?: string;
   }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
+  const gallerySide =
+    params.gallery === "ai"
+      ? "AI"
+      : params.gallery === "original"
+        ? "Original"
+        : null;
   const requested = Number(params.index);
-  const startPair = Number.isFinite(requested) ? Math.floor(requested / 2) : 0;
+  const startPair =
+    !gallerySide && Number.isFinite(requested) ? Math.floor(requested / 2) : 0;
   const startSide: PhotoSide =
     Number.isFinite(requested) && requested % 2 === 1 ? "AI" : "Original";
   const [pairs, setPairs] = useState<PhotoVersions[]>([]);
@@ -47,6 +56,7 @@ export default function FarmPhotosScreen() {
   const [index, setIndex] = useState(startPair);
   const [side, setSide] = useState<PhotoSide>(startSide);
   const [retryCount, setRetryCount] = useState(0);
+  const [checkingAi, setCheckingAi] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<PhotoVersions>>(null);
@@ -58,6 +68,8 @@ export default function FarmPhotosScreen() {
       return;
     }
     setLoading(true);
+    setCheckingAi(false);
+    setPairs([]);
     setError(null);
     try {
       const review = await getFarmReview(farmId);
@@ -71,24 +83,41 @@ export default function FarmPhotosScreen() {
         throw new Error("This record is no longer available.");
       const urls = animal?.photos ?? recordPhotoUrls(record?.sections);
       if (!urls.length) throw new Error("This record has no photos to show.");
-      const signed = await Promise.all(urls.map(loadPhotoVersions));
+      const signed: PhotoVersions[] = await Promise.all(
+        gallerySide === "Original"
+          ? urls.map(async (url) => ({
+              Original: await readableFarmImage(url).catch(() => url),
+            }))
+          : urls.map(loadPhotoVersions),
+      );
       if (!isActive()) return;
       setName(animal?.name ?? record?.name ?? "Photos");
-      setPairs(signed);
+      setPairs(gallerySide === "AI" ? signed.filter((photo) => photo.AI) : signed);
       setMissing({});
       setIndex(Math.min(Math.max(startPair, 0), signed.length - 1));
       setSide(startSide);
-      signed.forEach((photo, photoIndex) => {
-        if (photo.AI) return;
-        void waitForAiFarmImage(urls[photoIndex], isActive).then((enhanced) => {
-          if (!enhanced || !isActive()) return;
-          setPairs((current) =>
-            current.map((item, index) =>
-              index === photoIndex ? { ...item, AI: enhanced } : item,
-            ),
-          );
-        });
+      if (gallerySide === "Original") return;
+      const pending = signed.flatMap((photo, photoIndex) => {
+        if (photo.AI) return [];
+        return [
+          waitForAiFarmImage(urls[photoIndex], isActive).then((enhanced) => {
+            if (!enhanced || !isActive()) return;
+            setPairs((current) =>
+              gallerySide === "AI"
+                ? [...current, { ...photo, AI: enhanced }]
+                : current.map((item, index) =>
+                    index === photoIndex ? { ...item, AI: enhanced } : item,
+                  ),
+            );
+          }),
+        ];
       });
+      if (gallerySide === "AI" && pending.length) {
+        setCheckingAi(true);
+        void Promise.all(pending).then(() => {
+          if (isActive()) setCheckingAi(false);
+        });
+      }
     } catch (cause) {
       if (!isActive()) return;
       setError(
@@ -99,7 +128,7 @@ export default function FarmPhotosScreen() {
     } finally {
       if (isActive()) setLoading(false);
     }
-  }, [entryId, farmId, startPair, startSide]);
+  }, [entryId, farmId, gallerySide, startPair, startSide]);
 
   useFocusEffect(
     useCallback(() => {
@@ -117,9 +146,10 @@ export default function FarmPhotosScreen() {
     listRef.current?.scrollToIndex({ index: bounded, animated: true });
   }
 
-  function onScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+  function updateVisibleIndex(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const next = Math.round(event.nativeEvent.contentOffset.x / width);
-    if (Number.isFinite(next)) setIndex(next);
+    if (Number.isFinite(next))
+      setIndex(Math.min(Math.max(next, 0), pairs.length - 1));
   }
 
   const current = pairs[index];
@@ -141,13 +171,40 @@ export default function FarmPhotosScreen() {
         >
           <Feather name="arrow-left" size={18} color="#FFFFFF" />
           <Text style={styles.backText} numberOfLines={1}>
-            {name}
+            {gallerySide ? `${gallerySide} Gallery` : name}
           </Text>
         </Pressable>
         {pairs.length ? (
-          <Text style={styles.count}>
-            {index + 1} of {pairs.length}
-          </Text>
+          <View style={styles.navigation}>
+            {gallerySide && pairs.length > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous photo"
+                disabled={index === 0}
+                onPress={() => show(index - 1)}
+                style={[styles.arrow, index === 0 && styles.arrowDisabled]}
+              >
+                <Feather name="chevron-left" size={22} color="#FFFFFF" />
+              </Pressable>
+            ) : null}
+            <Text style={styles.count}>
+              {index + 1} of {pairs.length}
+            </Text>
+            {gallerySide && pairs.length > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next photo"
+                disabled={index >= pairs.length - 1}
+                onPress={() => show(index + 1)}
+                style={[
+                  styles.arrow,
+                  index >= pairs.length - 1 && styles.arrowDisabled,
+                ]}
+              >
+                <Feather name="chevron-right" size={22} color="#FFFFFF" />
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </View>
       {loading ? (
@@ -164,6 +221,14 @@ export default function FarmPhotosScreen() {
           </Pressable>
         </View>
       ) : null}
+      {gallerySide === "AI" && !loading && !error && !current ? (
+        <View style={styles.status}>
+          {checkingAi ? <ActivityIndicator color="#FFFFFF" /> : null}
+          <Text style={styles.help}>
+            {checkingAi ? "Checking for AI photos…" : "No AI photos available yet."}
+          </Text>
+        </View>
+      ) : null}
       {current ? (
         <>
           <FlatList
@@ -177,10 +242,12 @@ export default function FarmPhotosScreen() {
               offset: width * itemIndex,
               index: itemIndex,
             })}
-            keyExtractor={(pair) => pair.Original}
+            keyExtractor={(pair, photoIndex) => `${pair.Original}-${photoIndex}`}
             extraData={`${side}:${Object.keys(missing).length}`}
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onScrollEnd}
+            onMomentumScrollEnd={updateVisibleIndex}
+            onScroll={Platform.OS === "web" ? updateVisibleIndex : undefined}
+            scrollEventThrottle={32}
             onScrollToIndexFailed={({ index: failed }) => {
               listRef.current?.scrollToOffset({
                 offset: width * failed,
@@ -188,9 +255,9 @@ export default function FarmPhotosScreen() {
               });
             }}
             renderItem={({ item }) => {
-              const version = versionUrl(item, selectedVersion)
-                ? selectedVersion
-                : "Original";
+              const version =
+                gallerySide ??
+                (versionUrl(item, selectedVersion) ? selectedVersion : "Original");
               const url = versionUrl(item, version);
               return (
                 <View style={[styles.slide, { width }]}>
@@ -218,46 +285,50 @@ export default function FarmPhotosScreen() {
             }}
             style={styles.gallery}
           />
-          <View style={styles.versions}>
-            {photoSides.flatMap((version) => {
-              const url = versionUrl(current, version);
-              return url
-                ? [
-                    <VersionChoice
-                      key={version}
-                      label={version}
-                      url={url}
-                      selected={selectedVersion === version}
-                      onPress={() => setSide(version)}
-                    />,
-                  ]
-                : [];
-            })}
-          </View>
-          <FlatList
-            data={pairs}
-            horizontal
-            keyExtractor={(pair) => `thumb-${pair.Original}`}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.thumbs}
-            renderItem={({ item, index: photoIndex }) => (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Show photo ${photoIndex + 1}`}
-                onPress={() => show(photoIndex)}
-              >
-                <Image
-                  source={{
-                    uri: versionUrl(item, "Thumbnail") ?? item.Original,
-                  }}
-                  style={[
-                    styles.thumb,
-                    photoIndex === index && styles.thumbActive,
-                  ]}
-                />
-              </Pressable>
-            )}
-          />
+          {gallerySide ? null : (
+            <>
+              <View style={styles.versions}>
+                {photoSides.flatMap((version) => {
+                  const url = versionUrl(current, version);
+                  return url
+                    ? [
+                        <VersionChoice
+                          key={version}
+                          label={version}
+                          url={url}
+                          selected={selectedVersion === version}
+                          onPress={() => setSide(version)}
+                        />,
+                      ]
+                    : [];
+                })}
+              </View>
+              <FlatList
+                data={pairs}
+                horizontal
+                keyExtractor={(pair) => `thumb-${pair.Original}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.thumbs}
+                renderItem={({ item, index: photoIndex }) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show photo ${photoIndex + 1}`}
+                    onPress={() => show(photoIndex)}
+                  >
+                    <Image
+                      source={{
+                        uri: versionUrl(item, "Thumbnail") ?? item.Original,
+                      }}
+                      style={[
+                        styles.thumb,
+                        photoIndex === index && styles.thumbActive,
+                      ]}
+                    />
+                  </Pressable>
+                )}
+              />
+            </>
+          )}
         </>
       ) : null}
     </SafeAreaView>
@@ -308,6 +379,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   backText: { flex: 1, color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  navigation: { flexDirection: "row", alignItems: "center", gap: 4 },
+  arrow: { width: 40, height: 44, alignItems: "center", justifyContent: "center" },
+  arrowDisabled: { opacity: 0.35 },
   count: { color: "#D7E4DC", fontSize: 13, fontWeight: "700" },
   status: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   help: { color: "#D7E4DC", fontSize: 13, textAlign: "center" },

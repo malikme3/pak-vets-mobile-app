@@ -11,6 +11,7 @@ import {
   AdditionalFlowButton,
   farmCard,
   formatFarmDate,
+  findFarmOwnerName,
 } from "../features/farm-vitals/presentation";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -78,22 +79,6 @@ function visibleSections(review: FarmReview): FarmReviewSection[] {
   return review.sections.filter(
     (section) => section.rows.length > 0 || (section.utils?.length ?? 0) > 0,
   );
-}
-
-function ownerLine(review: FarmReview): string {
-  for (const section of review.sections) {
-    for (const util of section.utils ?? []) {
-      const row = util.rows.find(
-        (item) => /name/i.test(item.label) && item.value !== "Not provided",
-      );
-      if (
-        row &&
-        (util.field?.source === "contact" || /owner|contact/i.test(util.label))
-      )
-        return row.value;
-    }
-  }
-  return review.ownerName ?? "";
 }
 
 function ownerPhone(review: FarmReview): string {
@@ -300,7 +285,7 @@ export default function FarmDashboardScreen() {
   if (!farmId) return <Redirect href="/farm-board" />;
 
   const sections = review ? visibleSections(review) : [];
-  const owner = review ? ownerLine(review) : "";
+  const owner = review ? findFarmOwnerName(review) : "";
   const phone = review ? ownerPhone(review) : "";
   const city = review ? locationCity(review) : "";
   const category = review ? farmCategory(review) : "";

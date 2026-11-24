@@ -2,6 +2,8 @@ import {
   farmBorder,
   farmCard,
   farmButton,
+  findAnimalTag,
+  findFarmOwnerName,
 } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -25,6 +27,7 @@ import { File, Paths } from "expo-file-system";
 import Feather from "@expo/vector-icons/Feather";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import {
+  aiFarmImageUrl,
   animalPhotoUploadOptions,
   deleteSocialPost,
   getFarmReview,
@@ -33,11 +36,112 @@ import {
   readableFarmImage,
   saveSocialPost,
   uploadFarmImage,
+  type FarmAnimalReview,
   type SocialPost,
   type SocialPostStatus,
 } from "../services/farmVitalsApi";
 
-type DraftPhoto = { uri: string; fileName: string };
+type DraftPhoto =
+  | { uri: string; fileName: string }
+  | { uri: string; fileUrl: string };
+
+function requestedPostPhotos(value: string): string[] {
+  try {
+    const urls: unknown = JSON.parse(value);
+    if (Array.isArray(urls)) {
+      return [...new Set(urls.filter((url): url is string => typeof url === "string"))]
+        .slice(0, 2);
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+function animalPostDetails(
+  animal: FarmAnimalReview,
+  farmName: string,
+  ownerName?: string,
+) {
+  const rows = animal.sections
+    .flatMap((section) => section.rows)
+    .filter((row) => !row.imageUrl && row.value.trim() && row.value !== "Not provided");
+  const fieldValue = (names: string[]) =>
+    rows.find((row) =>
+      [row.key, row.label].some((field) =>
+        names.includes(field?.toLowerCase().replace(/[^a-z]/g, "") ?? ""),
+      ),
+    )?.value.trim();
+
+  const type = fieldValue(["animaltype", "typeofanimal", "type"]) || animal.species;
+  const speciesField = fieldValue(["species", "animalspecies"]);
+  const species = speciesField && speciesField.toLowerCase() !== type.toLowerCase()
+    ? speciesField
+    : /^(cow|bull|heifer|steer)$/i.test(type) ? "Cattle" : "";
+  const health = fieldValue([
+    "healthstatus",
+    "animalhealthstatus",
+    "currenthealthstatus",
+    "healthcondition",
+    "animalhealth",
+    "currenthealth",
+    "health",
+  ]);
+  const tag = findAnimalTag(rows);
+  const identity = [species, type, tag].filter(Boolean).join(" · ");
+  const subject = [animal.name, identity && `(${identity})`].filter(Boolean).join(" ");
+  const visit = farmName ? `Health check at ${farmName}` : "Health check";
+  const tagline = `${visit}${subject ? ` — ${subject}` : ""}${health ? ` | ${health}` : ""}`;
+  const captionIdentity = [
+    species && `Species: ${species}`,
+    type && `Animal Type: ${type}`,
+    tag && `Tag: ${tag}`,
+  ].filter(Boolean).join(", ");
+  const captionSubject = `${animal.name || "the animal"}${captionIdentity ? ` (${captionIdentity})` : ""}`;
+  const owner = ownerName?.trim();
+  const captionLocation = farmName
+    ? ` at ${farmName}${owner ? ` (owner: ${owner})` : ""}`
+    : owner
+      ? ` at ${owner}'s farm`
+      : "";
+  const healthStatus = health?.replace(/[.!?]+$/, "");
+  const monitoring = "highlighting the importance of regular veterinary care and proactive livestock health monitoring.";
+  const caption = [
+    `A veterinary field visit was conducted${captionLocation} to assess the health of ${captionSubject}.`,
+    healthStatus ? `The current health status is recorded as ${healthStatus}, ${monitoring}` : "",
+  ].filter(Boolean).join(" ");
+  return {
+    tagline: /[.!?]$/.test(tagline) ? tagline : `${tagline}.`,
+    caption,
+    farmLabel: [farmName, owner && `Owner: ${owner}`].filter(Boolean).join(" · "),
+    summary: [
+      animal.name,
+      type && `Animal type: ${type}`,
+      tag && `Tag: ${tag}`,
+      health && `Health status: ${health}`,
+    ].filter(Boolean).join(" · "),
+  };
+}
+
+const rewriteNoteLimit = 400;
+const captionLimit = 1200;
+
+function captionRewriteInput(caption: string) {
+  if (caption.length <= rewriteNoteLimit) return { input: caption, remainder: "" };
+  const boundary = caption.slice(0, rewriteNoteLimit + 1).search(/\s+\S*$/);
+  const split = boundary > 0 ? boundary : rewriteNoteLimit;
+  return {
+    input: caption.slice(0, split).trimEnd(),
+    remainder: caption.slice(split).trimStart(),
+  };
+}
+
+function posterTagline(line: string): string {
+  if (line.length <= 90) return line;
+  const withoutPeriod = line.replace(/\.$/, "");
+  if (withoutPeriod.length <= 90) return withoutPeriod;
+  return `${line.slice(0, 89).trimEnd()}…`;
+}
 
 const colors = {
   background: "#F8F8F2",
@@ -49,10 +153,6 @@ const colors = {
   danger: "#B42318",
   mint: "#E7F5EE",
 };
-
-const SAMPLE_TAGLINE = "Healthy herd, checked today";
-const SAMPLE_NOTE =
-  "Checked the flock this morning. Temperature and appetite were normal. Gave the scheduled vaccination. No wounds or fever.";
 
 const STATUS_LABEL: Record<SocialPostStatus, string> = {
   draft: "Draft",
@@ -100,11 +200,19 @@ function photoFileName(
 
 export default function FarmPostScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ farmId?: string; entryId?: string }>();
+  const params = useLocalSearchParams<{
+    farmId?: string;
+    entryId?: string;
+    postPhotos?: string;
+  }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
+  const selectedPhotoParam = typeof params.postPhotos === "string" ? params.postPhotos : "";
+  const photoLimit = selectedPhotoParam ? 2 : 4;
+  const initializedPhotoSelection = useRef(false);
   const [farmName, setFarmName] = useState("");
   const [animalName, setAnimalName] = useState("");
+  const [postDetails, setPostDetails] = useState({ tagline: "", caption: "", farmLabel: "", summary: "" });
   const [species, setSpecies] = useState("");
   const [photos, setPhotos] = useState<DraftPhoto[]>([]);
   const [fileUrls, setFileUrls] = useState<string[]>([]);
@@ -113,13 +221,15 @@ export default function FarmPostScreen() {
   const [postStatus, setPostStatus] = useState<SocialPostStatus | "">("");
   const [savedMark, setSavedMark] = useState("");
   const [savingAs, setSavingAs] = useState<SocialPostStatus | "">("");
-  const [tagline, setTagline] = useState(SAMPLE_TAGLINE);
+  const [taglineEdit, setTagline] = useState<string>();
+  const tagline = taglineEdit ?? postDetails.tagline;
   const [printedTagline, setPrintedTagline] = useState("");
-  const [note, setNote] = useState(SAMPLE_NOTE);
+  const [note, setNote] = useState("");
   const [posterUri, setPosterUri] = useState("");
   const [posterFileUrl, setPosterFileUrl] = useState("");
   const [postDate, setPostDate] = useState(todayLabel);
-  const [description, setDescription] = useState("");
+  const [captionEdit, setDescription] = useState<string>();
+  const description = captionEdit ?? postDetails.caption;
   const [loading, setLoading] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -143,7 +253,31 @@ export default function FarmPostScreen() {
       if (!animal) throw new Error("This animal is no longer on the farm.");
       setFarmName(review.name);
       setAnimalName(animal.name);
+      const owner = findFarmOwnerName(review);
+      const details = animalPostDetails(animal, review.name, owner);
+      setPostDetails(details);
+      if (owner) {
+        const previousCaption = animalPostDetails(animal, review.name).caption;
+        setDescription((current) =>
+          current === previousCaption ? details.caption : current,
+        );
+      }
       setSpecies(animal.species);
+      if (selectedPhotoParam && !initializedPhotoSelection.current) {
+        const available = new Set(
+          animal.photos.flatMap((url) => [url, aiFarmImageUrl(url)]).filter(Boolean),
+        );
+        const selected = requestedPostPhotos(selectedPhotoParam)
+          .filter((url) => available.has(url));
+        const previews = await Promise.all(
+          selected.map(async (fileUrl) => ({
+            fileUrl,
+            uri: await readableFarmImage(fileUrl).catch(() => fileUrl),
+          })),
+        );
+        initializedPhotoSelection.current = true;
+        setPhotos(previews);
+      }
       setDrafts(await listSocialPosts(farmId, entryId).catch(() => []));
     } catch (cause) {
       setError(
@@ -154,7 +288,7 @@ export default function FarmPostScreen() {
     } finally {
       setLoading(false);
     }
-  }, [entryId, farmId]);
+  }, [entryId, farmId, selectedPhotoParam]);
 
   useFocusEffect(
     useCallback(() => {
@@ -162,12 +296,12 @@ export default function FarmPostScreen() {
     }, [load]),
   );
 
-  const placeholder = [farmName, animalName, species, postDate]
+  const posterDetails = [postDetails.farmLabel, postDetails.summary, postDate]
     .filter(Boolean)
     .join(" · ");
 
   async function addPhotos(source: "camera" | "library") {
-    if (photos.length >= 4) return;
+    if (photos.length >= photoLimit) return;
     setError(null);
     setNotice(null);
     try {
@@ -181,17 +315,17 @@ export default function FarmPostScreen() {
               mediaTypes: ["images"],
               allowsMultipleSelection: true,
               quality: 0.8,
-              selectionLimit: 4 - photos.length,
+              selectionLimit: photoLimit - photos.length,
             });
       if (result.canceled) return;
       const next = result.assets
         .filter((asset) => asset.uri)
-        .slice(0, 4 - photos.length)
+        .slice(0, photoLimit - photos.length)
         .map((asset, index) => ({
           uri: asset.uri,
           fileName: photoFileName(asset, photos.length + index),
         }));
-      setPhotos((current) => [...current, ...next].slice(0, 4));
+      setPhotos((current) => [...current, ...next].slice(0, photoLimit));
       setFileUrls([]);
       setDraftId("");
       setPostStatus("");
@@ -199,7 +333,6 @@ export default function FarmPostScreen() {
       setPosterUri("");
       setPosterFileUrl("");
       setPrintedTagline("");
-      setDescription("");
     } catch {
       setError(
         source === "camera"
@@ -217,12 +350,12 @@ export default function FarmPostScreen() {
     setPosterUri("");
     setPosterFileUrl("");
     setPrintedTagline("");
-    setDescription("");
     setPostDate(todayLabel());
   }
 
   async function prepare() {
     const line = tagline.trim();
+    const caption = description.trim();
     if (!photos.length) {
       setError("Add at least one photo.");
       return;
@@ -231,39 +364,45 @@ export default function FarmPostScreen() {
       setError("Add a tagline.");
       return;
     }
-    if (line === SAMPLE_TAGLINE && note.trim() === SAMPLE_NOTE) {
-      setError("Change the tagline or the note before preparing the post.");
+    if (!caption) {
+      setError("Add a caption.");
       return;
     }
     setPreparing(true);
     setError(null);
     setNotice(null);
     try {
-      const { promptKey, generateThumbnail } = await animalPhotoUploadOptions();
-      const uploaded: string[] = [];
+      const uploadOptions = photos.some((photo) => "fileName" in photo)
+        ? await animalPhotoUploadOptions()
+        : undefined;
+      const sources: string[] = [];
       for (const photo of photos) {
-        uploaded.push(
-          await uploadFarmImage(
-            photo.uri,
-            photo.fileName,
-            farmId,
-            species || "unknown",
-            promptKey,
-            generateThumbnail,
-          ),
+        sources.push(
+          "fileUrl" in photo
+            ? photo.fileUrl
+            : await uploadFarmImage(
+                photo.uri,
+                photo.fileName,
+                farmId,
+                species || "unknown",
+                uploadOptions?.promptKey,
+                uploadOptions?.generateThumbnail,
+              ),
         );
       }
+      const { input, remainder } = captionRewriteInput(caption);
       const post = await prepareFarmPost({
-        fileUrls: uploaded,
-        tagline: line,
-        note: note.trim(),
+        fileUrls: sources,
+        tagline: posterTagline(line),
+        note: input,
         farmName,
         animalName,
         species,
         dateLabel: postDate,
         rewrite: true,
+        description: caption,
       });
-      setFileUrls(uploaded);
+      setFileUrls(sources);
       setDraftId("");
       setPostStatus("");
       setSavedMark("");
@@ -271,7 +410,8 @@ export default function FarmPostScreen() {
       setPrintedTagline(post.tagline);
       setPosterFileUrl(post.posterUrl);
       setPosterUri(await readableFarmImage(post.posterUrl));
-      setDescription(post.description);
+      const rewritten = [post.description.trim(), remainder].filter(Boolean).join("\n\n");
+      setDescription(rewritten.length <= captionLimit ? rewritten : caption);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (cause) {
       setError(
@@ -290,7 +430,7 @@ export default function FarmPostScreen() {
   ): Promise<{ readable: string; posterUrl: string }> {
     const post = await prepareFarmPost({
       fileUrls,
-      tagline: nextTagline,
+      tagline: posterTagline(nextTagline),
       note: note.trim(),
       farmName,
       animalName,
@@ -300,9 +440,7 @@ export default function FarmPostScreen() {
       description: caption,
     });
     const readable = await readableFarmImage(post.posterUrl);
-    setTagline(post.tagline);
     setPrintedTagline(post.tagline);
-    setDescription(post.description);
     setPosterFileUrl(post.posterUrl);
     setPosterUri(readable);
     return { readable, posterUrl: post.posterUrl };
@@ -354,8 +492,8 @@ export default function FarmPostScreen() {
       animalName,
       species,
       dateLabel: postDate,
-      tagline: line,
-      printedTagline: printed || line,
+      tagline: posterTagline(line),
+      printedTagline: printed || posterTagline(line),
       note: note.trim(),
       description: caption,
       posterUrl: poster,
@@ -365,7 +503,7 @@ export default function FarmPostScreen() {
     setDraftId(saved.postId);
     setPosterFileUrl(saved.posterUrl);
     setPostStatus(saved.status);
-    setSavedMark(contentMark(saved.tagline, saved.description, saved.note));
+    setSavedMark(contentMark(line, saved.description, saved.note));
     demoteMark.current = "";
     setDrafts(await listSocialPosts(farmId, entryId).catch(() => []));
     return saved;
@@ -425,7 +563,7 @@ export default function FarmPostScreen() {
     try {
       let image = posterUri;
       let fileUrl = posterFileUrl;
-      if (line && line !== printedTagline && fileUrls.length) {
+      if (line && posterTagline(line) !== printedTagline && fileUrls.length) {
         const printed = await reprint(line, caption);
         image = printed.readable;
         fileUrl = printed.posterUrl;
@@ -444,7 +582,7 @@ export default function FarmPostScreen() {
         dialogTitle: "Share post",
       });
       try {
-        await persist("shared", fileUrl, line);
+        await persist("shared", fileUrl, posterTagline(line));
       } catch (cause) {
         setError(
           cause instanceof Error
@@ -484,9 +622,7 @@ export default function FarmPostScreen() {
   }, [currentMark, draftId, edited, postStatus, saving, sharing]);
 
   const ready = Boolean(posterUri);
-  const taglineChanged = tagline.trim() !== printedTagline;
-  const copyChanged =
-    tagline.trim() !== SAMPLE_TAGLINE || note.trim() !== SAMPLE_NOTE;
+  const taglineChanged = posterTagline(tagline.trim()) !== printedTagline;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -504,7 +640,7 @@ export default function FarmPostScreen() {
               : shownStatus === "draft"
                 ? "This post is a draft. Mark it ready when the wording is set."
                 : "Save a draft or mark it ready to share."
-            : "A sample tagline and note are filled in. Change one of them, then prepare the post."}
+            : "Review and edit the tagline and caption before preparing the post."}
         </Text>
         {loading ? <ActivityIndicator color={colors.green} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -516,21 +652,22 @@ export default function FarmPostScreen() {
                 <Image source={{ uri: posterUri }} style={styles.posterImage} />
               </View>
               <View style={styles.band}>
-                <TextInput
-                  accessibilityLabel="Tagline on the photo"
-                  value={tagline}
-                  onChangeText={setTagline}
-                  placeholder="Edit the tagline"
-                  placeholderTextColor={colors.muted}
-                  maxLength={90}
-                  multiline
-                  style={styles.bandInput}
-                />
                 <Text style={styles.bandDetail}>
-                  {placeholder || "Farm details"}
+                  {posterDetails || "Farm details"}
                 </Text>
               </View>
             </View>
+            <Text style={styles.label}>Tagline</Text>
+            <TextInput
+              accessibilityLabel="Tagline on the photo"
+              value={tagline}
+              onChangeText={setTagline}
+              placeholder="Edit the tagline"
+              placeholderTextColor={colors.muted}
+              maxLength={240}
+              multiline
+              style={[styles.input, styles.taglineInput]}
+            />
             {taglineChanged ? (
               <Text style={styles.notice}>
                 The new tagline is printed on the photo when you share.
@@ -540,7 +677,7 @@ export default function FarmPostScreen() {
             <TextInput
               value={description}
               onChangeText={setDescription}
-              maxLength={1200}
+              maxLength={captionLimit}
               multiline
               style={[styles.input, styles.note]}
             />
@@ -699,7 +836,7 @@ export default function FarmPostScreen() {
                   </Pressable>
                 </View>
               ))}
-              {photos.length < 4 ? (
+              {photos.length < photoLimit ? (
                 <View style={styles.adders}>
                   <Pressable
                     accessibilityRole="button"
@@ -724,20 +861,22 @@ export default function FarmPostScreen() {
             <TextInput
               value={tagline}
               onChangeText={setTagline}
-              placeholder="Healthy herd, checked today"
+              placeholder="Enter a tagline"
               placeholderTextColor={colors.muted}
-              maxLength={90}
-              style={styles.input}
-            />
-            <Text style={styles.label}>Note for the caption</Text>
-            <TextInput
-              value={note}
-              onChangeText={setNote}
-              placeholder="Checked the flock this morning. Temperature and appetite were normal. Gave the scheduled vaccination. No wounds or fever."
-              placeholderTextColor={colors.muted}
-              maxLength={400}
+              maxLength={240}
               multiline
-              style={[styles.input, styles.note]}
+              style={[styles.input, styles.taglineInput]}
+            />
+            <Text style={styles.label}>Caption</Text>
+            <TextInput
+              accessibilityLabel="Caption"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Enter a caption"
+              placeholderTextColor={colors.muted}
+              maxLength={captionLimit}
+              multiline
+              style={[styles.input, styles.captionInput]}
             />
             <View style={styles.card}>
               <Text style={styles.label}>Prompt</Text>
@@ -746,16 +885,16 @@ export default function FarmPostScreen() {
             <View style={styles.card}>
               <Text style={styles.label}>Printed on the photo</Text>
               <Text style={styles.placeholder}>
-                {placeholder || "Farm details"}
+                {posterDetails || "Farm details"}
               </Text>
             </View>
             <Pressable
               accessibilityRole="button"
-              disabled={preparing || loading || !copyChanged || !tagline.trim()}
+              disabled={preparing || loading || !tagline.trim() || !description.trim()}
               onPress={() => void prepare()}
               style={[
                 styles.primary,
-                (!copyChanged || !tagline.trim()) && styles.primaryDisabled,
+                (!tagline.trim() || !description.trim()) && styles.primaryDisabled,
               ]}
             >
               {preparing ? (
@@ -834,6 +973,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
   },
+  taglineInput: { minHeight: 96, lineHeight: 22, textAlignVertical: "top" },
+  captionInput: { minHeight: 144, textAlignVertical: "top" },
   note: { minHeight: 96, textAlignVertical: "top" },
   card: {
     padding: 14,
@@ -905,14 +1046,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 6,
     backgroundColor: "#F8F8F2",
-  },
-  bandInput: {
-    minHeight: 48,
-    padding: 0,
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "800",
-    lineHeight: 26,
   },
   bandDetail: { color: colors.green, fontSize: 13, fontWeight: "600" },
 });

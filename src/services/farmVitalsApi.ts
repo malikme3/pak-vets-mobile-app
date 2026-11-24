@@ -2478,6 +2478,40 @@ export async function addAnimalPhotos(
 ): Promise<void> {
   const nextUrls = urls.filter((url) => url.startsWith("http"));
   if (!nextUrls.length) return;
+  await updateAnimalPhotoValues(farmId, entryId, (values) => {
+    const existing = Array.isArray(values.photos)
+      ? values.photos.filter((item): item is string => typeof item === "string")
+      : [];
+    values.photos = [
+      ...existing,
+      ...nextUrls.filter((url) => !existing.includes(url)),
+    ];
+    return true;
+  });
+}
+
+export async function removeAnimalPhoto(
+  farmId: string,
+  entryId: string,
+  url: string,
+): Promise<string[]> {
+  return updateAnimalPhotoValues(farmId, entryId, (values) => {
+    if (!animalPhotos(values).includes(url)) return false;
+    if (Array.isArray(values.photos)) {
+      values.photos = values.photos.filter((photo) => photo !== url);
+    }
+    for (const key of ["animalPhoto", "photo", "image"]) {
+      if (values[key] === url) delete values[key];
+    }
+    return true;
+  });
+}
+
+async function updateAnimalPhotoValues(
+  farmId: string,
+  entryId: string,
+  update: (values: Record<string, unknown>) => boolean,
+): Promise<string[]> {
   const { data, entries } = await readFarmDocument(farmId);
   const index = entries.findIndex(
     (item) =>
@@ -2490,19 +2524,14 @@ export async function addAnimalPhotos(
   const current = entries[index];
   if (!isObject(current)) throw new Error("This animal could not be updated.");
   const values = isObject(current.values) ? { ...current.values } : {};
-  const existing = Array.isArray(values.photos)
-    ? values.photos.filter((item): item is string => typeof item === "string")
-    : [];
-  values.photos = [
-    ...existing,
-    ...nextUrls.filter((url) => !existing.includes(url)),
-  ];
+  if (!update(values)) return animalPhotos(values);
   const nextEntries = entries.slice();
   nextEntries[index] = { ...current, values };
   await saveFarmDocument(farmId, {
     ...data,
     farmVitals: farmVitalsWithEntries(data, nextEntries),
   });
+  return animalPhotos(values);
 }
 
 export async function updateAnimalHistory(
