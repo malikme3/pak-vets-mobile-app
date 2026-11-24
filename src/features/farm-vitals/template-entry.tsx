@@ -801,7 +801,7 @@ function FieldControl({
         !hideLabel && outlinedLabels && !fileField && styles.outlinedField,
       ]}
     >
-      {!hideLabel && (
+      {!hideLabel && !fileField && (
         <Text
           numberOfLines={outlinedLabels && !fileField ? 1 : undefined}
           style={[
@@ -1113,6 +1113,7 @@ export function TemplateEntryForm({
   outlinedLabels = true,
   showDescription = true,
   compactTitle,
+  showStepTitle = true,
   farmId = "",
   onSubmit,
   renderField,
@@ -1126,6 +1127,7 @@ export function TemplateEntryForm({
   outlinedLabels?: boolean;
   showDescription?: boolean;
   compactTitle?: string;
+  showStepTitle?: boolean;
   farmId?: string;
   onDraftChange?: (answers: Record<string, unknown>) => void;
   renderField?: (field: FarmTemplateField) => ReactNode;
@@ -1193,7 +1195,16 @@ export function TemplateEntryForm({
               ...(detail && (!listed || breedOptions) ? [detail] : []),
             ]
           : [field],
-      ),
+      ).filter((field) => {
+        const isLactation = `${field.key} ${field.label}`
+          .toLowerCase()
+          .includes("lactation");
+        if (template.type !== "animal" || !isLactation) return true;
+        const gender = Object.entries(answers).find(([key]) =>
+          ["gender", "sex"].includes(key.toLowerCase()),
+        )?.[1];
+        return typeof gender === "string" && gender.trim().toLowerCase() === "female";
+      }),
     }))
     .filter((step) => step.fields.length > 0);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1209,6 +1220,16 @@ export function TemplateEntryForm({
 
   function changeAnswer(key: string, value: Answer) {
     const next = { ...answers, [key]: value };
+    if (
+      template.type === "animal" &&
+      ["gender", "sex"].includes(key.toLowerCase()) &&
+      (typeof value !== "string" || value.trim().toLowerCase() !== "female")
+    ) {
+      for (const field of fields) {
+        if (`${field.key} ${field.label}`.toLowerCase().includes("lactation"))
+          delete next[field.key];
+      }
+    }
     const inlineName =
       breed && (key === breed.category.key || key === breed.speciesKey)
         ? breed.nameKey
@@ -1237,6 +1258,35 @@ export function TemplateEntryForm({
     const fields = steps.flatMap((step) => step.fields);
     const nextErrors: Record<string, string> = {};
     collectErrors(fields, answers, "", false, nextErrors);
+    if (template.type === "farm") {
+      const normalized = (field: FarmTemplateField) =>
+        `${field.key}${field.label}`.toLowerCase().replace(/[^a-z]/g, "");
+      const findCount = (names: string[]) => {
+        const field = fields.find((candidate) => names.some((name) => normalized(candidate).includes(name)));
+        if (!field) return undefined;
+        const value = answers[field.key];
+        return typeof value === "string" && value.trim() ? Number(value) : undefined;
+      };
+      const totalField = fields.find((field) => normalized(field).includes("totalanimal"));
+      const total = findCount(["totalanimal"]);
+      const counts = ["milkinganimal", "dryanimal", "younganimal", "pregnantanimal"]
+        .map((name) => findCount([name]))
+        .filter((value): value is number => value !== undefined && Number.isFinite(value));
+      if (totalField && total !== undefined && Number.isFinite(total)) {
+        const categoryFields = fields.filter((field) =>
+          ["milkinganimal", "dryanimal", "younganimal", "pregnantanimal"].some((name) => normalized(field).includes(name)),
+        );
+        for (const field of categoryFields) {
+          const value = answers[field.key];
+          if (typeof value === "string" && value.trim() && Number(value) > total) {
+            nextErrors[field.key] = `Cannot exceed Total Animal (${total}).`;
+          }
+        }
+        if (counts.length && counts.reduce((sum, value) => sum + value, 0) > total) {
+          nextErrors[totalField.key] = "The animal category counts cannot add up to more than Total Animal.";
+        }
+      }
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       const found = steps.findIndex((step) =>
@@ -1273,7 +1323,7 @@ export function TemplateEntryForm({
       ) : null}
       {activeStep ? (
         <View style={styles.step}>
-          {!compactTitle && steps.length === 1 && activeStep.title ? (
+          {showStepTitle && !compactTitle && steps.length === 1 && activeStep.title ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
           {layoutRows(activeStep.fields, separateUtils).map((row) => (

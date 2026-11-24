@@ -12,9 +12,10 @@ import {
   farmCard,
   formatFarmDate,
 } from "../features/farm-vitals/presentation";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -38,9 +39,12 @@ import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import { SpeciesIcon } from "../components/SpeciesIcon";
 import {
   getFarmReview,
+  deleteFarmRecord,
   listAdditionalFlows,
   readableFarmImage,
   saveFarmProfileImages,
+  farmProfilePhotoPrompt,
+  aiFarmImageUrl,
   uploadFarmImage,
   type AdditionalFlow,
   type FarmReview,
@@ -57,6 +61,18 @@ const colors = {
   danger: "#B42318",
   mint: "#E7F5EE",
 };
+
+async function availableAiProfilePhoto(fileUrl: string): Promise<string | undefined> {
+  const enhancedUrl = aiFarmImageUrl(fileUrl);
+  if (!enhancedUrl) return;
+  try {
+    const enhanced = await readableFarmImage(enhancedUrl);
+    await Image.getSize(enhanced);
+    return enhanced;
+  } catch {
+    return;
+  }
+}
 
 function visibleSections(review: FarmReview): FarmReviewSection[] {
   return review.sections.filter(
@@ -133,6 +149,7 @@ export default function FarmDashboardScreen() {
     ? params.farmId[0]
     : params.farmId;
   const [review, setReview] = useState<FarmReview | null>(null);
+  const photoLoadVersion = useRef(0);
   const [photoRefreshToken, setPhotoRefreshToken] = useState(0);
   const [flows, setFlows] = useState<AdditionalFlow[]>([]);
   const [opening, setOpening] = useState(true);
@@ -153,6 +170,7 @@ export default function FarmDashboardScreen() {
   );
 
   const openFarm = useCallback(async (farmId: string, quiet = false) => {
+    const photoLoadId = ++photoLoadVersion.current;
     if (!quiet) setOpening(true);
     setError(null);
     try {
@@ -171,6 +189,18 @@ export default function FarmDashboardScreen() {
           : Promise.resolve(""),
       ]);
       setProfilePhotoUrls({ farm: farmPhotoUrl, owner: ownerPhotoUrl });
+      for (const [kind, fileUrl] of [
+        ["farm", next.farmPhotoUrl],
+        ["owner", next.ownerPhotoUrl],
+      ] as const) {
+        if (!fileUrl) continue;
+        void availableAiProfilePhoto(fileUrl).then((enhanced) => {
+          if (!enhanced || photoLoadVersion.current !== photoLoadId) return;
+          setProfilePhotoUrls((current) =>
+            ({ ...current, [kind]: enhanced }),
+          );
+        });
+      }
       setFlows(types);
       if (!quiet) {
         setOpenSections({});
@@ -200,25 +230,29 @@ export default function FarmDashboardScreen() {
       const asset = result.assets?.[0];
       if (result.canceled || !asset?.uri) return;
       setProfilePhotoSaving(kind);
+      setProfilePhotoUrls((current) => ({ ...current, [kind]: asset.uri }));
       const extension =
         /\.([a-z0-9]+)$/i.exec(asset.fileName ?? "")?.[1] ??
         (asset.mimeType?.split("/")[1] === "jpeg"
           ? "jpg"
           : (asset.mimeType?.split("/")[1] ?? "jpg"));
+      const promptKey = await farmProfilePhotoPrompt();
       const photoUrl = await uploadFarmImage(
         asset.uri,
         `${kind}-profile-${Date.now()}.${extension}`,
         farmId,
         "farm",
+        promptKey,
       );
-      const readableUrl = await readableFarmImage(photoUrl);
       const changes =
         kind === "farm"
           ? { farmPhotoUrl: photoUrl }
           : { ownerPhotoUrl: photoUrl };
       await saveFarmProfileImages(farmId, changes);
       setReview((current) => (current ? { ...current, ...changes } : current));
+      const readableUrl = await readableFarmImage(photoUrl);
       setProfilePhotoUrls((current) => ({ ...current, [kind]: readableUrl }));
+      setProfilePhotoSaving(null);
     } catch (cause) {
       setProfilePhotoError(
         cause instanceof Error
@@ -235,6 +269,26 @@ export default function FarmDashboardScreen() {
       ...current,
       [key]: !(current[key] ?? fallback),
     }));
+  }
+
+  function confirmDeleteRecord(entryId: string, name: string) {
+    Alert.alert("Remove record?", `Remove ${name} from this farm?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          void deleteFarmRecord(review!.farmId, entryId)
+            .then(() => openFarm(review!.farmId, true))
+            .catch((cause) =>
+              Alert.alert(
+                "Could not remove record",
+                cause instanceof Error ? cause.message : "Try again.",
+              ),
+            );
+        },
+      },
+    ]);
   }
 
   useFocusEffect(
@@ -601,8 +655,8 @@ export default function FarmDashboardScreen() {
                       review.animals.map((animal) => {
                         const date = formatFarmDate(animal.submittedAt);
                         return (
+                          <View key={animal.entryId} style={styles.recordRowWithRemove}>
                           <Pressable
-                            key={animal.entryId}
                             accessibilityRole="button"
                             accessibilityLabel={`Open ${animal.name}`}
                             onPress={() =>
@@ -614,7 +668,7 @@ export default function FarmDashboardScreen() {
                                 },
                               })
                             }
-                            style={styles.row}
+                            style={[styles.row, styles.recordMain]}
                           >
                             <View style={styles.avatar}>
                               {animal.species ? (
@@ -645,6 +699,15 @@ export default function FarmDashboardScreen() {
                               color={colors.green}
                             />
                           </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${animal.name}`}
+                            onPress={() => confirmDeleteRecord(animal.entryId, animal.name)}
+                            style={styles.removeRecordButton}
+                          >
+                            <Feather name="trash-2" size={15} color={colors.danger} />
+                          </Pressable>
+                          </View>
                         );
                       })
                     ) : (
@@ -656,8 +719,8 @@ export default function FarmDashboardScreen() {
                     entries.map((record) => {
                       const photo = recordPhotoUrls(record.sections)[0];
                       return (
+                        <View key={record.entryId} style={styles.recordRowWithRemove}>
                         <Pressable
-                          key={record.entryId}
                           accessibilityRole="button"
                           accessibilityLabel={
                             photo
@@ -678,9 +741,7 @@ export default function FarmDashboardScreen() {
                               },
                             })
                           }
-                          style={
-                            photo ? [styles.row, styles.photoRow] : styles.row
-                          }
+                          style={[styles.row, styles.recordMain, photo && styles.photoRow]}
                         >
                           <RecordPhoto
                             key={`${photo ?? record.entryId}-${photoRefreshToken}`}
@@ -705,6 +766,15 @@ export default function FarmDashboardScreen() {
                             color={colors.green}
                           />
                         </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${record.name}`}
+                          onPress={() => confirmDeleteRecord(record.entryId, record.name)}
+                          style={styles.removeRecordButton}
+                        >
+                          <Feather name="trash-2" size={17} color={colors.danger} />
+                        </Pressable>
+                        </View>
                       );
                     })
                   ) : (
@@ -975,6 +1045,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     ...farmCard,
+  },
+  recordRowWithRemove: { flexDirection: "row", alignItems: "center", gap: 8 },
+  recordMain: { flex: 1, paddingRight: 42 },
+  removeRecordButton: {
+    position: "absolute",
+    top: 7,
+    right: 7,
+    width: 27,
+    height: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    elevation: 2,
   },
   photoRow: { position: "relative", overflow: "hidden" },
   rowTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },

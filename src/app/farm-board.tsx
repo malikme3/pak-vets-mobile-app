@@ -24,6 +24,7 @@ import * as Location from "expo-location";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { distanceKm, type Coordinates } from "../utils/coordinates";
 import {
+  aiFarmImageUrl,
   listFarmDashboard,
   readableFarmImage,
   type FarmDashboardEntry,
@@ -40,6 +41,18 @@ const colors = {
   mint: "#E8F4ED",
   field: "#F5F7F3",
 };
+
+async function availableAiProfilePhoto(fileUrl: string): Promise<string | undefined> {
+  const enhancedUrl = aiFarmImageUrl(fileUrl);
+  if (!enhancedUrl) return;
+  try {
+    const enhanced = await readableFarmImage(enhancedUrl);
+    await Image.getSize(enhanced);
+    return enhanced;
+  } catch {
+    return;
+  }
+}
 
 function isOwnerGroup(row: FarmDashboardEntry["rows"][number]): boolean {
   return row.source === "contact" || /owner|contact/i.test(row.groupKey ?? "");
@@ -112,6 +125,16 @@ function FarmCardCover({
     ]).then(([farmImage, ownerImage]) => {
       if (!cancelled) setImages({ farm: farmImage, owner: ownerImage });
     });
+    for (const [kind, fileUrl] of [
+      ["farm", farm.farmPhotoUrl],
+      ["owner", farm.ownerPhotoUrl],
+    ] as const) {
+      if (!fileUrl) continue;
+      void availableAiProfilePhoto(fileUrl).then((enhanced) => {
+        if (enhanced && !cancelled)
+          setImages((current) => ({ ...current, [kind]: enhanced }));
+      });
+    }
     return () => {
       cancelled = true;
     };

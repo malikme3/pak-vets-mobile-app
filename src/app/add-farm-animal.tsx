@@ -12,6 +12,7 @@ import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import { breedEntryTemplate } from "../features/farm-vitals/breed-entry";
+import { entryDefaults } from "../features/farm-vitals/entry-defaults";
 import {
   singleEntryHeading,
   TemplateEntryForm,
@@ -20,6 +21,7 @@ import {
   addAnimalRecord,
   formTypeTitle,
   getActiveTemplate,
+  getFarmAnimalCount,
   type ActiveFarmTemplate,
 } from "../services/farmVitalsApi";
 
@@ -47,6 +49,7 @@ export default function AddFarmAnimalScreen() {
     (typeof params.flowLabel === "string" && params.flowLabel.trim()) ||
     formTypeTitle(kind);
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
+  const [initialValues, setInitialValues] = useState<Record<string, unknown>>({});
   const [breedAnswers, setBreedAnswers] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,10 +64,23 @@ export default function AddFarmAnimalScreen() {
     setLoading(true);
     setError(null);
     try {
-      const loaded = await getActiveTemplate(kind);
+      const [loaded, animalCount] = await Promise.all([
+        getActiveTemplate(kind),
+        kind === "animal"
+          ? getFarmAnimalCount(farmId).catch(() => undefined)
+          : undefined,
+      ]);
       if (kind === "breed") {
         breedEntryTemplate(loaded, "", "", {}, true);
         setBreedAnswers({});
+      }
+      if (kind === "animal") {
+        setInitialValues(
+          await entryDefaults(
+            loaded,
+            animalCount === undefined ? undefined : `animal-${animalCount + 1}`,
+          ),
+        );
       }
       setTemplate(loaded);
     } catch (cause) {
@@ -151,8 +167,10 @@ export default function AddFarmAnimalScreen() {
         {entryTemplate ? (
           <TemplateEntryForm
             template={entryTemplate}
+            initialValues={kind === "animal" ? initialValues : undefined}
             onDraftChange={kind === "breed" ? setBreedAnswers : undefined}
             showDescription={false}
+            showStepTitle={false}
             compactTitle={compactHeading ? label : undefined}
             submitLabel={kind === "animal" ? `Add ${label}` : "Save"}
             saving={saving}

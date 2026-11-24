@@ -256,6 +256,18 @@ export async function animalPhotoUploadOptions(): Promise<{
   }
 }
 
+export async function farmProfilePhotoPrompt(): Promise<string> {
+  try {
+    const template = await getActiveTemplate("farm");
+    return (
+      firstConfiguredPhoto(template.form.steps.flatMap((step) => step.fields))
+        ?.promptKey ?? ""
+    );
+  } catch {
+    return "";
+  }
+}
+
 export async function uploadFarmMedia(
   uri: string,
   fileName: string,
@@ -1408,6 +1420,26 @@ function farmContactValues(entries: unknown[]): Record<string, unknown> {
   return isObject(contact) && isObject(contact.values) ? contact.values : {};
 }
 
+function firstFarmFormPhoto(
+  fields: FarmTemplateField[],
+  values: Record<string, unknown>,
+): string | undefined {
+  for (const field of fields) {
+    const value = values[field.key];
+    if (
+      (field.type === "image" || field.type === "upload") &&
+      typeof value === "string" &&
+      /^https?:\/\//i.test(value)
+    ) {
+      return value;
+    }
+    if (field.fields?.length && isObject(value)) {
+      const nested = firstFarmFormPhoto(field.fields, value);
+      if (nested) return nested;
+    }
+  }
+}
+
 async function farmEntryValues(
   farmId: string,
   contactKey?: string,
@@ -1433,6 +1465,13 @@ async function farmEntryValues(
       isObject(item) && isObject(item.form) && item.form.entity === "animal",
   ).length;
   const values = isObject(entry) && isObject(entry.values) ? entry.values : {};
+  const farmForm = isObject(entry) && isObject(entry.form)
+    ? parseForm(entry.form)
+    : null;
+  const formPhoto = firstFarmFormPhoto(
+    farmForm?.steps.flatMap((step) => step.fields) ?? [],
+    values,
+  );
   const inline = contactKey ? values[contactKey] : undefined;
   const contact = contactKey ? farmContactValues(entries) : {};
   const contactValues = { ...contact };
@@ -1445,8 +1484,8 @@ async function farmEntryValues(
   return {
     values: contactKey ? { ...values, [contactKey]: contactValues } : values,
     animalCount,
-    ...(text(profileImages.farmPhotoUrl)
-      ? { farmPhotoUrl: text(profileImages.farmPhotoUrl) }
+    ...(text(profileImages.farmPhotoUrl) || formPhoto
+      ? { farmPhotoUrl: text(profileImages.farmPhotoUrl) || formPhoto }
       : {}),
     ...(text(profileImages.ownerPhotoUrl)
       ? { ownerPhotoUrl: text(profileImages.ownerPhotoUrl) }
@@ -1529,7 +1568,7 @@ export async function listFarmDashboard(
           animalCount: farm.animalCount ?? 0,
         };
         const entry =
-          projected && hasOwner
+          projected && hasOwner && farm.farmPhotoUrl
             ? summary
             : await farmEntryValues(farm.farmId, contactKey).catch(() => summary);
         const values = entry.values;
@@ -1983,9 +2022,16 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
   const record = payload.data;
   const data = isObject(record.data) ? record.data : {};
   const vitals = isObject(data.farmVitals) ? data.farmVitals : {};
+  const recordVitals = isObject(record.farmVitals) ? record.farmVitals : {};
   const profileImages = isObject(vitals.profileImages)
     ? vitals.profileImages
-    : {};
+    : isObject(recordVitals.profileImages)
+      ? recordVitals.profileImages
+      : isObject(data.profileImages)
+        ? data.profileImages
+        : isObject(record.profileImages)
+          ? record.profileImages
+          : {};
   const entries = Array.isArray(vitals.entries) ? vitals.entries : [];
   const entry = [...entries]
     .reverse()
@@ -2106,8 +2152,16 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
     farmId: text(record.farmId, farmId),
     ownerName: text(contact.full_name).trim() || undefined,
     ownerPhone: text(contact.phone).trim() || undefined,
-    farmPhotoUrl: text(profileImages.farmPhotoUrl) || undefined,
-    ownerPhotoUrl: text(profileImages.ownerPhotoUrl) || undefined,
+    farmPhotoUrl:
+      text(profileImages.farmPhotoUrl) ||
+      text(data.farmPhotoUrl) ||
+      text(record.farmPhotoUrl) ||
+      undefined,
+    ownerPhotoUrl:
+      text(profileImages.ownerPhotoUrl) ||
+      text(data.ownerPhotoUrl) ||
+      text(record.ownerPhotoUrl) ||
+      undefined,
     headerBackgroundImageUrl: farmHeaderImage,
     name: namedText(values, text(form?.name, "Farm")),
     submittedAt:
@@ -2147,6 +2201,42 @@ async function readFarmDocument(farmId: string): Promise<{
     entries:
       isObject(vitals) && Array.isArray(vitals.entries) ? vitals.entries : [],
   };
+}
+
+export async function getFarmAnimalCount(farmId: string): Promise<number> {
+  const { entries } = await readFarmDocument(farmId);
+  return entries.filter(
+    (item) =>
+      isObject(item) && isObject(item.form) && item.form.entity === "animal",
+  ).length;
+}
+
+export async function deleteFarmRecord(
+  farmId: string,
+  entryId: string,
+): Promise<void> {
+  const { data, entries } = await readFarmDocument(farmId);
+  const target = entries.find(
+    (item) => isObject(item) && item.entryId === entryId,
+  );
+  const removeLinked =
+    isObject(target) && isObject(target.form) && target.form.entity === "animal";
+  const updatedEntries = entries.filter(
+    (item) =>
+      !isObject(item) ||
+      (item.entryId !== entryId &&
+        !(removeLinked && item.animalEntryId === entryId)),
+  );
+  if (updatedEntries.length === entries.length)
+    throw new Error("This record could not be found.");
+  await saveFarmDocument(farmId, {
+    ...data,
+    farmVitals: {
+      ...(isObject(data.farmVitals) ? data.farmVitals : {}),
+      version: 1,
+      entries: updatedEntries,
+    },
+  });
 }
 
 export async function saveFarmProfileImages(

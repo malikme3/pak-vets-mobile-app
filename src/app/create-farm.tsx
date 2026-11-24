@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
+import { entryDefaults } from "../features/farm-vitals/entry-defaults";
 import { TemplateEntryForm } from "../features/farm-vitals/template-entry";
 import {
   createFarmRecord,
@@ -28,6 +29,7 @@ const colors = {
 export default function CreateFarmScreen() {
   const router = useRouter();
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
+  const [initialValues, setInitialValues] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,9 @@ export default function CreateFarmScreen() {
     setLoading(true);
     setError(null);
     try {
-      setTemplate(await getActiveTemplate("farm"));
+      const loaded = await getActiveTemplate("farm");
+      setInitialValues(await entryDefaults(loaded));
+      setTemplate(loaded);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -96,6 +100,7 @@ export default function CreateFarmScreen() {
         {template ? (
           <TemplateEntryForm
             template={template}
+            initialValues={initialValues}
             showDescription={false}
             submitLabel="Add farm"
             saving={saving}
