@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -5,7 +6,6 @@ import {
   ActivityIndicator,
   Text,
   TextInput,
-  ScrollView,
   TouchableOpacity,
   Alert,
 } from "react-native";
@@ -98,7 +98,10 @@ export default function CreateCaseScreen() {
     }
   }, [animalId, doctor, doctorLoading, router]);
 
-  const complaintTrimmed = useMemo(() => chiefComplaint.trim(), [chiefComplaint]);
+  const complaintTrimmed = useMemo(
+    () => chiefComplaint.trim(),
+    [chiefComplaint],
+  );
   const canContinue =
     Boolean(doctor?.doctorId) &&
     Boolean(animalId && animalId > 0 && Number.isFinite(animalId)) &&
@@ -107,7 +110,12 @@ export default function CreateCaseScreen() {
     !submitting;
 
   const uploadFileToS3 = useCallback(
-    async (fileUri: string, s3Key: string, contentType: string, tagValue?: string) => {
+    async (
+      fileUri: string,
+      s3Key: string,
+      contentType: string,
+      tagValue?: string,
+    ) => {
       const tags = tagValue ? `type=${tagValue}` : undefined;
       const bucketName = getBucketName();
       const { signedUrl } = await getUploadSignedUrl(bucketName, s3Key, tags);
@@ -120,8 +128,12 @@ export default function CreateCaseScreen() {
         headers: { "Content-Type": contentType },
       });
       if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText);
-        throw new Error(`S3 upload failed: ${errorText || response.statusText}`);
+        const errorText = await response
+          .text()
+          .catch(() => response.statusText);
+        throw new Error(
+          `S3 upload failed: ${errorText || response.statusText}`,
+        );
       }
     },
     [],
@@ -156,7 +168,8 @@ export default function CreateCaseScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const name =
-      asset.fileName ?? `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+      asset.fileName ??
+      `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
     setDiseaseEvidenceFiles((prev) => [
       ...prev,
       {
@@ -178,7 +191,8 @@ export default function CreateCaseScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const name =
-      asset.fileName ?? `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+      asset.fileName ??
+      `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
     setDiseaseEvidenceFiles((prev) => [
       ...prev,
       {
@@ -220,7 +234,8 @@ export default function CreateCaseScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const name =
-      asset.fileName ?? `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+      asset.fileName ??
+      `gallery-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
     setClinicalSignsFiles((prev) => [
       ...prev,
       {
@@ -241,7 +256,8 @@ export default function CreateCaseScreen() {
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     const name =
-      asset.fileName ?? `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
+      asset.fileName ??
+      `camera-${Date.now()}.${asset.uri.split(".").pop() ?? "jpg"}`;
     setClinicalSignsFiles((prev) => [
       ...prev,
       {
@@ -315,7 +331,9 @@ export default function CreateCaseScreen() {
 
   if (doctorLoading || !doctor || !animalId || !Number.isFinite(animalId)) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <StatusBar style="auto" />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -325,10 +343,14 @@ export default function CreateCaseScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <StatusBar style="auto" />
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.text }]}>Disease Intake</Text>
+      <FormScrollView contentContainerStyle={styles.content}>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Disease Intake
+        </Text>
         <Text style={[styles.subtitle, { color: colors.muted }]}>
           Main complaint is required before proceeding to case details.
         </Text>
@@ -349,7 +371,9 @@ export default function CreateCaseScreen() {
         />
 
         <Card style={styles.sectionCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Lab Report / Disease Evidence</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Lab Report / Disease Evidence
+          </Text>
           <View style={styles.radioRow}>
             {(
               [
@@ -367,36 +391,80 @@ export default function CreateCaseScreen() {
                     styles.radioChip,
                     {
                       borderColor: selected ? colors.primary : colors.border,
-                      backgroundColor: selected ? `${colors.primary}20` : colors.surface,
+                      backgroundColor: selected
+                        ? `${colors.primary}20`
+                        : colors.surface,
                     },
                   ]}
                 >
-                  <Text style={[styles.radioText, { color: colors.text }]}>{label}</Text>
+                  <Text style={[styles.radioText, { color: colors.text }]}>
+                    {label}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
           <View style={styles.buttonRow}>
-            <Button title="Choose Image" onPress={addDiseaseEvidenceFromGallery} variant="secondary" style={styles.selectButton} />
-            <Button title="Take Photo" onPress={addDiseaseEvidenceFromCamera} variant="secondary" style={styles.selectButton} />
+            <Button
+              title="Choose Image"
+              onPress={addDiseaseEvidenceFromGallery}
+              variant="secondary"
+              style={styles.selectButton}
+            />
+            <Button
+              title="Take Photo"
+              onPress={addDiseaseEvidenceFromCamera}
+              variant="secondary"
+              style={styles.selectButton}
+            />
           </View>
-          <Button title="Pick File" onPress={addDiseaseEvidenceFile} variant="secondary" style={styles.sectionAction} />
+          <Button
+            title="Pick File"
+            onPress={addDiseaseEvidenceFile}
+            variant="secondary"
+            style={styles.sectionAction}
+          />
           {diseaseEvidenceFiles.map((file, idx) => (
-            <Text key={`${file.uri}-${idx}`} style={[styles.fileItem, { color: colors.muted }]} numberOfLines={1}>
+            <Text
+              key={`${file.uri}-${idx}`}
+              style={[styles.fileItem, { color: colors.muted }]}
+              numberOfLines={1}
+            >
               {file.imageType}: {file.name}
             </Text>
           ))}
         </Card>
 
         <Card style={styles.sectionCard}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Clinical Signs</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Clinical Signs
+          </Text>
           <View style={styles.buttonRow}>
-            <Button title="Choose Image" onPress={addClinicalFromGallery} variant="secondary" style={styles.selectButton} />
-            <Button title="Take Photo" onPress={addClinicalFromCamera} variant="secondary" style={styles.selectButton} />
+            <Button
+              title="Choose Image"
+              onPress={addClinicalFromGallery}
+              variant="secondary"
+              style={styles.selectButton}
+            />
+            <Button
+              title="Take Photo"
+              onPress={addClinicalFromCamera}
+              variant="secondary"
+              style={styles.selectButton}
+            />
           </View>
-          <Button title="Pick File" onPress={addClinicalFile} variant="secondary" style={styles.sectionAction} />
+          <Button
+            title="Pick File"
+            onPress={addClinicalFile}
+            variant="secondary"
+            style={styles.sectionAction}
+          />
           {clinicalSignsFiles.map((file, idx) => (
-            <Text key={`${file.uri}-${idx}`} style={[styles.fileItem, { color: colors.muted }]} numberOfLines={1}>
+            <Text
+              key={`${file.uri}-${idx}`}
+              style={[styles.fileItem, { color: colors.muted }]}
+              numberOfLines={1}
+            >
               Clinical: {file.name}
             </Text>
           ))}
@@ -414,7 +482,7 @@ export default function CreateCaseScreen() {
           loading={createCaseMutation.isPending || submitting}
           style={styles.nextButton}
         />
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

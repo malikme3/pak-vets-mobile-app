@@ -28,7 +28,7 @@ export function FlowPageHeading({ onBack, title }: Props) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go to app home"
-          onPress={() => router.replace("/")}
+          onPress={() => router.replace("/farm-vitals")}
           style={({ pressed }) => [
             styles.homeButton,
             pressed && styles.pressed,

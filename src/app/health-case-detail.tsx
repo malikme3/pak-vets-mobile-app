@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { CaseFeatureEditor } from "../features/farm-vitals/case-feature-editor";
 import { FlowPageHeading } from "../features/farm-vitals/flow-page-heading";
 import * as DocumentPicker from "expo-document-picker";
@@ -9,7 +10,6 @@ import {
   Image,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -353,7 +353,7 @@ export default function HealthCaseDetailScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
@@ -787,7 +787,7 @@ export default function HealthCaseDetailScreen() {
             ) : null}
           </>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

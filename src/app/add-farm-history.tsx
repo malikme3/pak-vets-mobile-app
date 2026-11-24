@@ -1,10 +1,10 @@
-import { farmCard } from "../features/farm-vitals/presentation";
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -25,6 +25,7 @@ import {
   getAnimalHistoryDraft,
   getFarmReview,
   updateAnimalHistory,
+  withMedicalHistorySymptoms,
   type ActiveFarmTemplate,
   type FarmTemplateField,
 } from "../services/farmVitalsApi";
@@ -88,6 +89,7 @@ export default function AddFarmHistoryScreen() {
     entryId?: string;
     species?: string;
     flowLabel?: string;
+    fromRecordDetails?: string;
   }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const animalEntryId =
@@ -151,7 +153,10 @@ export default function AddFarmHistoryScreen() {
             type: draft.kind,
             updatedAt: draft.updatedAt,
             name: draft.form.name,
-            form: draft.form,
+            form:
+              draft.kind === "medical-history"
+                ? withMedicalHistorySymptoms(draft.form)
+                : draft.form,
             adminConfig: {},
           });
       } else if (requestedKind) {
@@ -169,7 +174,11 @@ export default function AddFarmHistoryScreen() {
           setSpecies(selectedSpecies);
           setBreedCategory("");
         }
-        setTemplate(loaded);
+        setTemplate(
+          requestedKind === "medical-history"
+            ? { ...loaded, form: withMedicalHistorySymptoms(loaded.form) }
+            : loaded,
+        );
       }
     } catch (cause) {
       setError(
@@ -205,7 +214,9 @@ export default function AddFarmHistoryScreen() {
           farmId,
           entryId,
           entryValues,
-          kind === "breed" ? entryTemplate.form : undefined,
+          kind === "breed" || kind === "medical-history"
+            ? entryTemplate.form
+            : undefined,
         );
       else
         await addAnimalHistory(
@@ -215,13 +226,28 @@ export default function AddFarmHistoryScreen() {
           entryValues,
         );
       setSaved(true);
-      if (!entryId) {
-        Alert.alert(
-          `${title} added`,
-          "",
-          [{ text: "OK", onPress: () => router.back() }],
-          { cancelable: false },
-        );
+      const message = entryId ? "Changes saved" : `${title} added`;
+      const returnAfterSave = () => {
+        if (
+          entryId &&
+          params.fromRecordDetails === "1" &&
+          router.canDismiss()
+        ) {
+          router.dismiss(2);
+        } else {
+          router.back();
+        }
+      };
+      if (Platform.OS === "web") {
+        const browser = globalThis as typeof globalThis & {
+          alert: (message: string) => void;
+        };
+        browser.alert(message);
+        returnAfterSave();
+      } else {
+        Alert.alert(message, "", [{ text: "OK", onPress: returnAfterSave }], {
+          cancelable: false,
+        });
       }
     } catch (cause) {
       setError(
@@ -237,7 +263,7 @@ export default function AddFarmHistoryScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
@@ -246,7 +272,7 @@ export default function AddFarmHistoryScreen() {
           title={
             entryId
               ? `Edit ${compactHeading ?? title}`
-              : compactHeading ?? `Add ${title}`
+              : (compactHeading ?? `Add ${title}`)
           }
         />
         {loading ? (
@@ -288,19 +314,7 @@ export default function AddFarmHistoryScreen() {
             <PhotoVersionsPreview urls={photoUrls} />
           </View>
         ) : null}
-        {saved && entryId ? (
-          <View style={styles.success}>
-            <Text style={styles.stepTitle}>
-              Changes saved
-            </Text>
-            <Pressable accessibilityRole="button" onPress={() => router.back()}>
-              <Text style={styles.retry}>
-                {entryId ? "Back to history" : "Back to animal"}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }
@@ -310,11 +324,9 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 32, gap: 10 },
   status: { flexDirection: "row", alignItems: "center", gap: 10 },
   alert: { gap: 8 },
-  stepTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
   help: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 13 },
   retry: { color: colors.green, fontWeight: "700" },
-  success: { gap: 6, ...farmCard, padding: 14 },
   photos: { gap: 10 },
   photoTitle: { color: colors.ink, fontSize: 16, fontWeight: "700" },
 });

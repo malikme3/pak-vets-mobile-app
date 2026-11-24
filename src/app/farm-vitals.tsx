@@ -121,7 +121,11 @@ export default function FarmVitalsScreen() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() =>
-                    router.push(authStatus === "signedIn" ? "/" : "/login")
+                    router.push(
+                      authStatus === "signedIn"
+                        ? "/doctor-dashboard"
+                        : "/login",
+                    )
                   }
                   style={({ pressed }) => [
                     styles.secondaryAction,

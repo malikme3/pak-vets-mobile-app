@@ -88,7 +88,11 @@ export default function RootLayout() {
                 name="oauthredirect"
                 options={{ title: "Signing In", headerShown: false }}
               />
-              <Stack.Screen name="index" options={{ title: "Home" }} />
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="doctor-dashboard"
+                options={{ title: "Home" }}
+              />
               <Stack.Screen
                 name="animal-details"
                 options={{ title: "Animal Details" }}

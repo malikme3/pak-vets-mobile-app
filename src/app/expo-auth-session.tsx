@@ -23,7 +23,7 @@ export default function ExpoAuthSessionScreen() {
     // If already signed in, redirect home; otherwise redirect back to login.
     // The auth flow continues in the background via the login screen's googleResponse handler.
     const timer = setTimeout(() => {
-      router.replace(status === "signedIn" ? "/" : "/login");
+      router.replace(status === "signedIn" ? "/farm-vitals" : "/login");
     }, 1500);
     return () => clearTimeout(timer);
   }, [router, status]);

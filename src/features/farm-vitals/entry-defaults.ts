@@ -29,7 +29,9 @@ async function currentCoordinates(): Promise<
     const permission = await Location.requestForegroundPermissionsAsync();
     if (!permission.granted) return;
     const position = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, 6000);
       }),
@@ -47,7 +49,9 @@ export async function entryDefaults(
   animalTag?: string,
 ): Promise<Record<string, unknown>> {
   const fields = template.form.steps.flatMap((step) => step.fields);
-  const coords = hasCoordinates(fields) ? await currentCoordinates() : undefined;
+  const coords = hasCoordinates(fields)
+    ? await currentCoordinates()
+    : undefined;
 
   function defaults(fields: FarmTemplateField[]): Record<string, unknown> {
     const values: Record<string, unknown> = {};
@@ -62,7 +66,14 @@ export async function entryDefaults(
         values[field.key] = coords[axis];
       } else if (
         animalTag &&
-        matches(field, ["animaltag", "animaltagid", "tagid", "tag"])
+        matches(field, [
+          "animalid",
+          "animalidtag",
+          "animaltag",
+          "animaltagid",
+          "tagid",
+          "tag",
+        ])
       ) {
         values[field.key] = animalTag;
       }

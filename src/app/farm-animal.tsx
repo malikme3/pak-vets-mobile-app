@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { CollapseSection } from "../features/farm-vitals/collapse-section";
 import { FarmSectionEditor } from "../features/farm-vitals/section-editor";
 import {
@@ -22,7 +23,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -128,7 +128,8 @@ function HistoryList({
   compactRecord?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const singleRecord = compactRecord && records.length === 1 ? records[0] : null;
+  const singleRecord =
+    compactRecord && records.length === 1 ? records[0] : null;
   return (
     <View style={styles.card}>
       <View style={styles.sectionHeader}>
@@ -154,12 +155,16 @@ function HistoryList({
             style={styles.sectionToggle}
           >
             <Text style={styles.historyTitle}>{title}</Text>
-            {onBrowse ? null : (
+            {!onBrowse || records.length ? (
               <Text style={styles.count}>{records.length}</Text>
-            )}
+            ) : null}
             <Feather
               name={
-                onBrowse ? "chevron-right" : open ? "chevron-up" : "chevron-down"
+                onBrowse
+                  ? "chevron-right"
+                  : open
+                    ? "chevron-up"
+                    : "chevron-down"
               }
               size={16}
               color={colors.green}
@@ -321,9 +326,10 @@ export default function FarmAnimalScreen() {
   );
 
   const avatarPhoto = photoPairs.find((pair) => pair.original || pair.enhanced);
-  const avatarAi = avatarPhoto?.enhanced && !missingAi[avatarPhoto.enhanced]
-    ? avatarPhoto.enhanced
-    : undefined;
+  const avatarAi =
+    avatarPhoto?.enhanced && !missingAi[avatarPhoto.enhanced]
+      ? avatarPhoto.enhanced
+      : undefined;
   const detailRows = rows.filter(
     (row) => provided(row) && !/photo|image/i.test(row.label),
   );
@@ -369,7 +375,9 @@ export default function FarmAnimalScreen() {
           disabled && styles.removePhotoDisabled,
         ]}
       >
-        {selected ? <Feather name="check" size={16} color={colors.surface} /> : null}
+        {selected ? (
+          <Feather name="check" size={16} color={colors.surface} />
+        ) : null}
       </Pressable>
     );
   }
@@ -427,7 +435,9 @@ export default function FarmAnimalScreen() {
       try {
         const photos = await removeAnimalPhoto(farmId, animalEntryId, url);
         setPostPhotos((current) =>
-          current.filter((photo) => photo !== url && photo !== aiFarmImageUrl(url)),
+          current.filter(
+            (photo) => photo !== url && photo !== aiFarmImageUrl(url),
+          ),
         );
         setAnimal((current) =>
           current?.entryId === animalEntryId ? { ...current, photos } : current,
@@ -463,7 +473,7 @@ export default function FarmAnimalScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
@@ -509,7 +519,10 @@ export default function FarmAnimalScreen() {
                       accessibilityLabel={`${animal.name} photo`}
                       onError={() => {
                         if (avatarAi)
-                          setMissingAi((current) => ({ ...current, [avatarAi]: true }));
+                          setMissingAi((current) => ({
+                            ...current,
+                            [avatarAi]: true,
+                          }));
                       }}
                     />
                   </Pressable>
@@ -570,7 +583,9 @@ export default function FarmAnimalScreen() {
             >
               <Feather name="share-2" size={16} color={colors.green} />
               <Text style={styles.postText}>
-                {postPhotos.length ? `Prepare post (${postPhotos.length})` : "Prepare post"}
+                {postPhotos.length
+                  ? `Prepare post (${postPhotos.length})`
+                  : "Prepare post"}
               </Text>
             </Pressable>
             {animal.photos.length ? (
@@ -593,7 +608,9 @@ export default function FarmAnimalScreen() {
                         color={colors.green}
                       />
                       <Text style={styles.galleryTabLabel}>
-                        {gallery === "original" ? "Original Gallery" : "AI Gallery"}
+                        {gallery === "original"
+                          ? "Original Gallery"
+                          : "AI Gallery"}
                       </Text>
                     </Pressable>
                   ))}
@@ -602,7 +619,10 @@ export default function FarmAnimalScreen() {
                   Select up to 2 photos for your post ({postPhotos.length}/2).
                 </Text>
                 {photoPairs.map((pair, photoIndex) => (
-                  <View key={`${pair.url}-${pair.index}`} style={styles.photoCard}>
+                  <View
+                    key={`${pair.url}-${pair.index}`}
+                    style={styles.photoCard}
+                  >
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Open original photo ${photoIndex + 1}`}
@@ -779,13 +799,31 @@ export default function FarmAnimalScreen() {
                   }
                 }}
                 onBrowse={
-                  type.key === "health-case"
-                    ? () =>
+                  type.key === "medical-history"
+                    ? () => {
+                        const records = animal.records.filter(
+                          (record) => record.kind === type.key,
+                        );
                         router.push({
-                          pathname: "/animal-case-dashboard",
-                          params: { farmId, animalEntryId: animal.entryId },
-                        })
-                    : undefined
+                          pathname: "/farm-history",
+                          params:
+                            records.length === 1
+                              ? { farmId, entryId: records[0].entryId }
+                              : {
+                                  farmId,
+                                  animalEntryId: animal.entryId,
+                                  kind: type.key,
+                                  title: type.label,
+                                },
+                        });
+                      }
+                    : type.key === "health-case"
+                      ? () =>
+                          router.push({
+                            pathname: "/animal-case-dashboard",
+                            params: { farmId, animalEntryId: animal.entryId },
+                          })
+                      : undefined
                 }
                 onOpenPhoto={(history) =>
                   router.push({
@@ -807,7 +845,7 @@ export default function FarmAnimalScreen() {
             ))}
           </>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

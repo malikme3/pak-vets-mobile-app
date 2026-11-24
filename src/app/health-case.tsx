@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { CaseFlowHeader } from "../features/farm-vitals/case-flow-header";
 import { OutlinedField } from "../features/farm-vitals/outlined-field";
 import { farmCard, farmButton } from "../features/farm-vitals/presentation";
@@ -14,7 +15,6 @@ import {
   Image,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -169,7 +169,7 @@ export default function HealthCaseScreen() {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<Target | null>(null);
-  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const scroll = useRef<ComponentRef<typeof FormScrollView>>(null);
   const saving = useRef(false);
   const drafts = useRef<Record<number, Record<string, unknown>>>({});
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
@@ -528,7 +528,7 @@ export default function HealthCaseScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         ref={scroll}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -693,7 +693,7 @@ export default function HealthCaseScreen() {
             />
           </View>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
       <View style={styles.footer}>
         {busy ? <Text style={styles.help}>{busy}</Text> : null}
         {reviewing ? (

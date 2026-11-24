@@ -1,16 +1,16 @@
+import { FormScrollView } from "../../components/ui/FormScrollView";
 import { farmBorder, farmCard, farmButton } from "./presentation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -1007,7 +1007,8 @@ export function UtilSheet({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
         style={styles.modalRoot}
       >
         <Pressable
@@ -1031,8 +1032,9 @@ export function UtilSheet({
               <Feather name="x" size={18} color={colors.ink} />
             </Pressable>
           </View>
-          <ScrollView
-            style={{ maxHeight: height * 0.62 }}
+          <FormScrollView
+            automaticallyAdjustKeyboardInsets={false}
+            style={{ maxHeight: height * 0.62, flexGrow: 0, flexShrink: 1 }}
             contentContainerStyle={styles.sheetBody}
             keyboardShouldPersistTaps="handled"
           >
@@ -1064,7 +1066,7 @@ export function UtilSheet({
                 ))}
               </FieldRow>
             ))}
-          </ScrollView>
+          </FormScrollView>
           {saveError ? <Text style={styles.error}>{saveError}</Text> : null}
           <View style={styles.modalActions}>
             <Pressable
@@ -1185,26 +1187,31 @@ export function TemplateEntryForm({
   const steps = template.form.steps
     .map((step) => ({
       ...step,
-      fields: entryFields(step.fields).flatMap((field) =>
-        breed && field.id === breed.category.id
-          ? [
-              field,
-              ...(listed && !breed.hasSpecies && breedOptions
-                ? [breedSpeciesField(breed.speciesKey, breedOptions)]
-                : []),
-              ...(detail && (!listed || breedOptions) ? [detail] : []),
-            ]
-          : [field],
-      ).filter((field) => {
-        const isLactation = `${field.key} ${field.label}`
-          .toLowerCase()
-          .includes("lactation");
-        if (template.type !== "animal" || !isLactation) return true;
-        const gender = Object.entries(answers).find(([key]) =>
-          ["gender", "sex"].includes(key.toLowerCase()),
-        )?.[1];
-        return typeof gender === "string" && gender.trim().toLowerCase() === "female";
-      }),
+      fields: entryFields(step.fields)
+        .flatMap((field) =>
+          breed && field.id === breed.category.id
+            ? [
+                field,
+                ...(listed && !breed.hasSpecies && breedOptions
+                  ? [breedSpeciesField(breed.speciesKey, breedOptions)]
+                  : []),
+                ...(detail && (!listed || breedOptions) ? [detail] : []),
+              ]
+            : [field],
+        )
+        .filter((field) => {
+          const isLactation = `${field.key} ${field.label}`
+            .toLowerCase()
+            .includes("lactation");
+          if (template.type !== "animal" || !isLactation) return true;
+          const gender = Object.entries(answers).find(([key]) =>
+            ["gender", "sex"].includes(key.toLowerCase()),
+          )?.[1];
+          return (
+            typeof gender === "string" &&
+            gender.trim().toLowerCase() === "female"
+          );
+        }),
     }))
     .filter((step) => step.fields.length > 0);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1262,28 +1269,52 @@ export function TemplateEntryForm({
       const normalized = (field: FarmTemplateField) =>
         `${field.key}${field.label}`.toLowerCase().replace(/[^a-z]/g, "");
       const findCount = (names: string[]) => {
-        const field = fields.find((candidate) => names.some((name) => normalized(candidate).includes(name)));
+        const field = fields.find((candidate) =>
+          names.some((name) => normalized(candidate).includes(name)),
+        );
         if (!field) return undefined;
         const value = answers[field.key];
-        return typeof value === "string" && value.trim() ? Number(value) : undefined;
+        return typeof value === "string" && value.trim()
+          ? Number(value)
+          : undefined;
       };
-      const totalField = fields.find((field) => normalized(field).includes("totalanimal"));
+      const totalField = fields.find((field) =>
+        normalized(field).includes("totalanimal"),
+      );
       const total = findCount(["totalanimal"]);
-      const counts = ["milkinganimal", "dryanimal", "younganimal", "pregnantanimal"]
+      const counts = [
+        "milkinganimal",
+        "dryanimal",
+        "younganimal",
+        "pregnantanimal",
+      ]
         .map((name) => findCount([name]))
-        .filter((value): value is number => value !== undefined && Number.isFinite(value));
+        .filter(
+          (value): value is number =>
+            value !== undefined && Number.isFinite(value),
+        );
       if (totalField && total !== undefined && Number.isFinite(total)) {
         const categoryFields = fields.filter((field) =>
-          ["milkinganimal", "dryanimal", "younganimal", "pregnantanimal"].some((name) => normalized(field).includes(name)),
+          ["milkinganimal", "dryanimal", "younganimal", "pregnantanimal"].some(
+            (name) => normalized(field).includes(name),
+          ),
         );
         for (const field of categoryFields) {
           const value = answers[field.key];
-          if (typeof value === "string" && value.trim() && Number(value) > total) {
+          if (
+            typeof value === "string" &&
+            value.trim() &&
+            Number(value) > total
+          ) {
             nextErrors[field.key] = `Cannot exceed Total Animal (${total}).`;
           }
         }
-        if (counts.length && counts.reduce((sum, value) => sum + value, 0) > total) {
-          nextErrors[totalField.key] = "The animal category counts cannot add up to more than Total Animal.";
+        if (
+          counts.length &&
+          counts.reduce((sum, value) => sum + value, 0) > total
+        ) {
+          nextErrors[totalField.key] =
+            "The animal category counts cannot add up to more than Total Animal.";
         }
       }
     }
@@ -1323,7 +1354,10 @@ export function TemplateEntryForm({
       ) : null}
       {activeStep ? (
         <View style={styles.step}>
-          {showStepTitle && !compactTitle && steps.length === 1 && activeStep.title ? (
+          {showStepTitle &&
+          !compactTitle &&
+          steps.length === 1 &&
+          activeStep.title ? (
             <Text style={styles.stepTitle}>{activeStep.title}</Text>
           ) : null}
           {layoutRows(activeStep.fields, separateUtils).map((row) => (
@@ -1472,6 +1506,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(23, 61, 50, 0.45)",
   },
   modalCard: {
+    flexShrink: 1,
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,

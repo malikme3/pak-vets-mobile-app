@@ -1,9 +1,9 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   FlatList,
   ActivityIndicator,
   Alert,
@@ -138,7 +138,10 @@ function NearbyAnimalRow({
   onPress: () => void;
 }) {
   const { colors } = useTheme();
-  const title = [cleanOptionalText(animal.species), cleanOptionalText(animal.breed)]
+  const title = [
+    cleanOptionalText(animal.species),
+    cleanOptionalText(animal.breed),
+  ]
     .filter(Boolean)
     .join(" • ");
   const distanceStr =
@@ -288,9 +291,9 @@ export default function SelectAnimalScreen() {
                   animal.farmer?.phoneNumber || "",
                 ).includes(q);
               case "farmer_nic":
-                return normalizeNicForMatch(animal.farmer?.nicNo || "").includes(
-                  q,
-                );
+                return normalizeNicForMatch(
+                  animal.farmer?.nicNo || "",
+                ).includes(q);
               case "farmer_name":
                 return normalizeNameForMatch(
                   animal.farmer?.fullName || "",
@@ -399,7 +402,9 @@ export default function SelectAnimalScreen() {
   const handleAnimalSelect = useCallback(
     async (animal: Animal) => {
       if (createCaseAfterSelect && doctor) {
-        router.replace(`/create-case?animalId=${animal.animalId}&intakeFirst=1`);
+        router.replace(
+          `/create-case?animalId=${animal.animalId}&intakeFirst=1`,
+        );
         return;
       }
       if (!returnTo || typeof returnTo !== "string") {
@@ -671,7 +676,7 @@ export default function SelectAnimalScreen() {
       edges={["top", "bottom"]}
     >
       <StatusBar style={isDark ? "light" : "dark"} />
-      <ScrollView
+      <FormScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, styles.contentWithStickyFooter]}
         showsVerticalScrollIndicator={false}
@@ -837,124 +842,135 @@ export default function SelectAnimalScreen() {
           </TouchableOpacity>
           {findByImageExpanded && (
             <>
-          <SegmentedControl
-            options={[
-              { label: "Face", value: "FACE" },
-              { label: "Ear", value: "EAR" },
-              { label: "Body", value: "BODY" },
-            ]}
-            selectedValue={imageMatchType}
-            onValueChange={(value) => {
-              setImageMatchType(value as ImageMatchType);
-              clearMatchResult();
-            }}
-          />
-          {matching ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={[styles.loadingRowText, { color: colors.muted }]}>
-                Finding animal…
-              </Text>
-            </View>
-          ) : matchResult ? (
-            <Button
-              title="Try another photo"
-              onPress={clearMatchResult}
-              variant="secondary"
-              style={styles.secondaryButton}
-            />
-          ) : (
-            <View style={styles.twoButtonRow}>
-              <Button
-                title="Choose photo"
-                onPress={handleChoosePhoto}
-                variant="secondary"
-                style={styles.halfButton}
+              <SegmentedControl
+                options={[
+                  { label: "Face", value: "FACE" },
+                  { label: "Ear", value: "EAR" },
+                  { label: "Body", value: "BODY" },
+                ]}
+                selectedValue={imageMatchType}
+                onValueChange={(value) => {
+                  setImageMatchType(value as ImageMatchType);
+                  clearMatchResult();
+                }}
               />
-              <Button
-                title="Take photo"
-                onPress={handleTakePhoto}
-                variant="secondary"
-                style={styles.halfButton}
-              />
-            </View>
-          )}
-          {matchResult && !matching && (
-            <View
-              style={[styles.resultBlock, { borderTopColor: colors.border }]}
-            >
-              {matchResult.matchStatus === "MATCH" && matchedAnimal ? (
-                <>
+              {matching ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color={colors.primary} />
                   <Text
-                    style={[styles.matchSuccessText, { color: colors.primary }]}
+                    style={[styles.loadingRowText, { color: colors.muted }]}
                   >
-                    Match ({(matchResult.bestScore * 100).toFixed(0)}%)
+                    Finding animal…
                   </Text>
-                  <TouchableOpacity
-                    style={styles.matchRow}
-                    onPress={() => handleAnimalSelect(matchedAnimal)}
-                    activeOpacity={0.7}
-                  >
-                    <TouchableOpacity
-                      style={[
-                        styles.matchAvatar,
-                        { backgroundColor: colors.border },
-                      ]}
-                      onPress={() =>
-                        router.push(
-                          `/animal-details?animalId=${matchedAnimal.animalId}`,
-                        )
-                      }
-                      activeOpacity={0.7}
-                    >
-                      {matchedFaceUrl ? (
-                        <Image
-                          source={{ uri: matchedFaceUrl }}
-                          style={styles.matchAvatarImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <Text
-                          style={[
-                            styles.matchAvatarPlaceholder,
-                            { color: colors.muted },
-                          ]}
-                        >
-                          ?
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                    <View style={styles.matchRowContent}>
-                      <Text
-                        style={[styles.matchRowTitle, { color: colors.text }]}
-                        numberOfLines={1}
-                      >
-                        {formatAnimalTitle(matchedAnimal)}
-                      </Text>
+                </View>
+              ) : matchResult ? (
+                <Button
+                  title="Try another photo"
+                  onPress={clearMatchResult}
+                  variant="secondary"
+                  style={styles.secondaryButton}
+                />
+              ) : (
+                <View style={styles.twoButtonRow}>
+                  <Button
+                    title="Choose photo"
+                    onPress={handleChoosePhoto}
+                    variant="secondary"
+                    style={styles.halfButton}
+                  />
+                  <Button
+                    title="Take photo"
+                    onPress={handleTakePhoto}
+                    variant="secondary"
+                    style={styles.halfButton}
+                  />
+                </View>
+              )}
+              {matchResult && !matching && (
+                <View
+                  style={[
+                    styles.resultBlock,
+                    { borderTopColor: colors.border },
+                  ]}
+                >
+                  {matchResult.matchStatus === "MATCH" && matchedAnimal ? (
+                    <>
                       <Text
                         style={[
-                          styles.matchRowSubtitle,
-                          { color: colors.muted },
+                          styles.matchSuccessText,
+                          { color: colors.primary },
                         ]}
-                        numberOfLines={1}
                       >
-                        {formatAnimalSubtitle(matchedAnimal)}
+                        Match ({(matchResult.bestScore * 100).toFixed(0)}%)
                       </Text>
-                    </View>
-                    <FontAwesome
-                      name="chevron-right"
-                      size={14}
-                      color={colors.muted}
-                    />
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <Text style={[styles.noMatchText, { color: colors.muted }]}>
-                  No match found
-                </Text>
+                      <TouchableOpacity
+                        style={styles.matchRow}
+                        onPress={() => handleAnimalSelect(matchedAnimal)}
+                        activeOpacity={0.7}
+                      >
+                        <TouchableOpacity
+                          style={[
+                            styles.matchAvatar,
+                            { backgroundColor: colors.border },
+                          ]}
+                          onPress={() =>
+                            router.push(
+                              `/animal-details?animalId=${matchedAnimal.animalId}`,
+                            )
+                          }
+                          activeOpacity={0.7}
+                        >
+                          {matchedFaceUrl ? (
+                            <Image
+                              source={{ uri: matchedFaceUrl }}
+                              style={styles.matchAvatarImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <Text
+                              style={[
+                                styles.matchAvatarPlaceholder,
+                                { color: colors.muted },
+                              ]}
+                            >
+                              ?
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                        <View style={styles.matchRowContent}>
+                          <Text
+                            style={[
+                              styles.matchRowTitle,
+                              { color: colors.text },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {formatAnimalTitle(matchedAnimal)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.matchRowSubtitle,
+                              { color: colors.muted },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {formatAnimalSubtitle(matchedAnimal)}
+                          </Text>
+                        </View>
+                        <FontAwesome
+                          name="chevron-right"
+                          size={14}
+                          color={colors.muted}
+                        />
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Text style={[styles.noMatchText, { color: colors.muted }]}>
+                      No match found
+                    </Text>
+                  )}
+                </View>
               )}
-            </View>
-          )}
             </>
           )}
         </Card>
@@ -1170,8 +1186,7 @@ export default function SelectAnimalScreen() {
             </>
           )}
         </Card>
-
-      </ScrollView>
+      </FormScrollView>
 
       <View
         style={[
@@ -1213,88 +1228,90 @@ export default function SelectAnimalScreen() {
           <View
             style={[styles.modalSheet, { backgroundColor: colors.surface }]}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Create new animal
-            </Text>
-            <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
-              Choose species
-            </Text>
+            <FormScrollView style={styles.modalScroll}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Create new animal
+              </Text>
+              <Text style={[styles.modalSubtitle, { color: colors.muted }]}>
+                Choose species
+              </Text>
 
-            <View style={styles.radioGroup}>
-              {CREATE_ANIMAL_SPECIES_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.radioRow, { borderColor: colors.border }]}
-                  onPress={() => setSelectedSpeciesOption(option)}
-                  activeOpacity={0.7}
-                >
-                  <View
+              <View style={styles.radioGroup}>
+                {CREATE_ANIMAL_SPECIES_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.radioRow, { borderColor: colors.border }]}
+                    onPress={() => setSelectedSpeciesOption(option)}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.radioOuter,
+                        {
+                          borderColor:
+                            selectedSpeciesOption === option
+                              ? colors.primary
+                              : colors.border,
+                        },
+                      ]}
+                    >
+                      {selectedSpeciesOption === option ? (
+                        <View
+                          style={[
+                            styles.radioInner,
+                            { backgroundColor: colors.primary },
+                          ]}
+                        />
+                      ) : null}
+                    </View>
+                    <Text style={[styles.radioLabel, { color: colors.text }]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {selectedSpeciesOption === "Other" ? (
+                <View style={styles.otherSpeciesWrap}>
+                  <Text
+                    style={[styles.otherSpeciesLabel, { color: colors.text }]}
+                  >
+                    Species name
+                  </Text>
+                  <TextInput
                     style={[
-                      styles.radioOuter,
+                      styles.otherSpeciesInput,
                       {
-                        borderColor:
-                          selectedSpeciesOption === option
-                            ? colors.primary
-                            : colors.border,
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                        color: colors.text,
                       },
                     ]}
-                  >
-                    {selectedSpeciesOption === option ? (
-                      <View
-                        style={[
-                          styles.radioInner,
-                          { backgroundColor: colors.primary },
-                        ]}
-                      />
-                    ) : null}
-                  </View>
-                  <Text style={[styles.radioLabel, { color: colors.text }]}>
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    value={otherSpeciesText}
+                    onChangeText={setOtherSpeciesText}
+                    placeholder="Enter species"
+                    placeholderTextColor={colors.muted}
+                    autoCapitalize="words"
+                  />
+                </View>
+              ) : null}
 
-            {selectedSpeciesOption === "Other" ? (
-              <View style={styles.otherSpeciesWrap}>
-                <Text
-                  style={[styles.otherSpeciesLabel, { color: colors.text }]}
-                >
-                  Species name
-                </Text>
-                <TextInput
-                  style={[
-                    styles.otherSpeciesInput,
-                    {
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      color: colors.text,
-                    },
-                  ]}
-                  value={otherSpeciesText}
-                  onChangeText={setOtherSpeciesText}
-                  placeholder="Enter species"
-                  placeholderTextColor={colors.muted}
-                  autoCapitalize="words"
+              <View style={styles.modalActions}>
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setCreateAnimalModalVisible(false)}
+                  style={styles.modalCancelBtn}
+                />
+                <Button
+                  title={startUploadingLoading ? "Getting location…" : "Next"}
+                  variant="primary"
+                  onPress={handleStartUploadingPhotos}
+                  style={styles.modalNextBtn}
+                  disabled={!canStartUploading || startUploadingLoading}
                 />
               </View>
-            ) : null}
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                variant="secondary"
-                onPress={() => setCreateAnimalModalVisible(false)}
-                style={styles.modalCancelBtn}
-              />
-              <Button
-                title={startUploadingLoading ? "Getting location…" : "Next"}
-                variant="primary"
-                onPress={handleStartUploadingPhotos}
-                style={styles.modalNextBtn}
-                disabled={!canStartUploading || startUploadingLoading}
-              />
-            </View>
+            </FormScrollView>
           </View>
         </View>
       </Modal>
@@ -1509,7 +1526,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
+  modalScroll: { flexGrow: 0, flexShrink: 1 },
   modalSheet: {
+    maxHeight: "90%",
     zIndex: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

@@ -9,8 +9,7 @@ const FARM_VITALS_API_URL = (
 const farmDashboardCacheTtlMs = 2 * 60 * 1000;
 const farmImageUrlCacheTtlMs = 2 * 60 * 1000;
 let farmDashboardCache:
-  | { savedAt: number; entries: FarmDashboardEntry[] }
-  | undefined;
+  { savedAt: number; entries: FarmDashboardEntry[] } | undefined;
 const farmImageUrlCache = new Map<
   string,
   { expiresAt: number; promise: Promise<string> }
@@ -36,6 +35,7 @@ export type FarmTemplateField = {
   source?: string;
   sourceFieldOrder?: string[];
   showOnDashboard?: boolean;
+  hidden?: boolean;
   fullWidth?: boolean;
   aiEnhance?: boolean;
   voiceInput?: boolean;
@@ -53,6 +53,7 @@ export type FarmDashboardField = {
   source?: string;
   groupKey?: string;
   filter?: boolean;
+  sort?: boolean;
   fullWidth?: boolean;
   badgeView?: boolean;
   tileView?: boolean;
@@ -75,6 +76,33 @@ export type FarmTemplateForm = {
   }[];
 };
 
+function hasSymptomsField(fields: FarmTemplateField[]): boolean {
+  return fields.some(
+    (field) =>
+      /symptoms?/i.test(field.key) ||
+      /symptoms?/i.test(field.label) ||
+      hasSymptomsField(field.fields ?? []),
+  );
+}
+
+export function withMedicalHistorySymptoms(
+  form: FarmTemplateForm,
+): FarmTemplateForm {
+  if (
+    !form.steps.length ||
+    form.steps.some((step) => hasSymptomsField(step.fields))
+  )
+    return form;
+  const [first, ...remaining] = form.steps;
+  const fields = [...first.fields];
+  const diagnosis = fields.findIndex((field) => field.key === "diagnosis");
+  fields.splice(
+    diagnosis < 0 ? fields.length : diagnosis,
+    0,
+    utilLeaf("symptoms", "Symptoms", "textarea"),
+  );
+  return { ...form, steps: [{ ...first, fields }, ...remaining] };
+}
 export type ActiveFarmTemplate = {
   type: string;
   updatedAt: string;
@@ -135,6 +163,7 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       type: text(item.type, "text"),
       helpText: text(item.helpText),
       rules: parseRules(item.rules),
+      ...(item.hidden === true ? { hidden: true } : {}),
       fullWidth: item.fullWidth === true,
     };
     if (item.optionSource === "breed") field.optionSource = "breed";
@@ -156,7 +185,10 @@ function parseFields(value: unknown, depth = 0): FarmTemplateField[] {
       item.promptKey.trim()
     )
       field.promptKey = item.promptKey.trim();
-    if ((field.type === "image" || field.type === "upload") && item.generateThumbnail === true)
+    if (
+      (field.type === "image" || field.type === "upload") &&
+      item.generateThumbnail === true
+    )
       field.generateThumbnail = true;
     if (Array.isArray(item.fields))
       field.fields = parseFields(item.fields, depth + 1);
@@ -179,6 +211,7 @@ function parseDashboardFields(value: unknown): FarmDashboardField[] {
           ? { groupKey: item.groupKey.trim() }
           : {}),
         ...(typeof item.filter === "boolean" ? { filter: item.filter } : {}),
+        ...(typeof item.sort === "boolean" ? { sort: item.sort } : {}),
         ...(typeof item.fullWidth === "boolean"
           ? { fullWidth: item.fullWidth }
           : {}),
@@ -228,7 +261,9 @@ function parseForm(value: unknown): FarmTemplateForm | null {
   };
 }
 
-function firstConfiguredPhoto(fields: FarmTemplateField[]): FarmTemplateField | undefined {
+function firstConfiguredPhoto(
+  fields: FarmTemplateField[],
+): FarmTemplateField | undefined {
   for (const field of fields) {
     if (
       (field.type === "upload" || field.type === "image") &&
@@ -246,7 +281,9 @@ export async function animalPhotoUploadOptions(): Promise<{
 }> {
   try {
     const template = await getActiveTemplate("animal");
-    const field = firstConfiguredPhoto(template.form.steps.flatMap((step) => step.fields));
+    const field = firstConfiguredPhoto(
+      template.form.steps.flatMap((step) => step.fields),
+    );
     return {
       promptKey: field?.promptKey ?? "animal_photo",
       generateThumbnail: field?.generateThumbnail,
@@ -331,7 +368,14 @@ export function uploadFarmImage(
   promptKey = "",
   generateThumbnail = false,
 ): Promise<string> {
-  return uploadFarmMedia(uri, fileName, farmId, species, promptKey, generateThumbnail);
+  return uploadFarmMedia(
+    uri,
+    fileName,
+    farmId,
+    species,
+    promptKey,
+    generateThumbnail,
+  );
 }
 
 export function aiFarmImageUrl(fileUrl: string): string {
@@ -560,7 +604,10 @@ export async function readableFarmImage(
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ fileUrl, ...(variant === "thumbnail" ? { variant } : {}) }),
+        body: JSON.stringify({
+          fileUrl,
+          ...(variant === "thumbnail" ? { variant } : {}),
+        }),
       },
     );
     const payload = await readJson(response);
@@ -1006,8 +1053,7 @@ export function getActiveFarmTemplate(): Promise<ActiveFarmTemplate> {
 }
 
 let farmTemplateCache:
-  | { expiresAt: number; promise: Promise<ActiveFarmTemplate> }
-  | undefined;
+  { expiresAt: number; promise: Promise<ActiveFarmTemplate> } | undefined;
 
 export type SubmittedFarm = {
   farmId: string;
@@ -1021,7 +1067,11 @@ export type SubmittedFarm = {
   animalCount?: number;
 };
 
+export type FarmDashboardSortType = "text" | "number" | "date";
+
 export type FarmReviewRow = {
+  sortType?: FarmDashboardSortType;
+  sortValue?: string;
   imageUrl?: string;
   key?: string;
   source?: string;
@@ -1357,6 +1407,20 @@ function fieldLabel(fields: FarmTemplateField[], key: string): string {
   return field ? field.label || field.key : "";
 }
 
+function dashboardSortType(
+  field?: FarmTemplateField,
+): FarmDashboardSortType | undefined {
+  if (!field || field.hidden || field.key === "active" || field.fields?.length)
+    return;
+  if (field.type === "number" || field.type === "date") return field.type;
+  if (
+    ["text", "textarea", "select", "radio", "checkbox", "switch"].includes(
+      field.type,
+    )
+  )
+    return "text";
+}
+
 function dashboardRows(
   fields: FarmTemplateField[],
   values: Record<string, unknown>,
@@ -1376,10 +1440,33 @@ function dashboardRows(
       choice.groupKey ? (group?.fields ?? []) : fields,
       choice.key,
     );
+    const sortDefinition = choice.groupKey
+      ? definition
+      : fieldDefinition(
+          fields.filter((field) => !field.source),
+          choice.key,
+        );
+    const sortType =
+      choice.sort && !group?.hidden
+        ? dashboardSortType(sortDefinition)
+        : undefined;
     const source = choice.groupKey ? values[choice.groupKey] : values;
     const value = choice.groupKey
       ? nestedValue(source, choice.key)
       : values[choice.key];
+    const nestedSortGroup =
+      sortType && !choice.groupKey && value === undefined
+        ? fields.find(
+            (field) =>
+              !field.source && fieldDefinition(field.fields ?? [], choice.key),
+          )
+        : undefined;
+    const sortValue = nestedSortGroup
+      ? nestedValue(values[nestedSortGroup.key], choice.key)
+      : value;
+    const sortable = Array.isArray(sortValue)
+      ? sortValue.join(", ")
+      : reviewValue(sortValue);
     const shown = reviewValue(value);
     return [
       {
@@ -1387,6 +1474,12 @@ function dashboardRows(
         source: choice.source ?? group?.source,
         ...(choice.groupKey ? { groupKey: choice.groupKey } : {}),
         ...(choice.filter ? { filter: true } : {}),
+        ...(sortType
+          ? {
+              sortType,
+              sortValue: sortable === "Not provided" ? "" : sortable,
+            }
+          : {}),
         badgeView: choice.badgeView === true,
         tileView:
           typeof choice.tileView === "boolean"
@@ -1466,9 +1559,8 @@ async function farmEntryValues(
       isObject(item) && isObject(item.form) && item.form.entity === "animal",
   ).length;
   const values = isObject(entry) && isObject(entry.values) ? entry.values : {};
-  const farmForm = isObject(entry) && isObject(entry.form)
-    ? parseForm(entry.form)
-    : null;
+  const farmForm =
+    isObject(entry) && isObject(entry.form) ? parseForm(entry.form) : null;
   const formPhoto = firstFarmFormPhoto(
     farmForm?.steps.flatMap((step) => step.fields) ?? [],
     values,
@@ -1537,6 +1629,20 @@ export async function listFarmDashboard(
   const template = result.template;
   const fields = template.form.steps.flatMap((step) => step.fields);
   const selected = template.form.dashboardFields ?? [];
+  const nestedSortFields = selected.filter(
+    (choice) =>
+      choice.sort &&
+      !choice.groupKey &&
+      !fields.some((field) => field.key === choice.key) &&
+      Boolean(
+        dashboardSortType(
+          fieldDefinition(
+            fields.filter((field) => !field.source),
+            choice.key,
+          ),
+        ),
+      ),
+  );
   const contact = fields.find((field) => field.source === "contact");
   const contactKey =
     contact?.key ??
@@ -1569,9 +1675,14 @@ export async function listFarmDashboard(
           animalCount: farm.animalCount ?? 0,
         };
         const entry =
-          projected && hasOwner && farm.farmPhotoUrl
+          projected &&
+          hasOwner &&
+          farm.farmPhotoUrl &&
+          nestedSortFields.every((choice) => choice.key in projected)
             ? summary
-            : await farmEntryValues(farm.farmId, contactKey).catch(() => summary);
+            : await farmEntryValues(farm.farmId, contactKey).catch(
+                () => summary,
+              );
         const values = entry.values;
         const hydrated: FarmDashboardEntry = {
           farmId: farm.farmId,
@@ -2069,7 +2180,11 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
       const animalEntryId =
         typeof item.animalEntryId === "string" ? item.animalEntryId : "";
       if (!kind || kind === "health-case") return [];
-      const historyForm = isObject(item.form) ? parseForm(item.form) : null;
+      const storedForm = isObject(item.form) ? parseForm(item.form) : null;
+      const historyForm =
+        kind === "medical-history" && storedForm
+          ? withMedicalHistorySymptoms(storedForm)
+          : storedForm;
       const historyValues = isObject(item.values) ? item.values : {};
       const sections = (historyForm?.steps ?? [])
         .map((step) => ({
@@ -2082,13 +2197,16 @@ export async function getFarmReview(farmId: string): Promise<FarmReview> {
         .find((row) => !row.imageUrl && row.value !== "Not provided");
       const breedName =
         kind === "breed"
-          ? [historyValues.breedName, historyValues.name, historyValues.breed]
-              .find(
-                (value) =>
-                  typeof value === "string" &&
-                  value.trim() &&
-                  !/^\d+$/.test(value.trim()),
-              )
+          ? [
+              historyValues.breedName,
+              historyValues.name,
+              historyValues.breed,
+            ].find(
+              (value) =>
+                typeof value === "string" &&
+                value.trim() &&
+                !/^\d+$/.test(value.trim()),
+            )
           : undefined;
       return [
         {
@@ -2235,7 +2353,9 @@ export async function deleteFarmRecord(
     (item) => isObject(item) && item.entryId === entryId,
   );
   const removeLinked =
-    isObject(target) && isObject(target.form) && target.form.entity === "animal";
+    isObject(target) &&
+    isObject(target.form) &&
+    target.form.entity === "animal";
   const updatedEntries = entries.filter(
     (item) =>
       !isObject(item) ||
@@ -2319,7 +2439,9 @@ async function appendFarmEntry(
         historyKind(existing) === "breed",
     )
   ) {
-    throw new Error("A Breed record already exists for this animal. Edit it instead.");
+    throw new Error(
+      "A Breed record already exists for this animal. Edit it instead.",
+    );
   }
   await saveFarmDocument(farmId, {
     ...data,

@@ -36,15 +36,26 @@ const colors = {
 
 export default function FarmHistoryScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ farmId?: string; entryId?: string }>();
+  const params = useLocalSearchParams<{
+    farmId?: string;
+    entryId?: string;
+    animalEntryId?: string;
+    kind?: string;
+    title?: string;
+  }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
+  const animalEntryId =
+    typeof params.animalEntryId === "string" ? params.animalEntryId : "";
+  const kind = typeof params.kind === "string" ? params.kind : "";
+  const browsing = !entryId && Boolean(animalEntryId && kind);
+  const [records, setRecords] = useState<FarmHistoryReview[]>([]);
   const [history, setHistory] = useState<FarmHistoryReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!farmId || !entryId) {
+    if (!farmId || (!entryId && !browsing)) {
       setLoading(false);
       setError("Open this history from its animal.");
       return;
@@ -53,6 +64,14 @@ export default function FarmHistoryScreen() {
     setError(null);
     try {
       const review = await getFarmReview(farmId);
+      if (browsing) {
+        const animal = review.animals.find(
+          (item) => item.entryId === animalEntryId,
+        );
+        if (!animal) throw new Error("This animal is no longer on the farm.");
+        setRecords(animal.records.filter((record) => record.kind === kind));
+        return;
+      }
       const match =
         review.records.find((record) => record.entryId === entryId) ??
         review.animals
@@ -69,7 +88,7 @@ export default function FarmHistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [entryId, farmId]);
+  }, [animalEntryId, browsing, entryId, farmId, kind]);
 
   useFocusEffect(
     useCallback(() => {
@@ -78,12 +97,60 @@ export default function FarmHistoryScreen() {
   );
 
   const title = history ? formTypeTitle(history.kind) : "Record";
-  const added = history ? formatFarmDate(history.submittedAt) : "";
+  const medicalHistory = history?.kind === "medical-history";
+  const metadata = history
+    ? [history.name === title ? "" : title, formatFarmDate(history.submittedAt)]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  const sections =
+    history?.sections
+      .map((section) => ({
+        ...section,
+        rows: medicalHistory
+          ? section.rows.filter(
+              (row) =>
+                row.imageUrl ||
+                (row.value.trim() && row.value !== "Not provided"),
+            )
+          : section.rows,
+      }))
+      .filter((section) => !medicalHistory || section.rows.length) ?? [];
+  const editButton = history ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${medicalHistory ? title : history.name}`}
+      onPress={() =>
+        router.push({
+          pathname: "/add-farm-history",
+          params: {
+            farmId,
+            entryId,
+            kind: history.kind,
+            fromRecordDetails: "1",
+          },
+        })
+      }
+      style={styles.edit}
+    >
+      <Feather name="edit-2" size={15} color={colors.green} />
+      <Text style={styles.editText}>Edit</Text>
+    </Pressable>
+  ) : null;
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <FlowPageHeading onBack={() => router.back()} title="Record details" />
+        <FlowPageHeading
+          onBack={() => router.back()}
+          title={
+            browsing
+              ? params.title || formTypeTitle(kind)
+              : medicalHistory
+                ? title
+                : "Record details"
+          }
+        />
         {loading ? (
           <View style={styles.status}>
             <ActivityIndicator color={colors.green} />
@@ -98,68 +165,132 @@ export default function FarmHistoryScreen() {
             </Pressable>
           </View>
         ) : null}
-        {history ? (
-          <>
-            <View style={styles.recordIdentity}>
-              <Text style={styles.name}>{history.name}</Text>
-              <Text style={styles.help}>
-                {[history.name === title ? "" : title, added]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${history.name}`}
-                onPress={() =>
-                  router.push({
-                    pathname: "/add-farm-history",
-                    params: { farmId, entryId, kind: history.kind },
-                  })
-                }
-                style={styles.edit}
-              >
-                <Feather name="edit-2" size={15} color={colors.green} />
-                <Text style={styles.editText}>Edit</Text>
-              </Pressable>
-            </View>
-            {history.sections.map((section) => (
-              <View key={section.title} style={styles.card}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                {section.rows.map((row, index) => (
-                  <View
-                    key={`${row.label}-${index}`}
-                    style={[
-                      row.imageUrl ? styles.photoRow : styles.fact,
-                      index > 0 && styles.factDivider,
-                    ]}
-                  >
-                    {row.imageUrl ? (
-                      <>
-                        {row.label !== section.title && (
-                          <Text style={styles.photoLabel}>{row.label}</Text>
-                        )}
-                        <RecordPhoto
-                          key={row.imageUrl}
-                          url={row.imageUrl}
-                          label={row.label}
-                          onOpen={() =>
-                            router.push({
-                              pathname: "/add-farm-history",
-                              params: { farmId, entryId, kind: history.kind },
-                            })
-                          }
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.factLabel}>{row.label}</Text>
-                        <Text style={styles.factValue}>{row.value}</Text>
-                      </>
-                    )}
+        {browsing && !loading && !error ? (
+          records.length ? (
+            records.map((record) => {
+              const symptoms = record.sections
+                .flatMap((section) => section.rows)
+                .find(
+                  (row) =>
+                    /symptoms?/i.test(row.label) &&
+                    row.value !== "Not provided",
+                );
+              return (
+                <Pressable
+                  key={record.entryId}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/farm-history",
+                      params: { farmId, entryId: record.entryId },
+                    })
+                  }
+                  style={[styles.card, styles.fact]}
+                >
+                  <View style={styles.listCopy}>
+                    <Text numberOfLines={1} style={styles.listName}>
+                      {record.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.help}>
+                      {symptoms
+                        ? `Symptoms: ${symptoms.value}`
+                        : formatFarmDate(record.submittedAt)}
+                    </Text>
                   </View>
-                ))}
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={colors.green}
+                  />
+                </Pressable>
+              );
+            })
+          ) : (
+            <Text style={styles.help}>No records yet.</Text>
+          )
+        ) : null}
+        {!browsing && history ? (
+          <>
+            {!medicalHistory ? (
+              <View style={styles.recordIdentity}>
+                <Text style={styles.name}>{history.name}</Text>
+                {metadata ? <Text style={styles.help}>{metadata}</Text> : null}
+                {editButton}
+              </View>
+            ) : null}
+            {sections.map((section) => (
+              <View key={section.title} style={styles.card}>
+                {!medicalHistory || sections.length > 1 ? (
+                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                ) : null}
+                {section.rows.map((row, index) => {
+                  const stacked =
+                    medicalHistory && !/^\d{4}-\d{2}-\d{2}$/.test(row.value);
+                  return (
+                    <View
+                      key={`${row.label}-${index}`}
+                      style={[
+                        row.imageUrl
+                          ? styles.photoRow
+                          : stacked
+                            ? styles.stackedFact
+                            : styles.fact,
+                        index > 0 && styles.factDivider,
+                      ]}
+                    >
+                      {row.imageUrl ? (
+                        <>
+                          {row.label !== section.title && (
+                            <Text style={styles.photoLabel}>{row.label}</Text>
+                          )}
+                          <RecordPhoto
+                            key={row.imageUrl}
+                            url={row.imageUrl}
+                            label={row.label}
+                            onOpen={() =>
+                              router.push({
+                                pathname: "/add-farm-history",
+                                params: {
+                                  farmId,
+                                  entryId,
+                                  kind: history.kind,
+                                  fromRecordDetails: "1",
+                                },
+                              })
+                            }
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <Text
+                            style={
+                              stacked ? styles.photoLabel : styles.factLabel
+                            }
+                          >
+                            {row.label}
+                          </Text>
+                          <Text
+                            style={
+                              stacked ? styles.stackedValue : styles.factValue
+                            }
+                          >
+                            {row.value}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             ))}
+            {medicalHistory ? (
+              <>
+                {!sections.length ? (
+                  <Text style={styles.help}>No details recorded.</Text>
+                ) : null}
+                {editButton}
+              </>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
@@ -182,12 +313,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   edit: {
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
     minHeight: 40,
     borderRadius: 12,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     ...farmButton,
     backgroundColor: "#FFFFFF",
@@ -197,6 +329,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     ...farmCard,
   },
+  listCopy: { flex: 1, gap: 4 },
+  listName: { color: colors.ink, fontSize: 15, fontWeight: "700" },
   sectionTitle: {
     color: colors.ink,
     fontSize: 15,
@@ -212,6 +346,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  stackedFact: { gap: 6, paddingHorizontal: 14, paddingVertical: 14 },
+  stackedValue: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   photoRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 14 },
   photoLabel: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   factDivider: { borderTopWidth: 1, borderTopColor: colors.border },

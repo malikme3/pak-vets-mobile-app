@@ -1,8 +1,8 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -29,7 +29,9 @@ const colors = {
 export default function CreateFarmScreen() {
   const router = useRouter();
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
-  const [initialValues, setInitialValues] = useState<Record<string, unknown>>({});
+  const [initialValues, setInitialValues] = useState<Record<string, unknown>>(
+    {},
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export default function CreateFarmScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
@@ -107,7 +109,7 @@ export default function CreateFarmScreen() {
             onSubmit={submit}
           />
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

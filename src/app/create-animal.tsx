@@ -1,10 +1,10 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
-  ScrollView,
   Alert,
   Image,
   TouchableOpacity,
@@ -1437,12 +1437,7 @@ export default function CreateAnimalScreen() {
         <FontAwesome
           name={
             (STEPS[currentStepIndex - 1]?.icon ?? "circle") as
-              | "user"
-              | "camera"
-              | "list"
-              | "check"
-              | "comment"
-              | "circle"
+              "user" | "camera" | "list" | "check" | "comment" | "circle"
           }
           size={12}
           color={colors.primary}
@@ -1833,7 +1828,8 @@ export default function CreateAnimalScreen() {
           style={[styles.container, { backgroundColor: colors.background }]}
         >
           <StatusBar style="auto" />
-          <ScrollView
+          <FormScrollView
+            automaticallyAdjustKeyboardInsets={false}
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -2424,7 +2420,7 @@ export default function CreateAnimalScreen() {
                 disabled={!farmerPhone.trim() || !farmerName.trim()}
               />
             )}
-          </ScrollView>
+          </FormScrollView>
 
           <Modal
             visible={
@@ -2543,7 +2539,8 @@ export default function CreateAnimalScreen() {
           style={[styles.container, { backgroundColor: colors.background }]}
         >
           <StatusBar style="auto" />
-          <ScrollView
+          <FormScrollView
+            automaticallyAdjustKeyboardInsets={false}
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -2664,7 +2661,7 @@ export default function CreateAnimalScreen() {
               style={styles.primaryButton}
               disabled={!hasAllThreeImages}
             />
-          </ScrollView>
+          </FormScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
     );
@@ -2682,7 +2679,8 @@ export default function CreateAnimalScreen() {
           style={[styles.container, { backgroundColor: colors.background }]}
         >
           <StatusBar style="auto" />
-          <ScrollView
+          <FormScrollView
+            automaticallyAdjustKeyboardInsets={false}
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -3050,7 +3048,7 @@ export default function CreateAnimalScreen() {
               style={styles.primaryButton}
               disabled={chiefComplaint.trim().length === 0}
             />
-          </ScrollView>
+          </FormScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
     );
@@ -3068,7 +3066,8 @@ export default function CreateAnimalScreen() {
           style={[styles.container, { backgroundColor: colors.background }]}
         >
           <StatusBar style="auto" />
-          <ScrollView
+          <FormScrollView
+            automaticallyAdjustKeyboardInsets={false}
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -3416,7 +3415,7 @@ export default function CreateAnimalScreen() {
                 creatingCase
               }
             />
-          </ScrollView>
+          </FormScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
     );

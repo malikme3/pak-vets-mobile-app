@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import {
   CollapseSection,
   EditSectionButton,
@@ -20,7 +21,6 @@ import {
   Image,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -63,7 +63,9 @@ const colors = {
   mint: "#E7F5EE",
 };
 
-async function availableAiProfilePhoto(fileUrl: string): Promise<string | undefined> {
+async function availableAiProfilePhoto(
+  fileUrl: string,
+): Promise<string | undefined> {
   const enhancedUrl = aiFarmImageUrl(fileUrl);
   if (!enhancedUrl) return;
   try {
@@ -181,9 +183,7 @@ export default function FarmDashboardScreen() {
         if (!fileUrl) continue;
         void availableAiProfilePhoto(fileUrl).then((enhanced) => {
           if (!enhanced || photoLoadVersion.current !== photoLoadId) return;
-          setProfilePhotoUrls((current) =>
-            ({ ...current, [kind]: enhanced }),
-          );
+          setProfilePhotoUrls((current) => ({ ...current, [kind]: enhanced }));
         });
       }
       setFlows(types);
@@ -295,7 +295,7 @@ export default function FarmDashboardScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
@@ -500,7 +500,9 @@ export default function FarmDashboardScreen() {
                       fields={directFields}
                       onCancel={() => setEditing(null)}
                       onSaved={async () => {
-                        setEditing((current) => (current === key ? null : current));
+                        setEditing((current) =>
+                          current === key ? null : current,
+                        );
                         await openFarm(farmId, true);
                       }}
                     />
@@ -658,58 +660,67 @@ export default function FarmDashboardScreen() {
                       review.animals.map((animal) => {
                         const date = formatFarmDate(animal.submittedAt);
                         return (
-                          <View key={animal.entryId} style={styles.recordRowWithRemove}>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Open ${animal.name}`}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/farm-animal",
-                                params: {
-                                  farmId: review.farmId,
-                                  entryId: animal.entryId,
-                                },
-                              })
-                            }
-                            style={[styles.row, styles.recordMain]}
+                          <View
+                            key={animal.entryId}
+                            style={styles.recordRowWithRemove}
                           >
-                            <View style={styles.avatar}>
-                              {animal.species ? (
-                                <SpeciesIcon
-                                  species={animal.species}
-                                  size={36}
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <Text style={styles.initial}>
-                                  {animal.name.slice(0, 1).toUpperCase()}
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Open ${animal.name}`}
+                              onPress={() =>
+                                router.push({
+                                  pathname: "/farm-animal",
+                                  params: {
+                                    farmId: review.farmId,
+                                    entryId: animal.entryId,
+                                  },
+                                })
+                              }
+                              style={[styles.row, styles.recordMain]}
+                            >
+                              <View style={styles.avatar}>
+                                {animal.species ? (
+                                  <SpeciesIcon
+                                    species={animal.species}
+                                    size={36}
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <Text style={styles.initial}>
+                                    {animal.name.slice(0, 1).toUpperCase()}
+                                  </Text>
+                                )}
+                              </View>
+                              <View style={styles.copy}>
+                                <Text numberOfLines={1} style={styles.rowTitle}>
+                                  {animal.name}
                                 </Text>
-                              )}
-                            </View>
-                            <View style={styles.copy}>
-                              <Text numberOfLines={1} style={styles.rowTitle}>
-                                {animal.name}
-                              </Text>
-                              <Text numberOfLines={1} style={styles.help}>
-                                {[animal.species, date]
-                                  .filter(Boolean)
-                                  .join(" · ") || "Animal"}
-                              </Text>
-                            </View>
-                            <Feather
-                              name="chevron-right"
-                              size={16}
-                              color={colors.green}
-                            />
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Remove ${animal.name}`}
-                            onPress={() => confirmDeleteRecord(animal.entryId, animal.name)}
-                            style={styles.removeRecordButton}
-                          >
-                            <Feather name="trash-2" size={15} color={colors.danger} />
-                          </Pressable>
+                                <Text numberOfLines={1} style={styles.help}>
+                                  {[animal.species, date]
+                                    .filter(Boolean)
+                                    .join(" · ") || "Animal"}
+                                </Text>
+                              </View>
+                              <Feather
+                                name="chevron-right"
+                                size={16}
+                                color={colors.green}
+                              />
+                            </Pressable>
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Remove ${animal.name}`}
+                              onPress={() =>
+                                confirmDeleteRecord(animal.entryId, animal.name)
+                              }
+                              style={styles.removeRecordButton}
+                            >
+                              <Feather
+                                name="trash-2"
+                                size={15}
+                                color={colors.danger}
+                              />
+                            </Pressable>
                           </View>
                         );
                       })
@@ -722,61 +733,76 @@ export default function FarmDashboardScreen() {
                     entries.map((record) => {
                       const photo = recordPhotoUrls(record.sections)[0];
                       return (
-                        <View key={record.entryId} style={styles.recordRowWithRemove}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            photo
-                              ? `Edit ${record.name} and view photo versions`
-                              : `Open ${record.name}`
-                          }
-                          onPress={() =>
-                            router.push({
-                              pathname: photo
-                                ? "/add-farm-history"
-                                : type.key === "health-case"
-                                  ? "/health-case-detail"
-                                  : "/farm-history",
-                              params: {
-                                farmId: review.farmId,
-                                entryId: record.entryId,
-                                ...(photo ? { kind: type.key } : {}),
-                              },
-                            })
-                          }
-                          style={[styles.row, styles.recordMain, photo && styles.photoRow]}
+                        <View
+                          key={record.entryId}
+                          style={styles.recordRowWithRemove}
                         >
-                          <RecordPhoto
-                            key={`${photo ?? record.entryId}-${photoRefreshToken}`}
-                            url={photo}
-                            label={record.name}
-                            tileBackground={Boolean(photo)}
-                            fallbackText={record.name.slice(0, 1).toUpperCase()}
-                          />
-                          <View style={styles.copy}>
-                            <Text numberOfLines={1} style={styles.rowTitle}>
-                              {record.name}
-                            </Text>
-                            {formatFarmDate(record.submittedAt) ? (
-                              <Text style={styles.help}>
-                                {formatFarmDate(record.submittedAt)}
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              photo
+                                ? `Edit ${record.name} and view photo versions`
+                                : `Open ${record.name}`
+                            }
+                            onPress={() =>
+                              router.push({
+                                pathname: photo
+                                  ? "/add-farm-history"
+                                  : type.key === "health-case"
+                                    ? "/health-case-detail"
+                                    : "/farm-history",
+                                params: {
+                                  farmId: review.farmId,
+                                  entryId: record.entryId,
+                                  ...(photo ? { kind: type.key } : {}),
+                                },
+                              })
+                            }
+                            style={[
+                              styles.row,
+                              styles.recordMain,
+                              photo && styles.photoRow,
+                            ]}
+                          >
+                            <RecordPhoto
+                              key={`${photo ?? record.entryId}-${photoRefreshToken}`}
+                              url={photo}
+                              label={record.name}
+                              tileBackground={Boolean(photo)}
+                              fallbackText={record.name
+                                .slice(0, 1)
+                                .toUpperCase()}
+                            />
+                            <View style={styles.copy}>
+                              <Text numberOfLines={1} style={styles.rowTitle}>
+                                {record.name}
                               </Text>
-                            ) : null}
-                          </View>
-                          <Feather
-                            name="chevron-right"
-                            size={16}
-                            color={colors.green}
-                          />
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Remove ${record.name}`}
-                          onPress={() => confirmDeleteRecord(record.entryId, record.name)}
-                          style={styles.removeRecordButton}
-                        >
-                          <Feather name="trash-2" size={17} color={colors.danger} />
-                        </Pressable>
+                              {formatFarmDate(record.submittedAt) ? (
+                                <Text style={styles.help}>
+                                  {formatFarmDate(record.submittedAt)}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <Feather
+                              name="chevron-right"
+                              size={16}
+                              color={colors.green}
+                            />
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${record.name}`}
+                            onPress={() =>
+                              confirmDeleteRecord(record.entryId, record.name)
+                            }
+                            style={styles.removeRecordButton}
+                          >
+                            <Feather
+                              name="trash-2"
+                              size={17}
+                              color={colors.danger}
+                            />
+                          </Pressable>
                         </View>
                       );
                     })
@@ -788,7 +814,7 @@ export default function FarmDashboardScreen() {
             })}
           </>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

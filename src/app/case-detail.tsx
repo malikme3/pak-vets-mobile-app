@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useCallback, useState, useEffect, useRef } from "react";
 import {
   View,
@@ -338,8 +339,12 @@ export default function CaseDetailScreen() {
         headers: { "Content-Type": contentType },
       });
       if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText);
-        throw new Error(`S3 upload failed: ${errorText || response.statusText}`);
+        const errorText = await response
+          .text()
+          .catch(() => response.statusText);
+        throw new Error(
+          `S3 upload failed: ${errorText || response.statusText}`,
+        );
       }
     },
     [],
@@ -584,10 +589,7 @@ export default function CaseDetailScreen() {
           evidence.imageType,
           evidence.name,
         );
-        const contentType = inferContentType(
-          evidence.name,
-          evidence.mimeType,
-        );
+        const contentType = inferContentType(evidence.name, evidence.mimeType);
         await uploadFileToS3(
           evidence.uri,
           s3Key,
@@ -641,12 +643,7 @@ export default function CaseDetailScreen() {
           file.name,
         );
         const contentType = inferContentType(file.name, file.mimeType);
-        await uploadFileToS3(
-          file.uri,
-          s3Key,
-          contentType,
-          "clinical-signs",
-        );
+        await uploadFileToS3(file.uri, s3Key, contentType, "clinical-signs");
       }
       setClinicalSignsFiles([]);
       setClinicalSignsExpanded(false);
@@ -1010,7 +1007,7 @@ export default function CaseDetailScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <StatusBar style="auto" />
-      <ScrollView
+      <FormScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -1156,14 +1153,14 @@ export default function CaseDetailScreen() {
                     key={value}
                     activeOpacity={0.7}
                     onPress={() =>
-                      setSelectedDiseaseEvidenceType(value as DiseaseEvidenceType)
+                      setSelectedDiseaseEvidenceType(
+                        value as DiseaseEvidenceType,
+                      )
                     }
                     style={[
                       styles.radioChip,
                       {
-                        borderColor: selected
-                          ? colors.primary
-                          : colors.border,
+                        borderColor: selected ? colors.primary : colors.border,
                         backgroundColor: selected
                           ? `${colors.primary}22`
                           : colors.surface,
@@ -1174,9 +1171,7 @@ export default function CaseDetailScreen() {
                       style={[
                         styles.radioDot,
                         {
-                          borderColor: selected
-                            ? colors.primary
-                            : colors.muted,
+                          borderColor: selected ? colors.primary : colors.muted,
                           backgroundColor: selected
                             ? colors.primary
                             : "transparent",
@@ -1234,10 +1229,7 @@ export default function CaseDetailScreen() {
                           {evidence.imageType}
                         </Text>
                         <Text
-                          style={[
-                            styles.evidenceName,
-                            { color: colors.text },
-                          ]}
+                          style={[styles.evidenceName, { color: colors.text }]}
                           numberOfLines={1}
                         >
                           {evidence.name}
@@ -1335,10 +1327,7 @@ export default function CaseDetailScreen() {
                           Clinical sign
                         </Text>
                         <Text
-                          style={[
-                            styles.evidenceName,
-                            { color: colors.text },
-                          ]}
+                          style={[styles.evidenceName, { color: colors.text }]}
                           numberOfLines={1}
                         >
                           {file.name}
@@ -1387,10 +1376,14 @@ export default function CaseDetailScreen() {
               ]}
             >
               <View style={styles.analysisModalHeader}>
-                <Text style={[styles.analysisModalTitle, { color: colors.text }]}>
+                <Text
+                  style={[styles.analysisModalTitle, { color: colors.text }]}
+                >
                   Evidence AI Analysis
                 </Text>
-                <TouchableOpacity onPress={() => setEvidenceViewerVisible(false)}>
+                <TouchableOpacity
+                  onPress={() => setEvidenceViewerVisible(false)}
+                >
                   <FontAwesome name="times" size={16} color={colors.muted} />
                 </TouchableOpacity>
               </View>
@@ -1413,7 +1406,9 @@ export default function CaseDetailScreen() {
                       style={[
                         styles.analysisTab,
                         {
-                          borderColor: selected ? colors.primary : colors.border,
+                          borderColor: selected
+                            ? colors.primary
+                            : colors.border,
                           backgroundColor: selected
                             ? `${colors.primary}20`
                             : colors.background,
@@ -1438,7 +1433,9 @@ export default function CaseDetailScreen() {
                 {animalDiseaseFilesLoading ? (
                   <ActivityIndicator color={colors.primary} />
                 ) : animalDiseaseFilesError ? (
-                  <Text style={[styles.analysisErrorText, { color: colors.danger }]}>
+                  <Text
+                    style={[styles.analysisErrorText, { color: colors.danger }]}
+                  >
                     {animalDiseaseFilesError}
                   </Text>
                 ) : (
@@ -1450,18 +1447,39 @@ export default function CaseDetailScreen() {
                       key={file.animalDiseaseFileId}
                       style={[
                         styles.analysisItem,
-                        { borderColor: colors.border, backgroundColor: colors.background },
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.background,
+                        },
                       ]}
                     >
-                      <Text style={[styles.analysisFileName, { color: colors.text }]}>
-                        {file.originalFileName || file.s3Key.split("/").pop() || "File"}
+                      <Text
+                        style={[
+                          styles.analysisFileName,
+                          { color: colors.text },
+                        ]}
+                      >
+                        {file.originalFileName ||
+                          file.s3Key.split("/").pop() ||
+                          "File"}
                       </Text>
-                      <Text style={[styles.analysisMetaText, { color: colors.muted }]}>
+                      <Text
+                        style={[
+                          styles.analysisMetaText,
+                          { color: colors.muted },
+                        ]}
+                      >
                         Status: {file.aiAnalysisStatus || "PENDING"} •{" "}
                         {new Date(file.createdAt).toLocaleDateString("en-US")}
                       </Text>
-                      <Text style={[styles.analysisBodyText, { color: colors.text }]}>
-                        {file.aiAnalysis?.trim() || "AI analysis not available yet."}
+                      <Text
+                        style={[
+                          styles.analysisBodyText,
+                          { color: colors.text },
+                        ]}
+                      >
+                        {file.aiAnalysis?.trim() ||
+                          "AI analysis not available yet."}
                       </Text>
                     </View>
                   ))
@@ -1471,7 +1489,9 @@ export default function CaseDetailScreen() {
                 (evidenceViewerTab === "LAB_REPORT"
                   ? labReportFiles.length === 0
                   : clinicalSignAnalysisFiles.length === 0) ? (
-                  <Text style={[styles.analysisEmptyText, { color: colors.muted }]}>
+                  <Text
+                    style={[styles.analysisEmptyText, { color: colors.muted }]}
+                  >
                     No files found for this section.
                   </Text>
                 ) : null}
@@ -1482,667 +1502,691 @@ export default function CaseDetailScreen() {
 
         {!intakeFirst && (
           <>
-        {/* 1. Diagnoses (with AI suggestions inline) */}
-        <AccordionSection
-          title="Diagnoses"
-          icon="stethoscope"
-          count={diagnoses.length}
-          expanded={expanded.diagnoses}
-          onToggle={() => toggleSection("diagnoses")}
-          colors={colors}
-          action={
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/add-diagnosis?caseId=${caseData?.caseId}`)
-              }
-              style={[styles.addChip, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="plus" size={12} color={colors.surface} />
-              <Text style={[styles.addChipText, { color: colors.surface }]}>
-                Add
-              </Text>
-            </TouchableOpacity>
-          }
-        >
-          {/* AI Suggestions (inline) */}
-          {chiefComplaint.trim() && (
-            <View
-              style={[
-                styles.aiBlock,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              {!suggestionsRequestedByUser ? (
+            {/* 1. Diagnoses (with AI suggestions inline) */}
+            <AccordionSection
+              title="Diagnoses"
+              icon="stethoscope"
+              count={diagnoses.length}
+              expanded={expanded.diagnoses}
+              onToggle={() => toggleSection("diagnoses")}
+              colors={colors}
+              action={
                 <TouchableOpacity
-                  onPress={() => setSuggestionsRequestedByUser(true)}
-                  style={styles.aiCta}
+                  onPress={() =>
+                    router.push(`/add-diagnosis?caseId=${caseData?.caseId}`)
+                  }
+                  style={[styles.addChip, { backgroundColor: colors.primary }]}
                   activeOpacity={0.8}
                 >
-                  <FontAwesome
-                    name="lightbulb-o"
-                    size={16}
-                    color={colors.primary}
-                  />
-                  <Text style={[styles.aiCtaText, { color: colors.primary }]}>
-                    Get AI suggestions
+                  <FontAwesome name="plus" size={12} color={colors.surface} />
+                  <Text style={[styles.addChipText, { color: colors.surface }]}>
+                    Add
                   </Text>
-                  <FontAwesome
-                    name="chevron-right"
-                    size={12}
-                    color={colors.primary}
-                  />
                 </TouchableOpacity>
-              ) : suggestionsLoading ? (
-                <View style={styles.aiLoading}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={[styles.aiLoadingText, { color: colors.muted }]}>
-                    Suggesting…
-                  </Text>
-                </View>
-              ) : suggestedDiagnoses.length > 0 ? (
-                <View style={styles.suggestionsList}>
-                  <TouchableOpacity
-                    style={styles.suggestionsListHeader}
-                    onPress={() => setSuggestionsListExpanded((v) => !v)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.aiLabel,
-                        { color: colors.muted, marginBottom: 0 },
-                      ]}
+              }
+            >
+              {/* AI Suggestions (inline) */}
+              {chiefComplaint.trim() && (
+                <View
+                  style={[
+                    styles.aiBlock,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  {!suggestionsRequestedByUser ? (
+                    <TouchableOpacity
+                      onPress={() => setSuggestionsRequestedByUser(true)}
+                      style={styles.aiCta}
+                      activeOpacity={0.8}
                     >
-                      Suggested ({suggestedDiagnoses.length})
-                    </Text>
-                    <FontAwesome
-                      name={
-                        suggestionsListExpanded ? "chevron-up" : "chevron-down"
-                      }
-                      size={14}
-                      color={colors.muted}
-                    />
-                  </TouchableOpacity>
-                  {suggestionsListExpanded &&
-                    suggestedDiagnoses.map((s, index) => (
-                      <View
-                        key={`${s.diagnosis_text}-${index}`}
-                        style={[
-                          styles.suggestionRow,
-                          {
-                            borderLeftColor: colors.primary,
-                            backgroundColor: colors.surface,
-                          },
-                        ]}
+                      <FontAwesome
+                        name="lightbulb-o"
+                        size={16}
+                        color={colors.primary}
+                      />
+                      <Text
+                        style={[styles.aiCtaText, { color: colors.primary }]}
                       >
-                        <Text
-                          style={[
-                            styles.suggestionText,
-                            { color: colors.text },
-                          ]}
-                          numberOfLines={3}
-                        >
-                          {s.diagnosis_text}
-                        </Text>
-                        <View style={styles.suggestionRowFooter}>
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              {
-                                backgroundColor:
-                                  s.status === "CONFIRMED"
-                                    ? colors.success
-                                    : colors.warning,
-                              },
-                            ]}
-                          >
-                            <Text style={styles.statusBadgeText}>
-                              {s.status}
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            onPress={() => handleConfirmSuggestion(s, index)}
-                            disabled={
-                              confirmingSuggestionIndex !== null &&
-                              confirmingSuggestionIndex !== index
-                            }
-                            style={[
-                              styles.addChip,
-                              {
-                                backgroundColor: colors.success,
-                                opacity:
-                                  confirmingSuggestionIndex !== null &&
-                                  confirmingSuggestionIndex !== index
-                                    ? 0.5
-                                    : 1,
-                              },
-                            ]}
-                            activeOpacity={0.8}
-                          >
-                            {confirmingSuggestionIndex === index ? (
-                              <ActivityIndicator
-                                size="small"
-                                color={colors.surface}
-                              />
-                            ) : (
-                              <>
-                                <FontAwesome
-                                  name="plus"
-                                  size={10}
-                                  color={colors.surface}
-                                />
-                                <Text
-                                  style={[
-                                    styles.addChipText,
-                                    { color: colors.surface },
-                                  ]}
-                                >
-                                  Add
-                                </Text>
-                              </>
-                            )}
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ))}
-                </View>
-              ) : (
-                <Text style={[styles.aiEmptyText, { color: colors.muted }]}>
-                  No AI suggestions found
-                </Text>
-              )}
-            </View>
-          )}
-
-          {/* Saved diagnoses */}
-          {diagnoses.length > 0 ? (
-            <View style={styles.diagnosesList}>
-              {diagnoses.map((diagnosis) => {
-                const audioMedia = diagnosis.mediaId
-                  ? mediaFiles.find((m) => m.mediaId === diagnosis.mediaId)
-                  : null;
-                const suggestedForThis =
-                  treatmentSuggestionsByDiagnosisId[diagnosis.diagnosisId] ??
-                  [];
-                const loadingTreatments =
-                  loadingTreatmentForDiagnosisId === diagnosis.diagnosisId;
-                return (
-                  <View
-                    key={diagnosis.diagnosisId}
-                    style={[
-                      styles.diagnosisBlock,
-                      { borderColor: colors.border },
-                    ]}
-                  >
-                    <View style={styles.diagnosisBlockRow}>
-                      <View style={styles.diagnosisBlockContent}>
-                        <DiagnosisItem
-                          diagnosis={diagnosis}
-                          audioMedia={audioMedia}
-                          colors={colors}
-                          getAudioUrl={getAudioUrl}
-                        />
-                      </View>
-                      <View style={styles.diagnosisBlockActions}>
-                        <TouchableOpacity
-                          onPress={() => handleEditDiagnosis(diagnosis)}
-                          style={[
-                            styles.iconBtn,
-                            { borderColor: colors.primary },
-                          ]}
-                          activeOpacity={0.7}
-                        >
-                          <FontAwesome
-                            name="pencil"
-                            size={ICON_ACTION}
-                            color={colors.primary}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() =>
-                            handleFetchTreatmentsForDiagnosis(diagnosis)
-                          }
-                          disabled={loadingTreatmentForDiagnosisId !== null}
-                          style={[
-                            styles.iconBtn,
-                            {
-                              borderColor: colors.primary,
-                              opacity:
-                                loadingTreatmentForDiagnosisId !== null
-                                  ? 0.5
-                                  : 1,
-                            },
-                          ]}
-                          activeOpacity={0.7}
-                        >
-                          {loadingTreatments ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={colors.primary}
-                            />
-                          ) : (
-                            <FontAwesome
-                              name="medkit"
-                              size={ICON_ACTION}
-                              color={colors.primary}
-                            />
-                          )}
-                        </TouchableOpacity>
-                      </View>
+                        Get AI suggestions
+                      </Text>
+                      <FontAwesome
+                        name="chevron-right"
+                        size={12}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  ) : suggestionsLoading ? (
+                    <View style={styles.aiLoading}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text
+                        style={[styles.aiLoadingText, { color: colors.muted }]}
+                      >
+                        Suggesting…
+                      </Text>
                     </View>
-                    {suggestedForThis.length > 0 && (
-                      <View
-                        style={[
-                          styles.suggestedTreatmentsContainer,
-                          {
-                            backgroundColor: colors.background,
-                            borderColor: colors.border,
-                            borderWidth: 1,
-                          },
-                        ]}
+                  ) : suggestedDiagnoses.length > 0 ? (
+                    <View style={styles.suggestionsList}>
+                      <TouchableOpacity
+                        style={styles.suggestionsListHeader}
+                        onPress={() => setSuggestionsListExpanded((v) => !v)}
+                        activeOpacity={0.7}
                       >
                         <Text
                           style={[
-                            styles.suggestedTreatmentsTitle,
-                            { color: colors.muted },
+                            styles.aiLabel,
+                            { color: colors.muted, marginBottom: 0 },
                           ]}
                         >
-                          Suggested treatments
+                          Suggested ({suggestedDiagnoses.length})
                         </Text>
-                        {suggestedForThis.map((sug, idx) => {
-                          const confirmKey = `${diagnosis.diagnosisId}-${idx}`;
-                          const isConfirming =
-                            confirmingTreatmentKey === confirmKey;
-                          return (
-                            <View
-                              key={idx}
+                        <FontAwesome
+                          name={
+                            suggestionsListExpanded
+                              ? "chevron-up"
+                              : "chevron-down"
+                          }
+                          size={14}
+                          color={colors.muted}
+                        />
+                      </TouchableOpacity>
+                      {suggestionsListExpanded &&
+                        suggestedDiagnoses.map((s, index) => (
+                          <View
+                            key={`${s.diagnosis_text}-${index}`}
+                            style={[
+                              styles.suggestionRow,
+                              {
+                                borderLeftColor: colors.primary,
+                                backgroundColor: colors.surface,
+                              },
+                            ]}
+                          >
+                            <Text
                               style={[
-                                styles.suggestedTreatmentRow,
-                                { borderLeftColor: colors.accent },
+                                styles.suggestionText,
+                                { color: colors.text },
                               ]}
+                              numberOfLines={3}
                             >
-                              <View style={styles.suggestedTreatmentRowContent}>
-                                <Text
-                                  style={[
-                                    styles.suggestedTreatmentType,
-                                    { color: colors.primary },
-                                  ]}
-                                >
-                                  {sug.treatmentType}
+                              {s.diagnosis_text}
+                            </Text>
+                            <View style={styles.suggestionRowFooter}>
+                              <View
+                                style={[
+                                  styles.statusBadge,
+                                  {
+                                    backgroundColor:
+                                      s.status === "CONFIRMED"
+                                        ? colors.success
+                                        : colors.warning,
+                                  },
+                                ]}
+                              >
+                                <Text style={styles.statusBadgeText}>
+                                  {s.status}
                                 </Text>
-                                {sug.medicineNameFree?.trim() && (
-                                  <Text
-                                    style={[
-                                      styles.suggestedTreatmentLine,
-                                      { color: colors.text },
-                                    ]}
-                                  >
-                                    <Text style={styles.bold}>Medicine: </Text>
-                                    {sug.medicineNameFree}
-                                  </Text>
-                                )}
-                                {sug.dose?.trim() && (
-                                  <Text
-                                    style={[
-                                      styles.suggestedTreatmentLine,
-                                      { color: colors.text },
-                                    ]}
-                                  >
-                                    <Text style={styles.bold}>Dose: </Text>
-                                    {sug.dose}
-                                  </Text>
-                                )}
-                                {sug.route?.trim() && (
-                                  <Text
-                                    style={[
-                                      styles.suggestedTreatmentLine,
-                                      { color: colors.text },
-                                    ]}
-                                  >
-                                    <Text style={styles.bold}>Route: </Text>
-                                    {sug.route}
-                                  </Text>
-                                )}
-                                {sug.frequency?.trim() && (
-                                  <Text
-                                    style={[
-                                      styles.suggestedTreatmentLine,
-                                      { color: colors.text },
-                                    ]}
-                                  >
-                                    <Text style={styles.bold}>Frequency: </Text>
-                                    {sug.frequency}
-                                  </Text>
-                                )}
-                                {sug.durationDays != null && (
-                                  <Text
-                                    style={[
-                                      styles.suggestedTreatmentLine,
-                                      { color: colors.text },
-                                    ]}
-                                  >
-                                    <Text style={styles.bold}>Duration: </Text>
-                                    {sug.durationDays} days
-                                  </Text>
-                                )}
-                                {sug.instructions?.trim() && (
-                                  <Text
-                                    style={[
-                                      styles.suggestedTreatmentLine,
-                                      styles.suggestedTreatmentInstructions,
-                                      { color: colors.text },
-                                    ]}
-                                    numberOfLines={3}
-                                  >
-                                    <Text style={styles.bold}>
-                                      Instructions:{" "}
-                                    </Text>
-                                    {sug.instructions}
-                                  </Text>
-                                )}
                               </View>
                               <TouchableOpacity
                                 onPress={() =>
-                                  handleConfirmTreatmentSuggestion(
-                                    diagnosis.diagnosisId,
-                                    sug,
-                                    idx,
-                                  )
+                                  handleConfirmSuggestion(s, index)
                                 }
                                 disabled={
-                                  confirmingTreatmentKey !== null &&
-                                  confirmingTreatmentKey !== confirmKey
+                                  confirmingSuggestionIndex !== null &&
+                                  confirmingSuggestionIndex !== index
                                 }
                                 style={[
-                                  styles.iconBtn,
+                                  styles.addChip,
                                   {
-                                    borderColor: colors.success,
+                                    backgroundColor: colors.success,
                                     opacity:
-                                      confirmingTreatmentKey !== null &&
-                                      confirmingTreatmentKey !== confirmKey
+                                      confirmingSuggestionIndex !== null &&
+                                      confirmingSuggestionIndex !== index
                                         ? 0.5
                                         : 1,
                                   },
                                 ]}
-                                activeOpacity={0.7}
+                                activeOpacity={0.8}
                               >
-                                {isConfirming ? (
+                                {confirmingSuggestionIndex === index ? (
                                   <ActivityIndicator
                                     size="small"
-                                    color={colors.success}
+                                    color={colors.surface}
                                   />
                                 ) : (
-                                  <FontAwesome
-                                    name="check-circle"
-                                    size={ICON_ACTION}
-                                    color={colors.success}
-                                  />
+                                  <>
+                                    <FontAwesome
+                                      name="plus"
+                                      size={10}
+                                      color={colors.surface}
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.addChipText,
+                                        { color: colors.surface },
+                                      ]}
+                                    >
+                                      Add
+                                    </Text>
+                                  </>
                                 )}
                               </TouchableOpacity>
                             </View>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome
-                name="clipboard"
-                size={ICON_EMPTY}
-                color={colors.muted}
-                style={styles.emptyIcon}
-              />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No diagnoses yet
-              </Text>
-              <Text style={[styles.emptySubtext, { color: colors.muted }]}>
-                Add from AI suggestions above or tap Add
-              </Text>
-            </View>
-          )}
-        </AccordionSection>
-
-        {/* 3. Treatments */}
-        <AccordionSection
-          title="Treatments"
-          icon="medkit"
-          count={treatments.length}
-          expanded={expanded.treatments}
-          onToggle={() => toggleSection("treatments")}
-          colors={colors}
-          action={
-            <TouchableOpacity
-              onPress={handleAddTreatment}
-              disabled={treatmentSuggestionsLoading}
-              style={[
-                styles.addChip,
-                {
-                  backgroundColor: colors.primary,
-                  opacity: treatmentSuggestionsLoading ? 0.6 : 1,
-                },
-              ]}
-              activeOpacity={0.8}
-            >
-              {treatmentSuggestionsLoading ? (
-                <ActivityIndicator size="small" color={colors.surface} />
-              ) : (
-                <FontAwesome name="plus" size={12} color={colors.surface} />
+                          </View>
+                        ))}
+                    </View>
+                  ) : (
+                    <Text style={[styles.aiEmptyText, { color: colors.muted }]}>
+                      No AI suggestions found
+                    </Text>
+                  )}
+                </View>
               )}
-              <Text style={[styles.addChipText, { color: colors.surface }]}>
-                {treatmentSuggestionsLoading ? "…" : "Add"}
-              </Text>
-            </TouchableOpacity>
-          }
-        >
-          {treatments.length > 0 ? (
-            <View style={styles.listContainer}>
-              {treatments.map((treatment) => {
-                const audioMedia = treatment.mediaId
-                  ? mediaFiles.find((m) => m.mediaId === treatment.mediaId)
-                  : null;
-                return (
-                  <TreatmentItem
-                    key={treatment.treatmentId}
-                    treatment={treatment}
-                    audioMedia={audioMedia}
-                    colors={colors}
-                    getAudioUrl={getAudioUrl}
-                    onEdit={handleEditTreatment}
-                  />
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome
-                name="medkit"
-                size={ICON_EMPTY}
-                color={colors.muted}
-                style={styles.emptyIcon}
-              />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No treatments yet
-              </Text>
-            </View>
-          )}
-        </AccordionSection>
 
-        {/* 4. Notes */}
-        <AccordionSection
-          title="Notes"
-          icon="file-text-o"
-          count={notes.length}
-          expanded={expanded.notes}
-          onToggle={() => toggleSection("notes")}
-          colors={colors}
-          action={
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/add-note?caseId=${caseData?.caseId}`)
+              {/* Saved diagnoses */}
+              {diagnoses.length > 0 ? (
+                <View style={styles.diagnosesList}>
+                  {diagnoses.map((diagnosis) => {
+                    const audioMedia = diagnosis.mediaId
+                      ? mediaFiles.find((m) => m.mediaId === diagnosis.mediaId)
+                      : null;
+                    const suggestedForThis =
+                      treatmentSuggestionsByDiagnosisId[
+                        diagnosis.diagnosisId
+                      ] ?? [];
+                    const loadingTreatments =
+                      loadingTreatmentForDiagnosisId === diagnosis.diagnosisId;
+                    return (
+                      <View
+                        key={diagnosis.diagnosisId}
+                        style={[
+                          styles.diagnosisBlock,
+                          { borderColor: colors.border },
+                        ]}
+                      >
+                        <View style={styles.diagnosisBlockRow}>
+                          <View style={styles.diagnosisBlockContent}>
+                            <DiagnosisItem
+                              diagnosis={diagnosis}
+                              audioMedia={audioMedia}
+                              colors={colors}
+                              getAudioUrl={getAudioUrl}
+                            />
+                          </View>
+                          <View style={styles.diagnosisBlockActions}>
+                            <TouchableOpacity
+                              onPress={() => handleEditDiagnosis(diagnosis)}
+                              style={[
+                                styles.iconBtn,
+                                { borderColor: colors.primary },
+                              ]}
+                              activeOpacity={0.7}
+                            >
+                              <FontAwesome
+                                name="pencil"
+                                size={ICON_ACTION}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() =>
+                                handleFetchTreatmentsForDiagnosis(diagnosis)
+                              }
+                              disabled={loadingTreatmentForDiagnosisId !== null}
+                              style={[
+                                styles.iconBtn,
+                                {
+                                  borderColor: colors.primary,
+                                  opacity:
+                                    loadingTreatmentForDiagnosisId !== null
+                                      ? 0.5
+                                      : 1,
+                                },
+                              ]}
+                              activeOpacity={0.7}
+                            >
+                              {loadingTreatments ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color={colors.primary}
+                                />
+                              ) : (
+                                <FontAwesome
+                                  name="medkit"
+                                  size={ICON_ACTION}
+                                  color={colors.primary}
+                                />
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        {suggestedForThis.length > 0 && (
+                          <View
+                            style={[
+                              styles.suggestedTreatmentsContainer,
+                              {
+                                backgroundColor: colors.background,
+                                borderColor: colors.border,
+                                borderWidth: 1,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.suggestedTreatmentsTitle,
+                                { color: colors.muted },
+                              ]}
+                            >
+                              Suggested treatments
+                            </Text>
+                            {suggestedForThis.map((sug, idx) => {
+                              const confirmKey = `${diagnosis.diagnosisId}-${idx}`;
+                              const isConfirming =
+                                confirmingTreatmentKey === confirmKey;
+                              return (
+                                <View
+                                  key={idx}
+                                  style={[
+                                    styles.suggestedTreatmentRow,
+                                    { borderLeftColor: colors.accent },
+                                  ]}
+                                >
+                                  <View
+                                    style={styles.suggestedTreatmentRowContent}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.suggestedTreatmentType,
+                                        { color: colors.primary },
+                                      ]}
+                                    >
+                                      {sug.treatmentType}
+                                    </Text>
+                                    {sug.medicineNameFree?.trim() && (
+                                      <Text
+                                        style={[
+                                          styles.suggestedTreatmentLine,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        <Text style={styles.bold}>
+                                          Medicine:{" "}
+                                        </Text>
+                                        {sug.medicineNameFree}
+                                      </Text>
+                                    )}
+                                    {sug.dose?.trim() && (
+                                      <Text
+                                        style={[
+                                          styles.suggestedTreatmentLine,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        <Text style={styles.bold}>Dose: </Text>
+                                        {sug.dose}
+                                      </Text>
+                                    )}
+                                    {sug.route?.trim() && (
+                                      <Text
+                                        style={[
+                                          styles.suggestedTreatmentLine,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        <Text style={styles.bold}>Route: </Text>
+                                        {sug.route}
+                                      </Text>
+                                    )}
+                                    {sug.frequency?.trim() && (
+                                      <Text
+                                        style={[
+                                          styles.suggestedTreatmentLine,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        <Text style={styles.bold}>
+                                          Frequency:{" "}
+                                        </Text>
+                                        {sug.frequency}
+                                      </Text>
+                                    )}
+                                    {sug.durationDays != null && (
+                                      <Text
+                                        style={[
+                                          styles.suggestedTreatmentLine,
+                                          { color: colors.text },
+                                        ]}
+                                      >
+                                        <Text style={styles.bold}>
+                                          Duration:{" "}
+                                        </Text>
+                                        {sug.durationDays} days
+                                      </Text>
+                                    )}
+                                    {sug.instructions?.trim() && (
+                                      <Text
+                                        style={[
+                                          styles.suggestedTreatmentLine,
+                                          styles.suggestedTreatmentInstructions,
+                                          { color: colors.text },
+                                        ]}
+                                        numberOfLines={3}
+                                      >
+                                        <Text style={styles.bold}>
+                                          Instructions:{" "}
+                                        </Text>
+                                        {sug.instructions}
+                                      </Text>
+                                    )}
+                                  </View>
+                                  <TouchableOpacity
+                                    onPress={() =>
+                                      handleConfirmTreatmentSuggestion(
+                                        diagnosis.diagnosisId,
+                                        sug,
+                                        idx,
+                                      )
+                                    }
+                                    disabled={
+                                      confirmingTreatmentKey !== null &&
+                                      confirmingTreatmentKey !== confirmKey
+                                    }
+                                    style={[
+                                      styles.iconBtn,
+                                      {
+                                        borderColor: colors.success,
+                                        opacity:
+                                          confirmingTreatmentKey !== null &&
+                                          confirmingTreatmentKey !== confirmKey
+                                            ? 0.5
+                                            : 1,
+                                      },
+                                    ]}
+                                    activeOpacity={0.7}
+                                  >
+                                    {isConfirming ? (
+                                      <ActivityIndicator
+                                        size="small"
+                                        color={colors.success}
+                                      />
+                                    ) : (
+                                      <FontAwesome
+                                        name="check-circle"
+                                        size={ICON_ACTION}
+                                        color={colors.success}
+                                      />
+                                    )}
+                                  </TouchableOpacity>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <FontAwesome
+                    name="clipboard"
+                    size={ICON_EMPTY}
+                    color={colors.muted}
+                    style={styles.emptyIcon}
+                  />
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    No diagnoses yet
+                  </Text>
+                  <Text style={[styles.emptySubtext, { color: colors.muted }]}>
+                    Add from AI suggestions above or tap Add
+                  </Text>
+                </View>
+              )}
+            </AccordionSection>
+
+            {/* 3. Treatments */}
+            <AccordionSection
+              title="Treatments"
+              icon="medkit"
+              count={treatments.length}
+              expanded={expanded.treatments}
+              onToggle={() => toggleSection("treatments")}
+              colors={colors}
+              action={
+                <TouchableOpacity
+                  onPress={handleAddTreatment}
+                  disabled={treatmentSuggestionsLoading}
+                  style={[
+                    styles.addChip,
+                    {
+                      backgroundColor: colors.primary,
+                      opacity: treatmentSuggestionsLoading ? 0.6 : 1,
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  {treatmentSuggestionsLoading ? (
+                    <ActivityIndicator size="small" color={colors.surface} />
+                  ) : (
+                    <FontAwesome name="plus" size={12} color={colors.surface} />
+                  )}
+                  <Text style={[styles.addChipText, { color: colors.surface }]}>
+                    {treatmentSuggestionsLoading ? "…" : "Add"}
+                  </Text>
+                </TouchableOpacity>
               }
-              style={[styles.addChip, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
             >
-              <FontAwesome name="plus" size={12} color={colors.surface} />
-              <Text style={[styles.addChipText, { color: colors.surface }]}>
-                Add
-              </Text>
-            </TouchableOpacity>
-          }
-        >
-          {notes.length > 0 ? (
-            <View style={styles.listContainer}>
-              {notes.map((note) => {
-                let audioMedia: MediaFile | null | undefined = null;
-                if (note.noteType === "VOICE_TRANSCRIPT") {
-                  if (note.mediaId)
-                    audioMedia = mediaFiles.find(
-                      (m) => m.mediaId === note.mediaId,
+              {treatments.length > 0 ? (
+                <View style={styles.listContainer}>
+                  {treatments.map((treatment) => {
+                    const audioMedia = treatment.mediaId
+                      ? mediaFiles.find((m) => m.mediaId === treatment.mediaId)
+                      : null;
+                    return (
+                      <TreatmentItem
+                        key={treatment.treatmentId}
+                        treatment={treatment}
+                        audioMedia={audioMedia}
+                        colors={colors}
+                        getAudioUrl={getAudioUrl}
+                        onEdit={handleEditTreatment}
+                      />
                     );
-                  if (!audioMedia && caseId) {
-                    const audioFiles = mediaFiles.filter(
-                      (m) =>
-                        m.fileType === "AUDIO" &&
-                        m.caseId === caseId &&
-                        m.s3Key?.includes(`cases/${caseId}/audio/`),
-                    );
-                    if (audioFiles.length > 0) {
-                      const noteCreatedAt = new Date(note.createdAt).getTime();
-                      audioMedia = audioFiles.reduce((closest, current) => {
-                        const currentDiff = Math.abs(
-                          new Date(current.createdAt).getTime() - noteCreatedAt,
-                        );
-                        const closestDiff = Math.abs(
-                          new Date(closest.createdAt).getTime() - noteCreatedAt,
-                        );
-                        return currentDiff < closestDiff ? current : closest;
-                      });
-                    }
+                  })}
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <FontAwesome
+                    name="medkit"
+                    size={ICON_EMPTY}
+                    color={colors.muted}
+                    style={styles.emptyIcon}
+                  />
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    No treatments yet
+                  </Text>
+                </View>
+              )}
+            </AccordionSection>
+
+            {/* 4. Notes */}
+            <AccordionSection
+              title="Notes"
+              icon="file-text-o"
+              count={notes.length}
+              expanded={expanded.notes}
+              onToggle={() => toggleSection("notes")}
+              colors={colors}
+              action={
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push(`/add-note?caseId=${caseData?.caseId}`)
                   }
-                }
-                return (
-                  <NoteItem
-                    key={note.noteId}
-                    note={note}
-                    audioMedia={audioMedia}
-                    colors={colors}
-                    getAudioUrl={getAudioUrl}
-                  />
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome
-                name="file-text-o"
-                size={ICON_EMPTY}
-                color={colors.muted}
-                style={styles.emptyIcon}
-              />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No notes yet
-              </Text>
-            </View>
-          )}
-        </AccordionSection>
-
-        {/* 5. Media */}
-        <AccordionSection
-          title="Media"
-          icon="image"
-          count={mediaFiles.length}
-          expanded={expanded.media}
-          onToggle={() => toggleSection("media")}
-          colors={colors}
-          action={
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/add-media?caseId=${caseData?.caseId}`)
+                  style={[styles.addChip, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="plus" size={12} color={colors.surface} />
+                  <Text style={[styles.addChipText, { color: colors.surface }]}>
+                    Add
+                  </Text>
+                </TouchableOpacity>
               }
-              style={[styles.addChip, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
             >
-              <FontAwesome name="plus" size={12} color={colors.surface} />
-              <Text style={[styles.addChipText, { color: colors.surface }]}>
-                Upload
-              </Text>
-            </TouchableOpacity>
-          }
-        >
-          {mediaFiles.length > 0 ? (
-            <View style={styles.mediaContainer}>
-              {mediaFiles.map((media) => (
-                <MediaThumbnail
-                  key={media.mediaId}
-                  media={media}
-                  colors={colors}
-                  getBucketName={getBucketName}
-                  getDownloadSignedUrl={getDownloadSignedUrl}
-                />
-              ))}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome
-                name="image"
-                size={ICON_EMPTY}
-                color={colors.muted}
-                style={styles.emptyIcon}
-              />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>
-                No media yet
-              </Text>
-            </View>
-          )}
-        </AccordionSection>
+              {notes.length > 0 ? (
+                <View style={styles.listContainer}>
+                  {notes.map((note) => {
+                    let audioMedia: MediaFile | null | undefined = null;
+                    if (note.noteType === "VOICE_TRANSCRIPT") {
+                      if (note.mediaId)
+                        audioMedia = mediaFiles.find(
+                          (m) => m.mediaId === note.mediaId,
+                        );
+                      if (!audioMedia && caseId) {
+                        const audioFiles = mediaFiles.filter(
+                          (m) =>
+                            m.fileType === "AUDIO" &&
+                            m.caseId === caseId &&
+                            m.s3Key?.includes(`cases/${caseId}/audio/`),
+                        );
+                        if (audioFiles.length > 0) {
+                          const noteCreatedAt = new Date(
+                            note.createdAt,
+                          ).getTime();
+                          audioMedia = audioFiles.reduce((closest, current) => {
+                            const currentDiff = Math.abs(
+                              new Date(current.createdAt).getTime() -
+                                noteCreatedAt,
+                            );
+                            const closestDiff = Math.abs(
+                              new Date(closest.createdAt).getTime() -
+                                noteCreatedAt,
+                            );
+                            return currentDiff < closestDiff
+                              ? current
+                              : closest;
+                          });
+                        }
+                      }
+                    }
+                    return (
+                      <NoteItem
+                        key={note.noteId}
+                        note={note}
+                        audioMedia={audioMedia}
+                        colors={colors}
+                        getAudioUrl={getAudioUrl}
+                      />
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <FontAwesome
+                    name="file-text-o"
+                    size={ICON_EMPTY}
+                    color={colors.muted}
+                    style={styles.emptyIcon}
+                  />
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    No notes yet
+                  </Text>
+                </View>
+              )}
+            </AccordionSection>
 
-        {/* Save / Done - set case COMPLETED; warn if no diagnosis or treatment yet */}
-        <Button
-          title={updateCaseMutation.isPending ? "Saving..." : "Save"}
-          onPress={async () => {
-            if (!caseId) return;
-            const isComplete = diagnoses.length >= 1 && treatments.length >= 1;
-            const doSave = async () => {
-              try {
-                await updateCaseMutation.mutateAsync({
-                  caseId,
-                  request: {
-                    status: isComplete ? "COMPLETED" : "IN_PROGRESS",
-                    chiefComplaint: chiefComplaint.trim() || undefined,
-                  },
-                });
-                router.replace("/");
-              } catch (e) {
-                Alert.alert(
-                  "Error",
-                  e instanceof Error
-                    ? e.message
-                    : "Failed to update case status",
-                );
+            {/* 5. Media */}
+            <AccordionSection
+              title="Media"
+              icon="image"
+              count={mediaFiles.length}
+              expanded={expanded.media}
+              onToggle={() => toggleSection("media")}
+              colors={colors}
+              action={
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push(`/add-media?caseId=${caseData?.caseId}`)
+                  }
+                  style={[styles.addChip, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="plus" size={12} color={colors.surface} />
+                  <Text style={[styles.addChipText, { color: colors.surface }]}>
+                    Upload
+                  </Text>
+                </TouchableOpacity>
               }
-            };
-            if (!isComplete) {
-              Alert.alert(
-                "Case unfinished",
-                "You haven't added at least one diagnosis and one treatment. The case will still be saved. You can add them later.",
-                [{ text: "OK", onPress: doSave }],
-              );
-              return;
-            }
-            await doSave();
-          }}
-          variant="primary"
-          style={styles.saveButton}
-          disabled={!caseId || updateCaseMutation.isPending}
-          loading={updateCaseMutation.isPending}
-        />
+            >
+              {mediaFiles.length > 0 ? (
+                <View style={styles.mediaContainer}>
+                  {mediaFiles.map((media) => (
+                    <MediaThumbnail
+                      key={media.mediaId}
+                      media={media}
+                      colors={colors}
+                      getBucketName={getBucketName}
+                      getDownloadSignedUrl={getDownloadSignedUrl}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <FontAwesome
+                    name="image"
+                    size={ICON_EMPTY}
+                    color={colors.muted}
+                    style={styles.emptyIcon}
+                  />
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    No media yet
+                  </Text>
+                </View>
+              )}
+            </AccordionSection>
+
+            {/* Save / Done - set case COMPLETED; warn if no diagnosis or treatment yet */}
+            <Button
+              title={updateCaseMutation.isPending ? "Saving..." : "Save"}
+              onPress={async () => {
+                if (!caseId) return;
+                const isComplete =
+                  diagnoses.length >= 1 && treatments.length >= 1;
+                const doSave = async () => {
+                  try {
+                    await updateCaseMutation.mutateAsync({
+                      caseId,
+                      request: {
+                        status: isComplete ? "COMPLETED" : "IN_PROGRESS",
+                        chiefComplaint: chiefComplaint.trim() || undefined,
+                      },
+                    });
+                    router.replace("/doctor-dashboard");
+                  } catch (e) {
+                    Alert.alert(
+                      "Error",
+                      e instanceof Error
+                        ? e.message
+                        : "Failed to update case status",
+                    );
+                  }
+                };
+                if (!isComplete) {
+                  Alert.alert(
+                    "Case unfinished",
+                    "You haven't added at least one diagnosis and one treatment. The case will still be saved. You can add them later.",
+                    [{ text: "OK", onPress: doSave }],
+                  );
+                  return;
+                }
+                await doSave();
+              }}
+              variant="primary"
+              style={styles.saveButton}
+              disabled={!caseId || updateCaseMutation.isPending}
+              loading={updateCaseMutation.isPending}
+            />
           </>
         )}
         {intakeFirst && (
@@ -2157,7 +2201,7 @@ export default function CaseDetailScreen() {
             disabled={!caseId}
           />
         )}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

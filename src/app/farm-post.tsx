@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import {
   farmBorder,
   farmCard,
@@ -7,13 +8,12 @@ import {
 } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  TextInput,
   ActivityIndicator,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type ScrollViewInstance,
 } from "react-native";
@@ -42,15 +42,17 @@ import {
 } from "../services/farmVitalsApi";
 
 type DraftPhoto =
-  | { uri: string; fileName: string }
-  | { uri: string; fileUrl: string };
+  { uri: string; fileName: string } | { uri: string; fileUrl: string };
 
 function requestedPostPhotos(value: string): string[] {
   try {
     const urls: unknown = JSON.parse(value);
     if (Array.isArray(urls)) {
-      return [...new Set(urls.filter((url): url is string => typeof url === "string"))]
-        .slice(0, 2);
+      return [
+        ...new Set(
+          urls.filter((url): url is string => typeof url === "string"),
+        ),
+      ].slice(0, 2);
     }
   } catch {
     return [];
@@ -65,19 +67,28 @@ function animalPostDetails(
 ) {
   const rows = animal.sections
     .flatMap((section) => section.rows)
-    .filter((row) => !row.imageUrl && row.value.trim() && row.value !== "Not provided");
+    .filter(
+      (row) =>
+        !row.imageUrl && row.value.trim() && row.value !== "Not provided",
+    );
   const fieldValue = (names: string[]) =>
-    rows.find((row) =>
-      [row.key, row.label].some((field) =>
-        names.includes(field?.toLowerCase().replace(/[^a-z]/g, "") ?? ""),
-      ),
-    )?.value.trim();
+    rows
+      .find((row) =>
+        [row.key, row.label].some((field) =>
+          names.includes(field?.toLowerCase().replace(/[^a-z]/g, "") ?? ""),
+        ),
+      )
+      ?.value.trim();
 
-  const type = fieldValue(["animaltype", "typeofanimal", "type"]) || animal.species;
+  const type =
+    fieldValue(["animaltype", "typeofanimal", "type"]) || animal.species;
   const speciesField = fieldValue(["species", "animalspecies"]);
-  const species = speciesField && speciesField.toLowerCase() !== type.toLowerCase()
-    ? speciesField
-    : /^(cow|bull|heifer|steer)$/i.test(type) ? "Cattle" : "";
+  const species =
+    speciesField && speciesField.toLowerCase() !== type.toLowerCase()
+      ? speciesField
+      : /^(cow|bull|heifer|steer)$/i.test(type)
+        ? "Cattle"
+        : "";
   const health = fieldValue([
     "healthstatus",
     "animalhealthstatus",
@@ -89,14 +100,18 @@ function animalPostDetails(
   ]);
   const tag = findAnimalTag(rows);
   const identity = [species, type, tag].filter(Boolean).join(" · ");
-  const subject = [animal.name, identity && `(${identity})`].filter(Boolean).join(" ");
+  const subject = [animal.name, identity && `(${identity})`]
+    .filter(Boolean)
+    .join(" ");
   const visit = farmName ? `Health check at ${farmName}` : "Health check";
   const tagline = `${visit}${subject ? ` — ${subject}` : ""}${health ? ` | ${health}` : ""}`;
   const captionIdentity = [
     species && `Species: ${species}`,
     type && `Animal Type: ${type}`,
     tag && `Tag: ${tag}`,
-  ].filter(Boolean).join(", ");
+  ]
+    .filter(Boolean)
+    .join(", ");
   const captionSubject = `${animal.name || "the animal"}${captionIdentity ? ` (${captionIdentity})` : ""}`;
   const owner = ownerName?.trim();
   const captionLocation = farmName
@@ -105,21 +120,30 @@ function animalPostDetails(
       ? ` at ${owner}'s farm`
       : "";
   const healthStatus = health?.replace(/[.!?]+$/, "");
-  const monitoring = "highlighting the importance of regular veterinary care and proactive livestock health monitoring.";
+  const monitoring =
+    "highlighting the importance of regular veterinary care and proactive livestock health monitoring.";
   const caption = [
     `A veterinary field visit was conducted${captionLocation} to assess the health of ${captionSubject}.`,
-    healthStatus ? `The current health status is recorded as ${healthStatus}, ${monitoring}` : "",
-  ].filter(Boolean).join(" ");
+    healthStatus
+      ? `The current health status is recorded as ${healthStatus}, ${monitoring}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return {
     tagline: /[.!?]$/.test(tagline) ? tagline : `${tagline}.`,
     caption,
-    farmLabel: [farmName, owner && `Owner: ${owner}`].filter(Boolean).join(" · "),
+    farmLabel: [farmName, owner && `Owner: ${owner}`]
+      .filter(Boolean)
+      .join(" · "),
     summary: [
       animal.name,
       type && `Animal type: ${type}`,
       tag && `Tag: ${tag}`,
       health && `Health status: ${health}`,
-    ].filter(Boolean).join(" · "),
+    ]
+      .filter(Boolean)
+      .join(" · "),
   };
 }
 
@@ -127,7 +151,8 @@ const rewriteNoteLimit = 400;
 const captionLimit = 1200;
 
 function captionRewriteInput(caption: string) {
-  if (caption.length <= rewriteNoteLimit) return { input: caption, remainder: "" };
+  if (caption.length <= rewriteNoteLimit)
+    return { input: caption, remainder: "" };
   const boundary = caption.slice(0, rewriteNoteLimit + 1).search(/\s+\S*$/);
   const split = boundary > 0 ? boundary : rewriteNoteLimit;
   return {
@@ -207,12 +232,18 @@ export default function FarmPostScreen() {
   }>();
   const farmId = typeof params.farmId === "string" ? params.farmId : "";
   const entryId = typeof params.entryId === "string" ? params.entryId : "";
-  const selectedPhotoParam = typeof params.postPhotos === "string" ? params.postPhotos : "";
+  const selectedPhotoParam =
+    typeof params.postPhotos === "string" ? params.postPhotos : "";
   const photoLimit = selectedPhotoParam ? 2 : 4;
   const initializedPhotoSelection = useRef(false);
   const [farmName, setFarmName] = useState("");
   const [animalName, setAnimalName] = useState("");
-  const [postDetails, setPostDetails] = useState({ tagline: "", caption: "", farmLabel: "", summary: "" });
+  const [postDetails, setPostDetails] = useState({
+    tagline: "",
+    caption: "",
+    farmLabel: "",
+    summary: "",
+  });
   const [species, setSpecies] = useState("");
   const [photos, setPhotos] = useState<DraftPhoto[]>([]);
   const [fileUrls, setFileUrls] = useState<string[]>([]);
@@ -265,10 +296,13 @@ export default function FarmPostScreen() {
       setSpecies(animal.species);
       if (selectedPhotoParam && !initializedPhotoSelection.current) {
         const available = new Set(
-          animal.photos.flatMap((url) => [url, aiFarmImageUrl(url)]).filter(Boolean),
+          animal.photos
+            .flatMap((url) => [url, aiFarmImageUrl(url)])
+            .filter(Boolean),
         );
-        const selected = requestedPostPhotos(selectedPhotoParam)
-          .filter((url) => available.has(url));
+        const selected = requestedPostPhotos(selectedPhotoParam).filter((url) =>
+          available.has(url),
+        );
         const previews = await Promise.all(
           selected.map(async (fileUrl) => ({
             fileUrl,
@@ -410,7 +444,9 @@ export default function FarmPostScreen() {
       setPrintedTagline(post.tagline);
       setPosterFileUrl(post.posterUrl);
       setPosterUri(await readableFarmImage(post.posterUrl));
-      const rewritten = [post.description.trim(), remainder].filter(Boolean).join("\n\n");
+      const rewritten = [post.description.trim(), remainder]
+        .filter(Boolean)
+        .join("\n\n");
       setDescription(rewritten.length <= captionLimit ? rewritten : caption);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (cause) {
@@ -627,7 +663,7 @@ export default function FarmPostScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         ref={scrollRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -890,11 +926,14 @@ export default function FarmPostScreen() {
             </View>
             <Pressable
               accessibilityRole="button"
-              disabled={preparing || loading || !tagline.trim() || !description.trim()}
+              disabled={
+                preparing || loading || !tagline.trim() || !description.trim()
+              }
               onPress={() => void prepare()}
               style={[
                 styles.primary,
-                (!tagline.trim() || !description.trim()) && styles.primaryDisabled,
+                (!tagline.trim() || !description.trim()) &&
+                  styles.primaryDisabled,
               ]}
             >
               {preparing ? (
@@ -905,7 +944,7 @@ export default function FarmPostScreen() {
             </Pressable>
           </>
         )}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

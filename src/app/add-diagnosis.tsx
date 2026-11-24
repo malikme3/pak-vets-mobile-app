@@ -1,9 +1,9 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Alert,
   TouchableOpacity,
   TextInput,
@@ -235,7 +235,7 @@ export default function AddDiagnosisScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <StatusBar style="auto" />
-      <ScrollView
+      <FormScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
@@ -363,7 +363,7 @@ export default function AddDiagnosisScreen() {
           }
           style={styles.saveButton}
         />
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

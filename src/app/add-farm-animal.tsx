@@ -1,8 +1,8 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -49,7 +49,9 @@ export default function AddFarmAnimalScreen() {
     (typeof params.flowLabel === "string" && params.flowLabel.trim()) ||
     formTypeTitle(kind);
   const [template, setTemplate] = useState<ActiveFarmTemplate | null>(null);
-  const [initialValues, setInitialValues] = useState<Record<string, unknown>>({});
+  const [initialValues, setInitialValues] = useState<Record<string, unknown>>(
+    {},
+  );
   const [breedAnswers, setBreedAnswers] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,7 +80,7 @@ export default function AddFarmAnimalScreen() {
         setInitialValues(
           await entryDefaults(
             loaded,
-            animalCount === undefined ? undefined : `animal-${animalCount + 1}`,
+            animalCount === undefined ? undefined : `animal_${animalCount + 1}`,
           ),
         );
       }
@@ -142,7 +144,7 @@ export default function AddFarmAnimalScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
@@ -178,7 +180,7 @@ export default function AddFarmAnimalScreen() {
             onSubmit={submit}
           />
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

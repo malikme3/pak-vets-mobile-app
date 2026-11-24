@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import {
   farmBorder,
   farmCard,
@@ -5,15 +6,14 @@ import {
 } from "../features/farm-vitals/presentation";
 import { useCallback, useEffect, useState } from "react";
 import {
+  TextInput,
   ActivityIndicator,
   Image,
   Keyboard,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -28,6 +28,7 @@ import {
   listFarmDashboard,
   readableFarmImage,
   type FarmDashboardEntry,
+  type FarmDashboardSortType,
 } from "../services/farmVitalsApi";
 
 const colors = {
@@ -42,7 +43,9 @@ const colors = {
   field: "#F5F7F3",
 };
 
-async function availableAiProfilePhoto(fileUrl: string): Promise<string | undefined> {
+async function availableAiProfilePhoto(
+  fileUrl: string,
+): Promise<string | undefined> {
   const enhancedUrl = aiFarmImageUrl(fileUrl);
   if (!enhancedUrl) return;
   try {
@@ -217,10 +220,52 @@ function matches(farm: FarmDashboardEntry, query: string): boolean {
   });
 }
 
+function formatFarmDistance(distanceKm: number | null): string {
+  if (distanceKm === null || !Number.isFinite(distanceKm) || distanceKm < 0)
+    return "";
+  const rounded =
+    distanceKm < 10 ? Number(distanceKm.toFixed(1)) : Math.round(distanceKm);
+  return `~${rounded} km`;
+}
+
+function farmSortValue(
+  farm: FarmDashboardEntry,
+  field: string,
+  type: FarmDashboardSortType,
+): string | number | null {
+  const value = farm.rows
+    .find((row) => row.sortType && filterId(row) === field)
+    ?.sortValue?.trim();
+  if (!value) return null;
+  if (type === "text") return value;
+  const number = type === "date" ? Date.parse(value) : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function compareFarmValues(
+  left: string | number | null,
+  right: string | number | null,
+  ascending: boolean,
+): number {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  const difference =
+    typeof left === "number" && typeof right === "number"
+      ? left - right
+      : String(left).localeCompare(String(right), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+  return ascending ? difference : -difference;
+}
+
 export default function FarmBoardScreen() {
   const router = useRouter();
   const [radiusKm, setRadiusKm] = useState<5 | 25 | 50 | null>(null);
   const [radiusOpen, setRadiusOpen] = useState(false);
+  const [sort, setSort] = useState<{ key: string; ascending: boolean } | null>(
+    null,
+  );
   const [nearbyOrigin, setNearbyOrigin] = useState<Coordinates | null>(null);
   const [findingNearby, setFindingNearby] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
@@ -282,6 +327,38 @@ export default function FarmBoardScreen() {
   const canSearch = searchableFields.length > 0;
   const canSubmitSearch = canSearch && query.trim().length >= 3 && !searched;
   const searchQuery = canSearch ? appliedQuery : "";
+  const sortChoices = new Map<
+    string,
+    { label: string; type: FarmDashboardSortType | "location" }
+  >();
+  for (const farm of farms) {
+    for (const row of farm.rows) {
+      if (row.sortType)
+        sortChoices.set(filterId(row), {
+          label: row.label,
+          type: row.sortType,
+        });
+    }
+  }
+  const latitudeChoice = [...sortChoices].find(([, choice]) =>
+    /^(latitude|lat)$/i.test(choice.label),
+  );
+  const longitudeChoice = [...sortChoices].find(([, choice]) =>
+    /^(longitude|long|lng)$/i.test(choice.label),
+  );
+  if (latitudeChoice && longitudeChoice) {
+    sortChoices.delete(latitudeChoice[0]);
+    sortChoices.delete(longitudeChoice[0]);
+    sortChoices.set("__location", { label: "Location", type: "location" });
+  }
+  const selectedSort = sort ? sortChoices.get(sort.key) : undefined;
+  const sortChipCount = sortChoices.size + 1;
+  const sortChipColumns = sortChipCount === 4 ? 2 : Math.min(3, sortChipCount);
+  const [sortRowWidth, setSortRowWidth] = useState(0);
+  const sortChipWidth =
+    sortRowWidth > 0
+      ? (sortRowWidth - 8 * (sortChipColumns - 1)) / sortChipColumns
+      : undefined;
   const located = farms.map((farm) => ({
     ...farm,
     distance:
@@ -296,12 +373,49 @@ export default function FarmBoardScreen() {
         radiusKm === null ||
         (farm.distance !== null && farm.distance <= radiusKm)),
   );
-  if (nearbyOrigin)
+  if (sort?.key === "latest" || sort?.key === "oldest") {
+    shown.sort((left, right) => {
+      const comparison = (left.submittedAt ?? "").localeCompare(
+        right.submittedAt ?? "",
+      );
+      return sort.key === "latest" ? -comparison : comparison;
+    });
+  } else if (sort?.key === "__location") {
     shown.sort(
       (left, right) =>
-        (left.distance ?? Infinity) - (right.distance ?? Infinity),
+        compareFarmValues(
+          left.location?.latitude ?? null,
+          right.location?.latitude ?? null,
+          sort.ascending,
+        ) ||
+        compareFarmValues(
+          left.location?.longitude ?? null,
+          right.location?.longitude ?? null,
+          sort.ascending,
+        ),
     );
+  } else if (sort && selectedSort && selectedSort.type !== "location") {
+    const sortType: FarmDashboardSortType = selectedSort.type;
+    shown.sort((left, right) =>
+      compareFarmValues(
+        farmSortValue(left, sort.key, sortType),
+        farmSortValue(right, sort.key, sortType),
+        sort.ascending,
+      ),
+    );
+  } else if (nearbyOrigin) {
+    shown.sort((left, right) =>
+      compareFarmValues(left.distance, right.distance, true),
+    );
+  }
   const missingGps = farms.filter((farm) => !farm.location).length;
+
+  function selectSort(key: string) {
+    setSort((current) => ({
+      key,
+      ascending: current?.key === key ? !current.ascending : true,
+    }));
+  }
 
   async function searchNearby() {
     if (findingNearby) return;
@@ -355,9 +469,16 @@ export default function FarmBoardScreen() {
           "Your location could not be determined. Please try again.",
         );
       setNearbyOrigin(origin);
-    } catch {
+    } catch (cause: unknown) {
+      const detail = cause instanceof Error ? cause.message.trim() : "";
+      const simulatorHint =
+        Platform.OS === "ios"
+          ? " In Simulator, choose a test location from Features > Location."
+          : " Check location services and app permissions.";
       setNearbyError(
-        "Could not get your location. Check location permissions and GPS, then try again.",
+        detail
+          ? `${detail}${simulatorHint}`
+          : `Could not get your location.${simulatorHint}`,
       );
     } finally {
       if (timer) clearTimeout(timer);
@@ -375,7 +496,7 @@ export default function FarmBoardScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={styles.scroll}
         keyboardDismissMode="none"
         keyboardShouldPersistTaps="always"
@@ -428,6 +549,11 @@ export default function FarmBoardScreen() {
             <Text style={styles.searchButtonText}>Search</Text>
           </Pressable>
         </View>
+        {canSearch ? (
+          <Text style={styles.help}>
+            Search by {searchableFields.join(", ")}.
+          </Text>
+        ) : null}
         <View style={styles.nearbyPanel}>
           <View style={styles.nearbyRow}>
             <Pressable
@@ -540,8 +666,7 @@ export default function FarmBoardScreen() {
           {nearbyOrigin ? (
             <Text style={styles.help}>
               {shown.length} {shown.length === 1 ? "farm" : "farms"} within{" "}
-              {radiusKm} km{searchQuery ? " matching your search" : ""} ·
-              Nearest first
+              {radiusKm} km{searchQuery ? " matching your search" : ""}
             </Text>
           ) : null}
           {nearbyOrigin && missingGps > 0 ? (
@@ -556,14 +681,75 @@ export default function FarmBoardScreen() {
             </Text>
           ) : null}
         </View>
+        {sortChoices.size ? (
+          <View style={styles.sortPanel}>
+            <View
+              style={styles.sortRow}
+              onLayout={(event) =>
+                setSortRowWidth(event.nativeEvent.layout.width)
+              }
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Toggle order between latest and oldest"
+                accessibilityState={{
+                  selected: sort?.key === "latest" || sort?.key === "oldest",
+                }}
+                onPress={() =>
+                  setSort((current) => ({
+                    key: current?.key === "latest" ? "oldest" : "latest",
+                    ascending: current?.key !== "latest",
+                  }))
+                }
+                style={[
+                  styles.sortButton,
+                  { width: sortChipWidth },
+                  (sort?.key === "latest" || sort?.key === "oldest") &&
+                    styles.sortSelected,
+                ]}
+              >
+                <Text style={styles.nearbyButtonText}>Added</Text>
+                {sort?.key === "latest" || sort?.key === "oldest" ? (
+                  <Feather
+                    name={sort.key === "latest" ? "arrow-down" : "arrow-up"}
+                    size={14}
+                    color={colors.green}
+                  />
+                ) : null}
+              </Pressable>
+              {[...sortChoices].map(([key, { label }]) => (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    sort?.key === key
+                      ? `Reverse sort by ${label}`
+                      : `Sort by ${label}`
+                  }
+                  accessibilityState={{ selected: sort?.key === key }}
+                  onPress={() => selectSort(key)}
+                  style={[
+                    styles.sortButton,
+                    { width: sortChipWidth },
+                    sort?.key === key && styles.sortSelected,
+                  ]}
+                >
+                  <Text style={styles.nearbyButtonText}>{label}</Text>
+                  {sort?.key === key ? (
+                    <Feather
+                      name={sort.ascending ? "arrow-up" : "arrow-down"}
+                      size={14}
+                      color={colors.green}
+                    />
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
         {!loading && !error && farms.length > 0 && !canSearch ? (
           <Text style={styles.help}>
             No fields are enabled for filtering in the farm template.
-          </Text>
-        ) : null}
-        {canSearch ? (
-          <Text style={styles.help}>
-            Search by {searchableFields.join(", ")}.
           </Text>
         ) : null}
         {loading ? (
@@ -593,6 +779,7 @@ export default function FarmBoardScreen() {
           const classification = farm.rows.find((row) =>
             /category|classification/i.test(row.label),
           );
+          const sortDetail = formatFarmDistance(farm.distance);
           const ownerInitial =
             owner?.value.trim().slice(0, 1) || place.title.slice(0, 1);
           const openFarm = () =>
@@ -663,8 +850,17 @@ export default function FarmBoardScreen() {
                     />
                   </View>
                 </View>
-                {place.badges.length ? (
+                {place.badges.length || sortDetail ? (
                   <View style={styles.dashboardBadges}>
+                    {sortDetail ? (
+                      <View
+                        accessible
+                        accessibilityLabel={`Distance ${sortDetail}`}
+                        style={styles.distanceBadge}
+                      >
+                        <Text style={styles.tileAnimalCount}>{sortDetail}</Text>
+                      </View>
+                    ) : null}
                     {place.badges.map((row, index) => (
                       <View
                         key={`dashboard-badge-${filterId(row)}-${index}`}
@@ -689,7 +885,7 @@ export default function FarmBoardScreen() {
             </Pressable>
           );
         })}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }
@@ -750,6 +946,20 @@ const styles = StyleSheet.create({
     ...farmButton,
   },
   nearbyPanel: { gap: 6 },
+  sortPanel: { gap: 8 },
+  sortRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  sortButton: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    ...farmButton,
+  },
+  sortSelected: { backgroundColor: colors.mint, borderColor: colors.green },
   nearbyRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   nearbyButton: {
     flex: 1,
@@ -937,6 +1147,13 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: 2,
     marginTop: 3,
+  },
+  distanceBadge: {
+    flexShrink: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.mint,
   },
   dashboardBadge: {
     maxWidth: "49%",

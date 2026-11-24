@@ -1,3 +1,4 @@
+import { FormScrollView } from "../components/ui/FormScrollView";
 import { useEffect, useState } from "react";
 import {
   View,
@@ -107,7 +108,7 @@ export default function LoginScreen() {
     );
 
   useEffect(() => {
-    if (isAuthed) router.replace("/");
+    if (isAuthed) router.replace("/farm-vitals");
   }, [isAuthed, router]);
 
   const finalizeLogin = async () => {
@@ -119,7 +120,7 @@ export default function LoginScreen() {
     const firebaseIdToken = await user.getIdToken();
     const { sessionToken } = await authApi.loginWithFirebase(firebaseIdToken);
     await setSessionToken(sessionToken);
-    router.replace("/");
+    router.replace("/farm-vitals");
   };
 
   const handleEmailLogin = async () => {
@@ -217,86 +218,100 @@ export default function LoginScreen() {
       style={[styles.container, { backgroundColor: colors.surface }]}
     >
       <StatusBar style="auto" />
-      <ImageBackground
-        source={require("../../assets/species-icons/classic/hero-banner-cow.png")}
-        style={styles.hero}
-        imageStyle={styles.heroImage}
-      >
-        <View style={[styles.heroScrim, { backgroundColor: colors.surface }]} />
-        <View style={styles.heroContent}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to Farm Vitals"
-            onPress={() => router.replace("/farm-vitals")}
-            style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}
-          >
-            <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "600" }}>
-              ← Explore Farm Vitals
+      <FormScrollView>
+        <ImageBackground
+          source={require("../../assets/species-icons/classic/hero-banner-cow.png")}
+          style={styles.hero}
+          imageStyle={styles.heroImage}
+        >
+          <View
+            style={[styles.heroScrim, { backgroundColor: colors.surface }]}
+          />
+          <View style={styles.heroContent}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to Farm Vitals"
+              onPress={() => router.replace("/farm-vitals")}
+              style={{
+                minHeight: 44,
+                justifyContent: "center",
+                alignSelf: "flex-start",
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: 13,
+                  fontWeight: "600",
+                }}
+              >
+                ← Explore Farm Vitals
+              </Text>
+            </Pressable>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Welcome to Pak Vets
             </Text>
-          </Pressable>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Welcome to Pak Vets
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.muted }]}>
-            Login to continue
-          </Text>
-        </View>
-      </ImageBackground>
+            <Text style={[styles.subtitle, { color: colors.muted }]}>
+              Login to continue
+            </Text>
+          </View>
+        </ImageBackground>
 
-      <View style={styles.card}>
-        {!isFirebaseConfigured ? (
-          <Text style={[styles.configHint, { color: colors.muted }]}>
-            Firebase is not configured. Add keys in app config env/extra.
-          </Text>
-        ) : null}
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              color: colors.text,
-            },
-          ]}
-          placeholder="Email"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              color: colors.text,
-            },
-          ]}
-          placeholder="Password"
-          placeholderTextColor={colors.muted}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        <Button
-          title={submitting ? "Signing in..." : "Sign in"}
-          onPress={handleEmailLogin}
-          variant="primary"
-          style={styles.primaryButton}
-          disabled={submitting}
-        />
-        <Button
-          title="Continue with Google"
-          onPress={handleGoogleLogin}
-          variant="secondary"
-          style={styles.secondaryButton}
-          disabled={
-            !googleRequest || !hasGoogleClientId || !isFirebaseConfigured
-          }
-        />
-      </View>
+        <View style={styles.card}>
+          {!isFirebaseConfigured ? (
+            <Text style={[styles.configHint, { color: colors.muted }]}>
+              Firebase is not configured. Add keys in app config env/extra.
+            </Text>
+          ) : null}
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
+            placeholder="Email"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
+            placeholder="Password"
+            placeholderTextColor={colors.muted}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+          <Button
+            title={submitting ? "Signing in..." : "Sign in"}
+            onPress={handleEmailLogin}
+            variant="primary"
+            style={styles.primaryButton}
+            disabled={submitting}
+          />
+          <Button
+            title="Continue with Google"
+            onPress={handleGoogleLogin}
+            variant="secondary"
+            style={styles.secondaryButton}
+            disabled={
+              !googleRequest || !hasGoogleClientId || !isFirebaseConfigured
+            }
+          />
+        </View>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

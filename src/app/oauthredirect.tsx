@@ -19,7 +19,7 @@ export default function OAuthRedirectScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace(status === "signedIn" ? "/" : "/login");
+      router.replace(status === "signedIn" ? "/farm-vitals" : "/login");
     }, 1500);
     return () => clearTimeout(timer);
   }, [router, status]);
