@@ -6,6 +6,7 @@ import {
   type Ref,
 } from "react";
 import {
+  findNodeHandle,
   Keyboard,
   Platform,
   ScrollView,
@@ -46,11 +47,6 @@ export function FormScrollView({
       if (!input || !view || TextInput.State.currentlyFocusedInput() !== input)
         return;
 
-      view.scrollResponderScrollNativeHandleToKeyboard(
-        input,
-        fieldClearance,
-        true,
-      );
       view.getNativeScrollRef()?.measureInWindow((_x, top, _width, height) => {
         const keyboardY =
           keyboardTop ?? Keyboard.metrics()?.screenY ?? Infinity;
@@ -124,7 +120,7 @@ export function FormScrollView({
           !handledFocusEvents.has(event.nativeEvent)
         ) {
           const input = TextInput.State.currentlyFocusedInput();
-          if (input) {
+          if (input && findNodeHandle(input) === event.nativeEvent.target) {
             // The nearest form scroll view owns the focused input, including sheets.
             handledFocusEvents.add(event.nativeEvent);
             focusedInput.current = input;
