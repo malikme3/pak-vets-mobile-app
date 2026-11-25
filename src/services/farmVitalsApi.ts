@@ -3,7 +3,9 @@ import { readCoordinates, type Coordinates } from "../utils/coordinates";
 
 const FARM_VITALS_API_URL = (
   process.env.EXPO_PUBLIC_FARM_VITALS_API_URL ||
-  "https://dl6axiz667.execute-api.us-east-1.amazonaws.com"
+  (__DEV__
+    ? "https://api-dev.pakvetcare.com"
+    : "https://api-prod.pakvetcare.com")
 ).replace(/\/+$/, "");
 
 const farmDashboardCacheTtlMs = 2 * 60 * 1000;
